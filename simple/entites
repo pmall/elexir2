@@ -1,11 +1,12 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use FindBin qw($Bin);
 use DBI;
 use List::MoreUtils qw(uniq);
 use Statistics::R;
 
-require 'fonctions';
+require $FindBin::Bin . '/fonctions';
 
 # ==============================================================================
 # Parametres
