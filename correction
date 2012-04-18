@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use FindBin qw($Bin);
 use DBI;
 use File::Temp qw(tempdir);
 
@@ -18,7 +19,7 @@ my $id_project = shift @ARGV || die("Vous devez passer un identifiant de projet 
 my $algo = 'rma-bg,quant-norm,pm-only';
 
 # On défini le dossier contenant les puces
-my $celdir = '/home/pierre/workspace/celdir';
+my $celdir = '/data/elexir/celfiles';
 
 # Nom des tables
 my $table_intensites = '_' . $id_project . '_intensites';
@@ -27,11 +28,11 @@ my $table_dabg = '_' . $id_project . '_dabg';
 # On défini les identifiants pour la bdd
 my $db_host = 'localhost';
 my $db_name = 'elexir2';
-my $db_user = 'pierre';
-my $db_pass = 'ysbag';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
 
 # Fichiers d'annotation
-my $dir_annotation = '/home/pierre/workspace/annotations';
+my $dir_annotation = $FindBin::Bin . '/../annotations';
 
 my $annotations = {
 	'exon' => {
@@ -178,14 +179,16 @@ $dbh->do('CREATE TABLE ' . $table_dabg . ' (' . $fields_dabg . ')');
 
 print 'Début ajout des intensites dans la base de données ' . "\n";
 
-#$dbh->do('LOAD DATA LOCAL INFILE \'' . $file_intensites . '\' INTO TABLE ' . $table_intensites . '()');
-`./format_intensities $file_intensites|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_intensites()"`;
+my $format_intensities = $FindBin::Bin . '/format_intensities';
+
+`$format_intensities $file_intensites|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_intensites()"`;
 
 print 'Fin ajout des intensites dans la base de données ' . "\n";
 
 print 'Début ajout du DABG dans la base de données ' . "\n";
 
-#$dbh->do('LOAD DATA LOCAL INFILE \'' . $file_dabg . '\' INTO TABLE ' . $table_dabg . '()');
-`./format_dabg $file_dabg|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_dabg()"`;
+my $format_dabg = $FindBin::Bin . '/format_dabg';
+
+`$format_dabg $file_dabg|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_dabg()"`;
 
 print 'Fin ajout du DABG dans la base de données ' . "\n";

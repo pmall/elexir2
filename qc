@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use FindBin qw($Bin);
 use DBI;
 use File::Temp qw(tempdir);
 
@@ -13,16 +14,16 @@ use File::Temp qw(tempdir);
 my $algo = 'rma';
 
 # On défini le dossier contenant les puces
-my $celdir = '/home/pierre/workspace/celdir';
+my $celdir = '/data/elexir/celfiles';
 
 # On défini les identifiants pour la bdd
 my $db_host = 'localhost';
 my $db_name = 'elexir2';
-my $db_user = 'pierre';
-my $db_pass = 'ysbag';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
 
 # Fichiers d'annotation
-my $dir_annotation = '/home/pierre/workspace/annotations';
+my $dir_annotation = $FindBin::Bin . '/../annotations';
 
 my $annotations = {
 	'exon' => {
