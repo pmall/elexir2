@@ -18,8 +18,8 @@ my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en p
 # On défini les identifiants pour la bdd
 my $db_host = 'localhost';
 my $db_name = 'elexir2';
-my $db_user = 'pierre';
-my $db_pass = 'ysbag';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
 
 # On défini un dossier temporaire
 my $tmp_dir = tempdir(CLEANUP => 1);

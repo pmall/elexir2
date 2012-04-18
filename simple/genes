@@ -21,8 +21,8 @@ my $seuil_dabg = 0.05;
 # On défini les identifiants pour la bdd
 my $db_host = 'localhost';
 my $db_name = 'elexir2';
-my $db_user = 'pierre';
-my $db_pass = 'ysbag';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
 
 # On ouvre une session R pour le script
 my $R = Statistics::R->new();
