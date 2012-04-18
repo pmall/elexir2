@@ -1,4 +1,7 @@
 #!/bin/bash
-./genes $1
-./sondes $1
-./entites $1
+
+dir=$(dirname $0)
+
+$dir/genes $1
+$dir/sondes $1
+$dir/entites $1
