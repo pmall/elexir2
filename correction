@@ -1,0 +1,191 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use DBI;
+use File::Temp qw(tempdir);
+
+# On récupère l'identifiant du projet
+my $id_project = shift @ARGV || die("Vous devez passer un identifiant de projet en paramètre");
+
+# ==============================================================================
+# Paramètres
+# ==============================================================================
+
+# Algo a utiliser pour la correction
+# rma-bg : correction du background de type RMA;
+# quant-norm : normalisation par quantille
+# pm-only : filtre que les sondes perfect match
+my $algo = 'rma-bg,quant-norm,pm-only';
+
+# On défini le dossier contenant les puces
+my $celdir = '/home/pierre/workspace/celdir';
+
+# Nom des tables
+my $table_intensites = '_' . $id_project . '_intensites';
+my $table_dabg = '_' . $id_project . '_dabg';
+
+# On défini les identifiants pour la bdd
+my $db_host = 'localhost';
+my $db_name = 'elexir2';
+my $db_user = 'pierre';
+my $db_pass = 'ysbag';
+
+# Fichiers d'annotation
+my $dir_annotation = '/home/pierre/workspace/annotations';
+
+my $annotations = {
+	'exon' => {
+		'human' => {
+			'clf' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.clf',
+			'pgf' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.pgf',
+			'bgp' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.antigenomic.bgp'
+		},
+		'mouse' => {
+			'pgf' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.pgf',
+			'clf' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.clf',
+			'bgp' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.antigenomic.bgp'
+		}
+	},
+	'ggh' => {
+		'human' => {
+			'pgf' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1_gc.pgf',
+			'clf' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.clf',
+			'bgp' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.antigenomic.bgp'
+		}
+	}
+};
+
+# On défini un dossier temporaire
+my $tmp_dir = tempdir(CLEANUP => 1);
+
+# On défini les fichier temporaire dans ce dossier temporaire
+my $file_intensites = $tmp_dir . '/intensites';
+my $file_dabg = $tmp_dir . '/dabg.residuals.txt';
+
+# Pour supprimer le dossier temporaire lors de ctrl+C
+$SIG{INT} = sub{ exit; };
+
+# ==============================================================================
+# Préparation des requètes
+# ==============================================================================
+
+# On se connecte à la bdd et on prépare les requetes
+my $dbh = DBI->connect(
+	'DBI:mysql:' . $db_name . ':' . $db_host,
+	$db_user,
+	$db_pass
+);
+
+my $select_project_sth = $dbh->prepare(
+	"SELECT dir, type, organism FROM projects WHERE id = ?"
+);
+
+my $select_chips_sth = $dbh->prepare(
+	"SELECT name, `condition`, num FROM chips WHERE id_project = ?"
+);
+
+# ==============================================================================
+# On récupère les infos du projet
+# ==============================================================================
+
+# On selectionne les infos du projet
+$select_project_sth->execute($id_project);
+
+# on récupère les infos des projets
+my($dir_project, $type, $organism) = $select_project_sth->fetchrow_array;
+
+# Si le projet n'est pas dans la bdd on die
+die("Le projet $id_project n'est pas dans la bdd") if(!$dir_project);
+
+# On selectionne les puces
+$select_chips_sth->execute($id_project);
+
+my @chips = @{$select_chips_sth->fetchall_arrayref({})};
+
+# Si il n'y a pas de puces dans la bdd on die
+die("Le projet $id_project correspond a aucune puce dans la bdd") if(@chips == 0);
+
+# On les classe par nom de champs
+@chips = sort({
+	$a->{condition} cmp $b->{condition} || $a->{num} <=> $b->{num}
+} @chips);
+
+# On récupère le nom et le champs de chaque puce
+my @chips_names = ();
+my @chips_fields = ();
+
+foreach my $chip (@chips){
+
+	push(@chips_names, $chip->{name});
+	push(@chips_fields, $chip->{condition} . '_' . $chip->{num});
+
+}
+
+# On fait une liste des chemins des puces
+my @chips_files = (map {
+	$celdir . '/' . $dir_project . '/' . $_
+} @chips_names);
+
+my $chips_files_list = join(' ', @chips_files);
+
+# On récupère les annotations
+my $annot_hash = $annotations->{$type}->{$organism};
+my $pgf = $annot_hash->{'pgf'};
+my $clf = $annot_hash->{'clf'};
+my $bgp = $annot_hash->{'bgp'};
+
+# ==============================================================================
+# On lance le traitement avec affymetrix power tools
+# ==============================================================================
+
+print 'Début de la correction avec affymetrix power tools ' . "\n";
+
+# Traitement sur les puces avec affymetrix power tools
+`apt-cel-extract -a $algo --pm-only -p $pgf -c $clf -o $file_intensites --temp-dir $tmp_dir $chips_files_list`;
+
+print 'Fin de la correction avec affymetrix power tools ' . "\n";
+
+print 'Début calcul du DABG avec affymetrix power tools ' . "\n";
+
+`apt-probeset-summarize -a dabg --feat-details -p $pgf -c $clf -b $bgp -o $tmp_dir $chips_files_list`;
+
+print 'Fin calcul du DABG avec affymetrix power tools ' . "\n";
+
+# ==============================================================================
+# On crée les tables
+# ==============================================================================
+
+# On crée les champs
+my $fields_intensites = 'probe_id INT UNSIGNED NOT NULL PRIMARY KEY, ' . join(', ', map {
+	$_ . ' SMALLINT UNSIGNED NOT NULL'
+} @chips_fields);
+
+my $fields_dabg = 'probe_id INT UNSIGNED NOT NULL PRIMARY KEY, ' . join(', ', map {
+	$_ . ' SMALLINT UNSIGNED NOT NULL'
+} @chips_fields);
+
+# On crée la table intensités et on la vide
+$dbh->do('DROP TABLE IF EXISTS ' . $table_intensites);
+$dbh->do('CREATE TABLE ' . $table_intensites . ' (' . $fields_intensites . ')');
+
+# On crée la table DABG
+$dbh->do('DROP TABLE IF EXISTS ' . $table_dabg);
+$dbh->do('CREATE TABLE ' . $table_dabg . ' (' . $fields_dabg . ')');
+
+# ==============================================================================
+# On ajoute les fichiers dans les tables
+# ==============================================================================
+
+print 'Début ajout des intensites dans la base de données ' . "\n";
+
+#$dbh->do('LOAD DATA LOCAL INFILE \'' . $file_intensites . '\' INTO TABLE ' . $table_intensites . '()');
+`./format_intensities $file_intensites|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_intensites()"`;
+
+print 'Fin ajout des intensites dans la base de données ' . "\n";
+
+print 'Début ajout du DABG dans la base de données ' . "\n";
+
+#$dbh->do('LOAD DATA LOCAL INFILE \'' . $file_dabg . '\' INTO TABLE ' . $table_dabg . '()');
+`./format_dabg $file_dabg|mysql -h $db_host -u $db_user -p$db_pass $db_name -e "LOAD DATA LOCAL INFILE '/dev/stdin' INTO TABLE $table_dabg()"`;
+
+print 'Fin ajout du DABG dans la base de données ' . "\n";

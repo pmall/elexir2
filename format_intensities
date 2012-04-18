@@ -1,0 +1,38 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+
+my $header = 0;
+
+while(my $line = <>){
+
+	chomp $line;
+
+	# On vire les commentaires et le header
+	next if($line =~ /^#/);
+
+	if($header == 0){ $header = 1; next; }
+
+	# On récupère les parties
+	my @parts = split("\t", $line);
+
+	# On vire les infos qu'on veut pas
+	my $probe_id = shift @parts;
+	my $x = shift @parts;
+	my $y = shift @parts;
+	my $probe_type = shift @parts;
+	my $probeset_id = shift @parts;
+	my $probeset_type = shift @parts;
+	my $block = shift @parts;
+
+	# Le reste c'est les intensités
+	# On ajoute 16 a toutes les valeurs (le stability factor)
+	my @rows = map { $_ + 16 } @parts;
+
+	# On ajoute le probe id au début
+	unshift(@rows, $probe_id);
+
+	# On affiche
+	print join("\t", @rows) . "\n";
+
+}

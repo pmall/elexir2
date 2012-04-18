@@ -1,0 +1,4 @@
+#!/bin/bash
+./genes $1
+./sondes $1
+./entites $1
