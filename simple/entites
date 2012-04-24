@@ -80,7 +80,9 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_sondes = 'humain_probes_status';
+my $table_sondes = $infos_analyse->{'organism'} eq 'human'
+	? 'humain_probes_status'
+	: 'souris_probes_status';
 my $table_intensites = '_' . $infos_analyse->{'id_project'} . '_intensites';
 my $table_dabg = '_' . $infos_analyse->{'id_project'} . '_dabg';
 my $table_trans = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_transcription';
