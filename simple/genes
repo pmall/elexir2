@@ -128,8 +128,6 @@ for(my $i = 1; $i <= @exp; $i++){
 
 }
 
-@fields_expr = sort @fields_expr;
-
 my @fields_trans = (
 	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
 	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_expr),
@@ -216,7 +214,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Calcul de l'expression de gène
 	# ======================================================================
 
-	my %expr = expression(\@exp, \@sondes);
+	my @expr = expression(\@exp, \@sondes);
 
 	# ======================================================================
 	# Etape de lissage pour la transcription
@@ -276,7 +274,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	push(@genes, {
 		'id' => $id_gene,
-		'expression' => \%expr,
+		'expression' => \@expr,
 		'fc_trans' => $fc_gene_trans,
 		'p_value_trans' => $p_value_trans,
 		'nb_sondes_trans' => scalar(@sondes_trans),
@@ -311,7 +309,7 @@ for(my $i = 0; $i < @genes; $i++){
 	# On insert le gène dans la bdd
 	$insert_gene_sth->execute(
 		$gene->{'id'},
-		(map { log2($gene->{'expression'}->{$_}) } (sort keys %{$gene->{'expression'}})),
+		(map { log2($_) } (@{$gene->{'expression'}})),
 		log2($gene->{'fc_trans'}),
 		$gene->{'p_value_trans'},
 		$adjp_trans[$i],

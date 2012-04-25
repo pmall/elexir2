@@ -280,7 +280,7 @@ sub expression{
 	my @exp = @{$ref_exp};
 	my @sondes = @{$ref_sondes};
 
-	my %medians = ();
+	my @medians = ();
 
 	for(my $i = 1; $i <= @exp; $i++){
 
@@ -296,12 +296,12 @@ sub expression{
 
 		}
 
-		$medians{'control' . $i} = median(@values_controls);
-		$medians{'test' . $i} = median(@values_tests);
+		push(@medians, median(@values_controls));
+		push(@medians, median(@values_tests));
 
 	}
 
-	return %medians;
+	return @medians;
 
 }
 

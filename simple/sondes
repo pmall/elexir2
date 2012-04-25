@@ -139,9 +139,6 @@ for(my $i = 1; $i <= @exp; $i++){
 
 }
 
-@fields_NIs = sort @fields_NIs;
-@fields_SIs = sort @fields_SIs;
-
 my @fields_table_NIs = (
 	'probe_id INT UNSIGNED NOT NULL',
 	'gene_id INT UNSIGNED NOT NULL',

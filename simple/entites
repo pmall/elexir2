@@ -153,13 +153,10 @@ for(my $i = 0; $i < @exp; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
+	push(@fields_SIs, 'SI' . ($i + 1));
+	push(@fields_SIsds, 'SIsd' . ($i + 1));
 
 }
-
-@fields_expr = sort @fields_expr;
-
-for(my $i = 0; $i < @exp; $i++){ push(@fields_SIs, 'SI' . ($i + 1)); }
-for(my $i = 0; $i < @exp; $i++){ push(@fields_SIsds, 'SIsd' . ($i + 1)); }
 
 my @fields_splicing = ();
 
@@ -377,7 +374,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# ======================================================
 
 			# On calcule l'expression de l'entité
-			my %expr = expression(\@exp, \@sondes_entite);
+			my @expr = expression(\@exp, \@sondes_entite);
 
 			# ======================================================
 			# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
@@ -453,8 +450,11 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 			for(my $i = 1; $i <= @exp; $i++){
 
-				my $psi_control = 100 * ($expr{'control' . $i} / (2**$gene->{'control' . $i}));
-				my $psi_test = 100 * ($expr{'test' . $i} / (2**$gene->{'test' . $i}));
+				my $index_cont = ($i - 1) * 2;
+				my $index_test = ($i * 2) - 1;
+
+				my $psi_control = 100 * ($expr[$index_cont] / (2**$gene->{'control' . $i}));
+				my $psi_test = 100 * ($expr[$index_test] / (2**$gene->{'test' . $i}));
 
 				push(@psis_control, $psi_control);
 				push(@psis_test, $psi_test);
@@ -535,7 +535,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 				'type' => $infos_sondes_entite[0]->{'entite_type'},
 				'exon_pos' => $infos_sondes_entite[0]->{'exon_pos'},
 				'nb_sondes' => $nb_sondes,
-				'expression' => \%expr,
+				'expression' => \@expr,
 				'SIs' => \@SIs_entite,
 				'SI' => $si_entite,
 				'p_value' => $p_value,
@@ -640,7 +640,7 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@values, $entite->{'id_gene'});
 	push(@values, $entite->{'type'});
 	push(@values, $entite->{'exon_pos'});
-	push(@values, (map { log2($entite->{'expression'}->{$_}) } (sort keys %{$entite->{'expression'}})));
+	push(@values, (map { log2($_) } (@{$entite->{'expression'}})));
 	push(@values, (map { $_ } @{$entite->{'SIs'}})) if($paire);
 	push(@values, $entite->{'SI'});
 	push(@values, $entite->{'p_value'});
