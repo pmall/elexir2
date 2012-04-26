@@ -74,12 +74,10 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_sondes = $infos_analyse->{'organism'} eq 'human'
-	? 'humain_probes_status'
-	: 'souris_probes_status';
-my $table_intensites = '_' . $infos_analyse->{'id_project'} . '_intensites';
-my $table_dabg = '_' . $infos_analyse->{'id_project'} . '_dabg';
-my $table_trans = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_transcription';
+my $table_sondes = get_table_sondes($infos_analyse->{'organism'});
+my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
+my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
+my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare la requete pour les sondes avec ces infos
@@ -116,7 +114,7 @@ my @exp = decrire(
 );
 
 # ==============================================================================
-# On crée une table pour accueillir les valeurs du gène
+# On crée la table qui contient les valeurs des gène
 # ==============================================================================
 
 my @fields_expr = ();
@@ -289,7 +287,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 }
 
 # ==============================================================================
-# On calcule les p values ajustées et on ajoute dans la bdd
+# On calcule les p values ajustées
 # ==============================================================================
 
 # On récupère la totalité des listes de pvalues trans et epi
@@ -303,7 +301,7 @@ my @adjp_epi = adjust_pvals(\@pvals_epi);
 # Pour chaque gène
 for(my $i = 0; $i < @genes; $i++){
 
-	# On récupère les gènes
+	# On récupère le gènes
 	my $gene = $genes[$i];
 
 	# On insert le gène dans la bdd

@@ -3,6 +3,72 @@ use strict;
 use warnings;
 use List::Util qw(sum min);
 
+# ==============================================================================
+# Formatage commun a tout les scripts
+# ==============================================================================
+
+sub get_table_sondes{
+
+	my($organism) = @_;
+
+	return ($organism eq 'human')
+		? 'humain_probes_status'
+		: 'souris_probes_status';
+
+}
+
+sub get_table_intensites{
+
+	my($id_project) = @_;
+
+	return '_' . $id_project . '_intensites';
+
+}
+
+sub get_table_dabg{
+
+	my($id_project) = @_;
+
+	return '_' . $id_project . '_dabg';
+
+}
+
+sub get_table_transcription{
+
+	my($id_project, $id_analyse) = @_;
+
+	return '_' . $id_project . '__' . $id_analyse . '_transcription';
+
+}
+
+sub get_table_ni{
+
+	my($id_project, $id_analyse) = @_;
+
+	return '_' . $id_project . '__' . $id_analyse . '_NIs';
+
+}
+
+sub get_table_si{
+
+	my($id_project, $id_analyse) = @_;
+
+	return '_' . $id_project . '__' . $id_analyse . '_SIs';
+
+}
+
+sub get_table_splicing{
+
+	my($id_project, $id_analyse) = @_;
+
+	return '_' . $id_project . '__' . $id_analyse . '_splicing';
+
+}
+
+# ==============================================================================
+# Fonctions stats descriptive
+# ==============================================================================
+
 sub mean{
 
 	return sum(@_)/@_
@@ -33,18 +99,9 @@ sub median{
 	# On classe les valeurs par ordre croissant
 	my @ordered = sort {$a <=> $b} @_;
 
-	if(@_ % 2){
-
-		# Nombre d'éléments impaire : on prend celui du milieu
-		return $ordered[int(@_/2)];
-
-	}else{
-
-		# Nombre d'éléments paires : on fait la moyenne des deux
-		# valeurs du milieu.
-		return (($ordered[(@_/2) - 1] + $ordered[@_/2]) / 2);
-
-	}
+	return (@_ % 2)
+		? $ordered[int(@_/2)]
+		: (($ordered[(@_/2) - 1] + $ordered[@_/2]) / 2);
 
 }
 
@@ -62,7 +119,10 @@ sub log2{
 
 }
 
-# Retourne la description d'une expérience
+# ==============================================================================
+# Description d'un expérience (retourne une liste qui va bien pour les calculs)
+# ==============================================================================
+
 sub decrire{
 
 	my($sth, $id_analyse, $type_analyse) = @_;
@@ -105,6 +165,10 @@ sub decrire{
 	return @exp;
 
 }
+
+# ==============================================================================
+# Calcul de l'expression d'une sonde a partir du dabg
+# ==============================================================================
 
 # Retourne 1 si la sonde est exprimée dans au moins la moitié des replicats
 # d'au moins une condition, 0 sinon
@@ -152,6 +216,10 @@ sub dabg{
 	return ($exp_control or $exp_test);
 
 }
+
+# ==============================================================================
+# Fonctions de lissage
+# ==============================================================================
 
 # Filtre une liste de sondes par un lissage de type transcription
 # Cad on garde les sondes dont l'intensité est comprise dans la moyenne plus ou
@@ -270,6 +338,10 @@ sub lissage_epissage{
 
 }
 
+# ==============================================================================
+# Calcul de l'expression d'une liste de sonde
+# ==============================================================================
+
 # Retourne les valeurs d'expression d'un groupe de sonde
 # (mediane de tout les samples d'un réplicat puis médiane de ces valeurs
 # => une valeur par replicat)
@@ -304,6 +376,10 @@ sub expression{
 	return @medians;
 
 }
+
+# ==============================================================================
+# Fonctions pour le fold change
+# ==============================================================================
 
 # Retourne la liste des médianes des fold changes d'un groupe de sonde
 sub fcs_sondes{
@@ -357,6 +433,10 @@ sub fcs_sonde{
 
 }
 
+# ==============================================================================
+# Fonction ttest
+# ==============================================================================
+
 # Effectue un ttest à partir d'une valeur moyenne/mediane/whatever et de la
 # liste des échantillons qui a permi de calculer cette valeur
 sub ttest{
@@ -382,6 +462,10 @@ sub ttest{
 	return $p_value;
 
 }
+
+# ==============================================================================
+# Fonction correction pvalues
+# ==============================================================================
 
 sub adjust_pvals{
 

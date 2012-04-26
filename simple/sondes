@@ -72,13 +72,11 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_sondes = $infos_analyse->{'organism'} eq 'human'
-	? 'humain_probes_status'
-	: 'souris_probes_status';
-my $table_intensites = '_' . $infos_analyse->{'id_project'} . '_intensites';
-my $table_trans = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_transcription';
-my $table_ni = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_NIs';
-my $table_si = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_SIs';
+my $table_sondes = get_table_sondes($infos_analyse->{'organism'});
+my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
+my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
+my $table_ni = get_table_ni($infos_analyse->{'id_project'}, $id_analyse);
+my $table_si = get_table_si($infos_analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requete pour l'analyse avec ces infos
