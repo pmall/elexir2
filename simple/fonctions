@@ -7,6 +7,16 @@ use List::Util qw(sum min);
 # Formatage commun a tout les scripts
 # ==============================================================================
 
+sub get_base_fasterdb{
+
+	my($organism) = @_;
+
+	return ($organism eq 'human')
+		? 'fasterdb_humain'
+		: 'fasterdb_souris';
+
+}
+
 sub get_table_sondes{
 
 	my($organism) = @_;
