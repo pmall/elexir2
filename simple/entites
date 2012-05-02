@@ -24,7 +24,6 @@ my $const_si = 0.137503524;
 # On défini les identifiants pour la bdd
 my $db_host = 'localhost';
 my $db_name = 'elexir2';
-my $db_name_fdb = 'fasterdb_humain';
 my $db_user = 'elexir2';
 my $db_pass = 'pandas';
 
@@ -121,7 +120,7 @@ my $select_sis_sth = $dbh->prepare(
 
 # On se connecte a fasterdb
 my $dbh_fdb = DBI->connect(
-	'DBI:mysql:' . $db_name_fdb . ':' . $db_host,
+	'DBI:mysql:' . $base_fasterdb . ':' . $db_host,
 	$db_user,
 	$db_pass
 );
