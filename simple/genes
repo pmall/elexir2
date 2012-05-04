@@ -1,12 +1,15 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use FindBin qw($Bin);
 use DBI;
 use List::MoreUtils qw(uniq);
 use Statistics::R;
-
-require $FindBin::Bin . '/fonctions';
+use FindBin qw($Bin);
+use lib $FindBin::Bin . '/../lib';
+use Format;
+use Math;
+use Analyse;
+use Stats;
 
 # ==============================================================================
 # Parametres
@@ -57,7 +60,7 @@ my $select_chips_sth = $dbh->prepare(
 
 # On selectionne les gènes
 my $select_genes_sth = $dbh->prepare(
-	"SELECT DISTINCT(gene_id) FROM humain_probes_status"
+	"SELECT DISTINCT(gene_id) FROM humain_probes_status LIMIT 100"
 );
 
 # ==============================================================================

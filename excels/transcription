@@ -1,0 +1,288 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use DBI;
+use File::Path qw(make_path);
+use Spreadsheet::WriteExcel;
+use FindBin qw($Bin);
+use lib "$FindBin::Bin/../lib";
+use Format;
+use Math qw(round);
+use Analyse::RequetesCourantes;
+use Traitement_resultats::FonctionsXls;
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+
+# On défini les identifiants pour la bdd
+my $db_host = 'localhost';
+my $db_name = 'elexir2';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
+
+# Paramètres de sélection pour les résulats
+my $seuil_trans = 0.263034406;
+my $seuil_pval = 0.05;
+my $seuil_fiabilite_fcGene = 2;
+
+# Repertoire contenant les fichiers excel
+my $dir_xls = '/data/elexir/reports';
+
+# ==============================================================================
+# Connection à elexir et préparation des requetes
+# ==============================================================================
+
+my $probes_db = DBI->connect(
+	"DBI:mysql:" . $db_name . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# On selectionne les infos de l'analyse
+my $select_infos_analyse_sth = $probes_db->prepare(
+	"SELECT p.id AS id_project, a.name, p.organism, a.type,
+	COUNT(DISTINCT ca.name) AS nb_rep_cont, COUNT(DISTINCT cb.name) AS nb_rep_test
+	FROM analyses AS a, projects AS p, groups AS la, groups AS lb, chips AS ca, chips AS cb
+	WHERE a.id_project = p.id
+	AND a.id = la.id_analysis
+	AND a.id = lb.id_analysis
+	AND la.letter = 'A'
+	AND lb.letter = 'B'
+	AND p.id = ca.id_project
+	AND p.id = cb.id_project
+	AND la.`condition` = ca.`condition`
+	AND lb.`condition` = cb.`condition`
+	AND a.id = ?
+	GROUP BY p.id"
+);
+
+# ==============================================================================
+# On récupère les infos de l'analyse
+# ==============================================================================
+
+$select_infos_analyse_sth->execute($id_analyse);
+
+my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
+
+die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+# ==============================================================================
+# On récupère les infos dont on a besoin selon les infos de l'analyse
+# ==============================================================================
+
+my $id_projet = $infos_analyse->{"id_project"};
+my $nom_projet = $infos_analyse->{"name"};
+my $orga = $infos_analyse->{"organism"};
+my $nb_repl_cont = $infos_analyse->{"nb_rep_cont"};
+my $nb_repl_test = $infos_analyse->{"nb_rep_test"};
+
+# on crée les variables du script qui déendent de l'analyse
+my $base_fasterdb = get_base_fasterdb($orga);
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
+my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
+my $fichier_sortie = $dir_sortie . '/' . $nom_projet . '_transcription.xls';
+
+# On crée les dossier
+make_path($dir_sortie);
+
+# ==============================================================================
+# On se connecte a fasterdb
+# ==============================================================================
+
+my $faster_db = DBI->connect(
+	"DBI:mysql:" . $base_fasterdb . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# ==============================================================================
+# On initialise le fichier
+# ==============================================================================
+
+# Fichier
+my $resultat			= Spreadsheet::WriteExcel->new($fichier_sortie);
+
+# Feuilles
+my $f_resume			= $resultat->add_worksheet('Resume de l\'analyse');
+my $f_transcription_no_fdr	= $resultat->add_worksheet('SANS correction pvals');
+my $f_transcription_fdr		= $resultat->add_worksheet('AVEC correction pvals');
+
+# Couleurs
+my $couleur_entete		= $resultat->set_custom_color(39, 189, 189, 189);
+my $couleur_up			= $resultat->set_custom_color(40, 255, 204, 153);
+my $couleur_down		= $resultat->set_custom_color(41, 204, 255, 204);
+
+# Formats
+my $format_resume_titre		= $resultat->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_resume_cell		= $resultat->add_format(color => 'black', bold => 0, center_across => 1);
+my $format_cell_no_center	= $resultat->add_format(color => 'black', bold => 0);
+my $format_entete		= $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_up			= $resultat->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
+my $format_down			= $resultat->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
+
+#-------------------------------------------------------------------#
+#                          Données à afficher                       #
+#-------------------------------------------------------------------#
+
+# En-tetes des onglets
+my @entete_gene = ('Fasterdb id', 'Link Elexir', 'Symbol', 'Name', 'Human Ensembl id', 'Mouse Ensembl id', 'Chr Position', 'Regulation', 'FC', 'Pvalue', 'Nb probes', 'Nb exons');
+
+&FonctionsXls::ecriture(\@entete_gene, $f_transcription_no_fdr, 0, $format_entete);
+&FonctionsXls::ecriture(\@entete_gene, $f_transcription_fdr, 0, $format_entete);
+
+# On set la largeur des colonnes
+setting_columns($f_transcription_no_fdr);
+setting_columns($f_transcription_fdr);
+
+
+#-------------------------------------------------------------------#
+#                              Traitement                           #
+#-------------------------------------------------------------------#
+
+# ---------------------------- Resume ----------------------------- #
+
+# Date
+$f_resume->write(0, 0, date(), $format_cell_no_center);
+
+# Paramètres utilisés
+$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
+my @parametre_fc   = ("Seuil fold", round((2**$seuil_trans), 2));
+my @parametre_pval = ("Seuil p-value", $seuil_pval);
+&FonctionsXls::ecriture(\@parametre_fc, $f_resume, 3, $format_resume_cell);
+&FonctionsXls::ecriture(\@parametre_pval, $f_resume, 4, $format_resume_cell);
+
+# Annotation des sondes et des gènes analysés
+# &FonctionsXls::resume_annotation_sondes($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center, "transcription");
+# &FonctionsXls::resume_annotation_genes($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell);
+
+# ------------------------- Récup infos --------------------------- #
+
+my ($h_genes_ortholgues_humain, $h_genes_ortholgues_souris) = &RequetesCourantes::requete_genes_orthologues($faster_db);
+
+my $h_genes_carac = &RequetesCourantes::requete_genes_caracteristiques($faster_db);
+
+# -------------------------- Requete ---------------------------- #
+
+my $req_trans =
+    "SELECT `gene_id`, `trans_fc`, `trans_pval`, `trans_adjp`, `trans_nb_sondes`, `trans_nb_exons`
+    FROM $table_trans
+    WHERE abs( `trans_fc` ) >= $seuil_trans ;";
+    
+
+# ------------------- Exécution de la requete --------------------- #
+
+my ($h_no_fdr, $h_fdr) = requetage($req_trans);
+
+# ------------------- Traitement des résultats --------------------- #
+
+my $resultats_no_fdr = process($h_no_fdr, $f_transcription_no_fdr);
+my $resultats_fdr    = process($h_fdr, $f_transcription_fdr);
+
+
+# -------------------------- Résultats --------------------------- #
+
+&FonctionsXls::resume_resultats_transcription($resultats_no_fdr, $resultats_fdr, $f_resume, $format_resume_titre, $format_resume_cell);
+
+#------------------------------------------------------------------#
+#                             Subroutines                          #
+#------------------------------------------------------------------#
+sub setting_columns {
+    my($feuille) = @_;
+
+    $feuille->set_column(0, 0, 12);
+    $feuille->set_column(1, 1, 12);
+    $feuille->set_column(3, 4, 18);
+    $feuille->set_column(5, 6, 23);
+    $feuille->set_column(7, 7, 10);
+    $feuille->set_column(10, 10, 12);
+
+}
+# ------------------------------------------------------------------ #
+sub requetage {
+
+    my ($requete) = @_;
+    
+    my %hash_no_fdr = ();
+    my %hash_fdr = ();
+
+    my $select_gene = $probes_db -> prepare ( $requete );
+    $select_gene -> execute;
+    while ( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select_gene -> fetchrow_array ) {
+        if( $pval <= $seuil_pval ){
+            $pval = round($pval, 5);
+            my %h_gene_reg = ( "fc"        => $fc,
+                               "pval"      => $pval,
+                               "nb_sondes" => $nb_sondes,
+                               "nb_exons"  => $nb_exons );
+            $hash_no_fdr{$gene_id} = \%h_gene_reg;
+        }                   
+        if( $adjp <= $seuil_pval ){
+            $adjp = round($adjp, 5);
+            my %h_gene_reg = ( "fc"        => $fc,
+                               "pval"      => $adjp,
+                               "nb_sondes" => $nb_sondes,
+                               "nb_exons"  => $nb_exons );
+            $hash_fdr{$gene_id} = \%h_gene_reg;
+        }                   
+    }
+
+    $select_gene -> finish;
+    
+    return (\%hash_no_fdr, \%hash_fdr);
+
+}
+# ------------------------------------------------------------------ #
+sub process {
+    my ($hash_genes, $feuille) = @_;
+    
+    my $nb_genes = 0;
+    my $nb_genes_up = 0;
+    my $nb_genes_down = 0;
+    
+    foreach my $gene_id (sort { ($hash_genes->{$b}->{"fc"} >= 0) <=> ($hash_genes->{$a}->{"fc"} >= 0) || abs($hash_genes->{$b}->{"fc"}) <=> abs($hash_genes->{$a}->{"fc"}) } (keys %$hash_genes) ) {
+        
+        $nb_genes++;
+        
+        my $gene = $hash_genes->{$gene_id};
+
+        # On récupère les infos du gène courant
+        my $gene_infos = $h_genes_carac->{$gene_id};
+        my $hash_ensembl = &FonctionsXls::get_gene_identifiants_ensembl($gene_infos->{"ensembl"}, $h_genes_ortholgues_humain, $h_genes_ortholgues_souris);
+    
+        # Calcul des FC en fonction du sens de la regulation
+        my ($regulation, $fc_gene, $fcs_xls) = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($gene->{"fc"});
+        my $format;
+        if ($regulation eq "up"){
+        	$format = $format_up;
+        	$nb_genes_up++;
+        }else{
+            $format = $format_down;
+            $nb_genes_down++;
+        }
+
+        # Lien à l'interface web de MISEA
+        my $link_misea = '';
+        #my $link_misea = "http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+        #my $link_misea = "http://fasterdb.com/elexir/main.pl?id=$gene_id&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+    
+        # Ecriture dans le fichier excel
+	my $strand = ($gene_infos->{"strand"} eq '1') ? '+' : '-';
+
+        my @data = ($gene_id, $link_misea, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, "chr" . $gene_infos->{"chr"}.":".$gene_infos->{"start"}."-".$gene_infos->{"end"}.":".$strand, $regulation, $fc_gene, $gene->{"pval"}, $gene->{"nb_sondes"}, $gene->{"nb_exons"});
+
+        &FonctionsXls::ecriture(\@data, $feuille, $nb_genes, $format);
+        
+    }
+
+    # On renvoie les résultats de la requete (nb_total, nb_up, nb_down) pour écriture dans le log
+    my %h_resultats = ( "total" => $nb_genes,
+                        "up"    => $nb_genes_up,
+                        "down"  => $nb_genes_down );
+    
+    return (\%h_resultats);
+    
+}

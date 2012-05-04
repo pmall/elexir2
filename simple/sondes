@@ -1,12 +1,15 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
-use FindBin qw($Bin);
 use DBI;
 use List::Util qw(sum);
 use File::Temp qw(tempdir);
-
-require $FindBin::Bin . '/fonctions';
+use FindBin qw($Bin);
+use lib $FindBin::Bin . '/../lib';
+use Format;
+use Math;
+use Analyse;
+use Stats;
 
 # ==============================================================================
 # Parametres
