@@ -1,7 +1,0 @@
-#!/bin/bash
-
-dir=$(dirname $0)
-
-$dir/genes $1
-$dir/sondes $1
-$dir/entites $1
