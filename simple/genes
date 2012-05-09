@@ -60,7 +60,7 @@ my $select_chips_sth = $dbh->prepare(
 
 # On selectionne les gènes
 my $select_genes_sth = $dbh->prepare(
-	"SELECT DISTINCT(gene_id) FROM humain_probes_status"
+	"SELECT DISTINCT(gene_id) FROM humain_probes_status LIMIT 100"
 );
 
 # ==============================================================================

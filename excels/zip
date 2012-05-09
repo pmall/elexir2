@@ -1,0 +1,58 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use DBI;
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+
+# On défini les identifiants pour la bdd
+my $db_host = 'localhost';
+my $db_name = 'elexir2';
+my $db_user = 'elexir2';
+my $db_pass = 'pandas';
+
+# Repertoire contenant les fichiers excel
+my $dir_xls = '/data/elexir/reports';
+
+# ==============================================================================
+# Connection à elexir et préparation des requetes
+# ==============================================================================
+
+my $dbh = DBI->connect(
+	"DBI:mysql:" . $db_name . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+my $select_project_id_sth = $dbh->prepare(
+	"SELECT id_project, name FROM analyses WHERE id = ?"
+);
+
+# ==============================================================================
+# On récupère l'identifiant du projet
+# ==============================================================================
+
+$select_project_id_sth->execute($id_analyse);
+my($id_projet, $nom_analyse) = $select_project_id_sth->fetchrow_array;
+$select_project_id_sth->finish;
+
+# ==============================================================================
+# On zippe les fichiers
+# ==============================================================================
+
+my $dir_analyse = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
+
+my $files = join(' ', (
+	$nom_analyse . '_transcription.xls',
+	$nom_analyse . '_epissage.xls',
+	$nom_analyse . '_epissage_SI.xls',
+	$nom_analyse . '_epissage_SIsd.xls',
+	$nom_analyse . '_epissage_psi.xls'
+));
+
+`cd $dir_analyse && zip $nom_analyse.zip $files`;
