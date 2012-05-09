@@ -17,6 +17,7 @@ use Stats;
 
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+my $limit = shift @ARGV // 18446744073709551615; # Si pas indiqué, on met maxint /
 
 # Seuil pour le dabg
 my $seuil_dabg = 0.05;
@@ -60,7 +61,7 @@ my $select_chips_sth = $dbh->prepare(
 
 # On selectionne les gènes
 my $select_genes_sth = $dbh->prepare(
-	"SELECT DISTINCT(gene_id) FROM humain_probes_status LIMIT 100"
+	"SELECT DISTINCT(gene_id) FROM humain_probes_status LIMIT ?"
 );
 
 # ==============================================================================
@@ -162,8 +163,8 @@ my $i = 0;
 # les pvals ajustés)
 my @genes = ();
 
-# On selectionne tout les gènes
-$select_genes_sth->execute;
+# On selectionne les gènes
+$select_genes_sth->execute($limit);
 
 # Pour chaque gène
 while(my($id_gene) = $select_genes_sth->fetchrow_array){

@@ -865,13 +865,12 @@ sub process {
             my $entite_courante = $hash_entites_gene{$entite_id};
             
             # ---------------- Info gène ----------------- #
-            my $strand = ($gene_infos->{"strand"} eq '1') ? '+' : '-';
-
             my $link_elexir = '';
             #my $link_elexir  = "http://172.21.100.5/elexir/main.pl?id=$gene_courant&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
     #        my $link_elexir = "http://fasterdb.com/elexir/main.pl?id=$gene_courant&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
             my $gene_infos   = $h_genes_carac->{$gene_courant};
             my $ensembl      = $gene_infos->{"ensembl"};
+            my $strand       = ($gene_infos->{"strand"} eq '1') ? '+' : '-';
             my $hash_ensembl = &FonctionsXls::get_gene_identifiants_ensembl($ensembl, $h_genes_ortholgues_humain, $h_genes_ortholgues_souris);
             my @data_gene    = ($gene_courant, $link_elexir, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, 'chr' . $gene_infos->{"chr"}.":".$gene_infos->{"start"}."-".$gene_infos->{"end"}.":".$strand, $h_genes_regulation->{$gene_courant}->{"regulation"}, round($h_genes_regulation->{$gene_courant}->{"fold"}, 2), round($h_genes_regulation->{$gene_courant}->{"pvalue"}, 5));
             

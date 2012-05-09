@@ -2,7 +2,7 @@
 
 dir=$(dirname $0)
 
-$dir/simple/genes $1
+$dir/simple/genes $1 $2
 $dir/simple/sondes $1
 $dir/simple/entites $1
 $dir/excels/transcription $1
