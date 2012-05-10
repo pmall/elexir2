@@ -50,7 +50,8 @@ $select_project_id_sth->finish;
 # On zippe les fichiers
 # ==============================================================================
 
-my $dir_analyse = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
+my $dir_project = $dir_xls . '/' . $id_projet;
+my $dir_analyse = $dir_project . '/' . $id_analyse;
 
 my $files = join(' ', (
 	'transcription.xls',
@@ -60,4 +61,4 @@ my $files = join(' ', (
 	'epissage_psi.xls'
 ));
 
-`cd $dir_analyse && zip files.zip $files`;
+`cd $dir_analyse && zip files.zip $files && chmod -R 777 $dir_project`;
