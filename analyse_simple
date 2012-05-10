@@ -5,9 +5,4 @@ dir=$(dirname $0)
 $dir/simple/genes $1 $2
 $dir/simple/sondes $1
 $dir/simple/entites $1
-$dir/excels/transcription $1
-$dir/excels/splicing $1
-$dir/excels/splicing_SI $1
-$dir/excels/splicing_SIsd $1
-$dir/excels/splicing_psi $1
-$dir/excels/zip $1
+$dir/create_excels $1

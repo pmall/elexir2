@@ -51,7 +51,7 @@ my $probes_db = DBI->connect(
 
 # On selectionne les infos de l'analyse
 my $select_infos_analyse_sth = $probes_db->prepare(
-	"SELECT p.id AS id_project, p.dir, a.name, p.organism, a.type,
+	"SELECT p.id AS id_project, p.organism, a.type,
 	COUNT(DISTINCT ca.name) AS nb_rep_cont, COUNT(DISTINCT cb.name) AS nb_rep_test
 	FROM analyses AS a, projects AS p, groups AS la, groups AS lb, chips AS ca, chips AS cb
 	WHERE a.id_project = p.id
@@ -82,7 +82,6 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # ==============================================================================
 
 my $id_projet = $infos_analyse->{"id_project"};
-my $nom_projet = $infos_analyse->{"name"};
 my $orga = $infos_analyse->{"organism"};
 my $est_paire = ($infos_analyse->{"type"} eq 'paire');
 my $nb_repl_cont = $infos_analyse->{"nb_rep_cont"};
@@ -98,7 +97,7 @@ my $table_carac_entites = $config->{'table_carac_entites'}{$orga};
 my $table_prom = $config->{'table_prom'}{$orga};
 my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/' . $nom_projet . '_epissage_SIsd.xls';
+my $fichier_sortie = $dir_sortie . '/epissage_SIsd.xls';
 
 # On crée les dossier
 make_path($dir_sortie);
