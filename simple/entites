@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use YAML::XS qw(LoadFile);
 use DBI;
 use List::MoreUtils qw(uniq);
 use Statistics::R;
@@ -18,17 +19,20 @@ use Stats;
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
 
-# Seuil pour le dabg
-my $seuil_dabg = 0.05;
-
-# Constante SI significatif
-my $const_si = 0.137503524;
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
 
 # On défini les identifiants pour la bdd
-my $db_host = 'localhost';
-my $db_name = 'elexir2';
-my $db_user = 'elexir2';
-my $db_pass = 'pandas';
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Parametres pour l'analyse
+my $gc_max = $config->{'simple'}{'gc_max'};
+my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
+my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
+my $const_si = $config->{'simple'}{'seuil_si'};
 
 # On ouvre une session R pour le script
 my $R = Statistics::R->new();
@@ -75,13 +79,13 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = get_base_fasterdb($infos_analyse->{'organism'});
-my $table_sondes = get_table_sondes($infos_analyse->{'organism'});
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'organism'}};
+my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}};
 my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 my $table_si = get_table_si($infos_analyse->{'id_project'}, $id_analyse);
-my $table_splicing = '_' . $infos_analyse->{'id_project'} . '__' . $id_analyse . '_splicing';
+my $table_splicing = get_table_splicing($infos_analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requete sur elexir pour l'analyse avec ces infos
@@ -97,8 +101,8 @@ my $select_infos_sondes_sth = $dbh->prepare(
 	"SELECT probe_id, exon_pos, entite_id, entite_type
 	FROM " . $table_sondes . "
 	WHERE align = 'as'
-	AND gc_content < 18
-	AND nb_occ = 1
+	AND gc_content < ?
+	AND nb_occ = ?
 	AND gene_id = ?"
 );
 
@@ -224,7 +228,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	$select_nb_exons_gene_sth->finish;
 
 	# On récupère les infos des sondes du gène
-	$select_infos_sondes_sth->execute($gene->{'gene_id'});
+	$select_infos_sondes_sth->execute($gc_max, $nb_occ_max, $gene->{'gene_id'});
 	my $infos_sondes = $select_infos_sondes_sth->fetchall_arrayref({});
 	$select_infos_sondes_sth->finish;
 

@@ -1,0 +1,65 @@
+# connection aux base de données
+db_host: localhost
+db_user: elexir2
+db_pass: pandas
+db_name: elexir2
+
+db_name_fasterdb:
+  human: fasterdb_humain
+  mouse: fasterdb_souris
+
+# Repertoires de données
+dir_cel: /data/elexir/celfiles
+dir_qc: /data/elexir/reports
+dir_xls: /data/elexir/reports
+dir_web: plateforme2
+
+# Description des fichiers d'annotations
+annotations:
+  exon:
+    human:
+      pgf: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.pgf
+      clf: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.clf
+      bgp: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.antigenomic.bgp
+    mouse:
+      pgf: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.pgf
+      clf: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.clf
+      bgp: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.antigenomic.bgp
+  ggh:
+    human:
+      pgf: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1_gc.pgf
+      clf: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.clf
+      bgp: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.antigenomic.bgp
+
+# Tables selon l'organisme
+table_sondes:
+  human: humain_probes_status
+  mouse: souris_probes_status
+
+table_carac_entites:
+  human: humain_carac_entites
+  mouse: souris_carac_entites
+
+table_prom:
+  human: humain_prom
+  mouse: souris_prom
+
+table_polya:
+  human: humain_polya
+  mouse: souris_polya
+
+# Paramètres pour les algos
+correction:
+  algo: rma-bg,quant-norm,pm-only
+
+simple:
+  gc_max: 18
+  nb_occ_max: 1
+  seuil_dabg: 0.05
+  seuil_si: 0.137503524
+
+excel:
+  seuil_transcription: 0.263034406
+  seuil_epissage: 1.45
+  seuil_pval: 0.05
+  seuil_fc_gene: 2

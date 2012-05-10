@@ -1,60 +1,41 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use FindBin qw($Bin);
+use YAML::XS qw(LoadFile);
 use DBI;
 use File::Temp qw(tempdir);
-
-# On récupère l'identifiant du projet
-my $id_project = shift @ARGV || die("Vous devez passer un identifiant de projet en paramètre");
+use FindBin qw($Bin);
+use lib $FindBin::Bin . '/lib';
+use Format;
 
 # ==============================================================================
 # Paramètres
 # ==============================================================================
 
+# On récupère l'identifiant du projet
+my $id_project = shift @ARGV || die("Vous devez passer un identifiant de projet en paramètre");
+
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/config.yml');
+
 # Algo a utiliser pour la correction
-# rma-bg : correction du background de type RMA;
-# quant-norm : normalisation par quantille
-# pm-only : filtre que les sondes perfect match
-my $algo = 'rma-bg,quant-norm,pm-only';
+my $algo = $config->{'correction'}{'algo'};
 
 # On défini le dossier contenant les puces
-my $celdir = '/data/elexir/celfiles';
+my $celdir = $config->{'dir_cel'};
 
 # Nom des tables
-my $table_intensites = '_' . $id_project . '_intensites';
-my $table_dabg = '_' . $id_project . '_dabg';
+my $table_intensites = get_table_intensites($id_project);
+my $table_dabg = get_table_dabg($id_project);
 
 # On défini les identifiants pour la bdd
-my $db_host = 'localhost';
-my $db_name = 'elexir2';
-my $db_user = 'elexir2';
-my $db_pass = 'pandas';
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
 
 # Fichiers d'annotation
-my $dir_annotation = $FindBin::Bin . '/../annotations';
-
-my $annotations = {
-	'exon' => {
-		'human' => {
-			'clf' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.clf',
-			'pgf' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.pgf',
-			'bgp' => $dir_annotation . '/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.antigenomic.bgp'
-		},
-		'mouse' => {
-			'pgf' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.pgf',
-			'clf' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.clf',
-			'bgp' => $dir_annotation . '/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.antigenomic.bgp'
-		}
-	},
-	'ggh' => {
-		'human' => {
-			'pgf' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1_gc.pgf',
-			'clf' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.clf',
-			'bgp' => $dir_annotation . '/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.antigenomic.bgp'
-		}
-	}
-};
+my $dir_annotation = $config->{'dir_annotations'};
 
 # On défini un dossier temporaire
 my $tmp_dir = tempdir(CLEANUP => 1);
@@ -130,10 +111,9 @@ my @chips_files = (map {
 my $chips_files_list = join(' ', @chips_files);
 
 # On récupère les annotations
-my $annot_hash = $annotations->{$type}->{$organism};
-my $pgf = $annot_hash->{'pgf'};
-my $clf = $annot_hash->{'clf'};
-my $bgp = $annot_hash->{'bgp'};
+my $pgf = $config->{'annotations'}{$type}{$organism}{'pgf'};
+my $clf = $config->{'annotations'}{$type}{$organism}{'clf'};
+my $bgp = $config->{'annotations'}{$type}{$organism}{'bgp'};
 
 # ==============================================================================
 # On lance le traitement avec affymetrix power tools

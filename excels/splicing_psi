@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use YAML::XS qw(LoadFile);
 use DBI;
 use File::Path qw(make_path);
 use Spreadsheet::WriteExcel;
@@ -18,22 +19,25 @@ use Traitement_resultats::FonctionsXls;
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
 
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
+
 # passe est 3'_utr aussi en principe
 my $est_3primeUTR = 0;
 
 # On défini les identifiants pour la bdd
-my $db_host = 'localhost';
-my $db_name = 'elexir2';
-my $db_user = 'elexir2';
-my $db_pass = 'pandas';
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
 
 # Paramètres de sélection pour les résulats
-my $seuil_epissage = 1.45;
-my $seuil_pval = 0.05;
-my $seuil_fiabilite_fcGene = 2;
+my $seuil_epissage = $config->{'excel'}{'seuil_epissage'};
+my $seuil_pval = $config->{'excel'}{'seuil_pval'};
+my $seuil_fiabilite_fcGene = $config->{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
-my $dir_xls = '/data/elexir/reports';
+my $dir_xls = $config->{'dir_xls'};
 
 # ==============================================================================
 # Connection à elexir et préparation des requetes
@@ -86,13 +90,13 @@ my $nb_repl_test = $infos_analyse->{"nb_rep_test"};
 
 # on crée les variables du script qui déendent de l'analyse
 my $orga_adaptor = get_organism_adaptor($orga);
-my $base_fasterdb = get_base_fasterdb($orga);
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
-my $table_sondes = get_table_sondes($orga);
-my $table_carac_entites = get_table_carac_entites($orga);
-my $table_prom = get_table_prom($orga);
-my $table_polya = get_table_polya($orga);
+my $table_sondes = $config->{'table_sondes'}{$orga};
+my $table_carac_entites = $config->{'table_carac_entites'}{$orga};
+my $table_prom = $config->{'table_prom'}{$orga};
+my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $fichier_sortie = $dir_sortie . '/' . $nom_projet . '_epissage_psi.xls';
 

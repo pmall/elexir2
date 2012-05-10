@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use YAML::XS qw(LoadFile);
 use DBI;
 use List::Util qw(sum);
 use File::Temp qw(tempdir);
@@ -18,11 +19,14 @@ use Stats;
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
 
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
+
 # On défini les identifiants pour la bdd
-my $db_host = 'localhost';
-my $db_name = 'elexir2';
-my $db_user = 'elexir2';
-my $db_pass = 'pandas';
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
 
 # On défini un dossier temporaire
 my $tmp_dir = tempdir(CLEANUP => 1);
@@ -75,7 +79,7 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_sondes = get_table_sondes($infos_analyse->{'organism'});
+my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}};
 my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 my $table_ni = get_table_ni($infos_analyse->{'id_project'}, $id_analyse);

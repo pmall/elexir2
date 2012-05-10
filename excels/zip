@@ -1,7 +1,9 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
+use YAML::XS qw(LoadFile);
 use DBI;
+use FindBin qw($Bin);
 
 # ==============================================================================
 # Parametres
@@ -10,14 +12,17 @@ use DBI;
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
 
-# On défini les identifiants pour la bdd
-my $db_host = 'localhost';
-my $db_name = 'elexir2';
-my $db_user = 'elexir2';
-my $db_pass = 'pandas';
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
 
-# Repertoire contenant les fichiers excel
-my $dir_xls = '/data/elexir/reports';
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Répertoire de sortie 
+my $dir_xls = $config->{'dir_xls'};
 
 # ==============================================================================
 # Connection à elexir et préparation des requetes
