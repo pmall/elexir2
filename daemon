@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 import os
 import sys
+import yaml
 import threading
 import time
 import datetime
@@ -12,14 +13,20 @@ import subprocess
 # On définit des constantes
 # ==============================================================================
 
-# Nombre de threads en même temps
-NBTHREADS = 2
+# On récupère le répertoire de travail
+wd = os.getcwd()
+
+# On récupère la config
+config = yaml.load(file(wd + '/config.yml', 'r'))
 
 # Base de données
-HOST	= 'localhost'
-USER	= 'elexir2'
-PASSWD	= 'pandas'
-DBNAME	= 'elexir2'
+HOST	= config['db_host']
+USER	= config['db_user']
+PASSWD	= config['db_pass']
+DBNAME	= config['db_name']
+
+# Nombre de threads autorisés en même temps
+NBTHREADS = config['nb_threads']
 
 # Répertoire dans lequel vit le daemon
 WORKDIR = '/'
@@ -115,7 +122,7 @@ def now():
 # Fonction 
 # ==============================================================================
 
-def do_job(job, sema):
+def do_job(wd, job, sema):
 	sema.acquire()
 
 	id_job = job[0];
@@ -140,7 +147,7 @@ def do_job(job, sema):
 	cursor = dbh.cursor()
 	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
-	subprocess.call(['/home/pierre/workspace/analyses/' + algo, str(id_analyse)])
+	subprocess.call([wd + '/' + algo, str(id_analyse)])
 
 	cursor.execute('UPDATE jobs SET status = %(status)s, end = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'done', 'date':now()})
 	cursor.close
@@ -156,18 +163,19 @@ def do_job(job, sema):
 
 while(1):
 	try:
-
 		dbh = MySQLdb.connect(host = HOST, user = USER, passwd = PASSWD, db = DBNAME)
 
 		sema = threading.Semaphore(NBTHREADS);
 
 		while(1):
+
 			cursor = dbh.cursor()
-			cursor.execute('SELECT id, id_project, id_analysis, type FROM jobs WHERE status = %(status)s', {'status':'waiting'})
+			cursor.execute('SELECT id, id_project, id_analysis, type FROM jobs WHERE status = %(status)s', {'status':'starting'})
 			jobs = cursor.fetchall()
 
 			for job in jobs:
-				thread = threading.Thread(target = do_job, args = (job, sema))
+				cursor.execute('UPDATE jobs SET status = %(status)s WHERE id = %(id)s', {'id':job[0], 'status':'waiting'})
+				thread = threading.Thread(target = do_job, args = (wd, job, sema))
 				thread.start()
 				print thread
 
