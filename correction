@@ -96,8 +96,14 @@ die("Le projet $id_project correspond a aucune puce dans la bdd") if(@chips == 0
 my @chips_names = ();
 my @chips_fields = ();
 
+# pour chaque puces
 foreach my $chip (@chips){
 
+	# On échappe les parenthèses du nom de la puce
+	$chip->{name} =~ s/\(/\\(/g;
+	$chip->{name} =~ s/\)/\\)/g;
+
+	# On les ajoute a la liste
 	push(@chips_names, $chip->{name});
 	push(@chips_fields, $chip->{condition} . '_' . $chip->{num});
 
