@@ -233,7 +233,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	$select_infos_sondes_sth->finish;
 
 	# On récupère les ids des sondes (la même sonde peut apparaitre plusieur
-	# fois dans le gène)
+	# fois pour différentes entitées)
 	my @ids_sondes = uniq(map { $_->{'probe_id'} } @{$infos_sondes});
 
 	# On récupère les infos des sondes exprimées
@@ -256,30 +256,20 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	}
 
 	# ======================================================================
-	# On garde que les gènes qui ont moins de 4 exons ou au moins 4 exons
-	# avec au moins 2 sondes dans 50% des exons
+	# Si le gene a au moins 4 exons on l'analyse seulement si au moins la
+	# moitié de ses exons sont ciblés par au moins 2 sondes
 	# ======================================================================
 
-	# On va garder qu'une partie des sondes du gène
-	my @infos_sondes_selectionnes = ();
+	# Si le gène a au moins 4 exons on le garde seulement si 50% des exons
+	# ont au moins deux sondes.
+	if($nb_exons >= 4){
 
-	# On récupère les sondes exoniques parmis les sondes exprimés
-	my @infos_sondes_exons = (grep {
-		$_->{'entite_type'} == 1
-	} @infos_sondes_exprimes);
+		# On récupère les sondes exoniques parmis les sondes exprimés
+		my @infos_sondes_exons = (grep {
+			$_->{'entite_type'} == 1
+		} @infos_sondes_exprimes);
 
-	# Si il y a moins de 4 exons on garde tout
-	if($nb_exons < 4){
-
-		# On garde toute les sondes
-		@infos_sondes_selectionnes = @infos_sondes_exprimes;
-
-	# Sinon on garde le gene seulement si 50% des exons ont au moins deux
-	# sondes. On ne garde que les sondes qui sont dans les exons avec au
-	# moins deux sondes
-	}else{
-
-		# On compte le nombre de sondes uniques par exon
+		# On compte le nombre de sondes par exon
 		my %sondes_par_exons = ();
 
 		foreach my $infos_sonde_exon (@infos_sondes_exons){
@@ -288,23 +278,15 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		}
 
-		# On selectionne les exons qui ont au moins 2 sondes
-		my @exons_2_sondes = grep {
+		# On récupère le nombre d'exons qui sont ciblés par au moins
+		# deux sondes
+		my $nb_exons_2_sondes = grep {
 			$sondes_par_exons{$_} > 1
 		} keys %sondes_par_exons;
 
-		# On zappe si il n'y a pas 50% des exons qui ont au moins 2
-		# sondes
-		next if(@exons_2_sondes < int($nb_exons/2));
-
-		# On ne garde que les sondes des exons qui ont au moins deux sondes
-		foreach my $exon_pos (@exons_2_sondes){
-
-			push(@infos_sondes_selectionnes, grep {
-				$_->{'exon_pos'} == $exon_pos
-			} @infos_sondes_exprimes);
-
-		}
+		# On zappe si il n'y a pas 50% des exons qui sont ciblés par
+		# au moins deux sondes
+		next if($nb_exons_2_sondes < int($nb_exons/2));
 
 	}
 
@@ -325,19 +307,19 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	my @entites_gene = ();
 
 	# On vire les entités négatives (WTF ?)
-	@infos_sondes_selectionnes = (grep { $_->{'entite_type'} > 0 } @infos_sondes_selectionnes);
+	@infos_sondes_exprimes = (grep { $_->{'entite_type'} > 0 } @infos_sondes_exprimes);
 
-	# On récupère la liste des id d'entités (et on les classe dans l'ordre)
-	my @ids_entites = sort { $a <=> $b } (uniq(map { $_->{'entite_id'} } @infos_sondes_selectionnes));
+	# On récupère la liste des id d'entités
+	my @ids_entites = uniq(map { $_->{'entite_id'} } @infos_sondes_exprimes);
 
 	# Pour chaque exons
 	foreach my $id_entite (@ids_entites){
 
 		# On récupère les sondes de cet exon
-		my @infos_sondes_exon = grep { $_->{'entite_id'} == $id_entite } @infos_sondes_selectionnes;
+		my @infos_sondes_exon = grep { $_->{'entite_id'} == $id_entite } @infos_sondes_exprimes;
 
-		# On récupère les types d'entité de l'exon (et on les classe dans l'ordre)
-		my @types_entites = sort { $a <=> $b } (uniq(map { $_->{'entite_type'} } @infos_sondes_exon));
+		# On récupère les types d'entité de l'exon
+		my @types_entites = uniq(map { $_->{'entite_type'} } @infos_sondes_exon);
 
 		# Pour chaque type d'entite
 		foreach my $type_entite (@types_entites){

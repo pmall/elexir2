@@ -66,11 +66,6 @@ my $select_chips_sth = $dbh->prepare(
 	AND g.id_analysis = ?"
 );
 
-# On selectionne les gènes
-my $select_genes_sth = $dbh->prepare(
-	"SELECT DISTINCT(gene_id) FROM humain_probes_status LIMIT ?"
-);
-
 # ==============================================================================
 # On teste si l'analyse existe bien
 # ==============================================================================
@@ -93,6 +88,11 @@ my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_an
 # ==============================================================================
 # On prépare la requete pour les sondes avec ces infos
 # ==============================================================================
+
+# On selectionne les gènes
+my $select_genes_sth = $dbh->prepare(
+	"SELECT DISTINCT(gene_id) FROM " . $table_sondes . " LIMIT ?"
+);
 
 # On selectionne les sondes d'un gène
 my $select_infos_sondes_sth = $dbh->prepare(
@@ -188,36 +188,33 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	$select_infos_sondes_sth->finish;
 
 	# On récupère les valeurs de dabg de chaque sonde
-	my @dabg =();
+	my @sondes =();
 
+	# Pour chaque id de sonde
 	foreach my $probe_id (keys %{$infos_sondes}){
 
+		# On récupère les valeurs de dabg de la sonde
 		$select_dabg_sth->execute($probe_id);
-		my $values = $select_dabg_sth->fetchrow_hashref;
+		my $dabg = $select_dabg_sth->fetchrow_hashref;
 		$select_dabg_sth->finish;
 
-		push(@dabg, $values);
+		# Si la sonde est exprimé
+		if(dabg($seuil_dabg, \@exp, $dabg)){
+
+			# On va chercher ses intensites
+			$select_intensite_sth->execute($probe_id);
+			my $sonde = $select_intensite_sth->fetchrow_hashref;
+			$select_intensite_sth->finish;
+
+			# Et on l'ajoute à la liste des sondes
+			push(@sondes, $sonde);
+
+		}
 
 	}
 
-	# On ne garde que les sondes qui sont exprimés dans cette analyse
-	my @sondes_exprimes = grep { dabg($seuil_dabg, \@exp, $_) } @dabg;
-
-	# Si il n'y a pas six sondes exprimées on zappe
-	next if(@sondes_exprimes < 6);
-
-	# On récupère les intensites des sondes exprimés
-	my @sondes = ();
-
-	foreach my $sonde_exprime (@sondes_exprimes){
-
-		$select_intensite_sth->execute($sonde_exprime->{'probe_id'});
-		my $sonde = $select_intensite_sth->fetchrow_hashref;
-		$select_intensite_sth->finish;
-
-		push(@sondes, $sonde);
-
-	}
+	# Si il n'y a pas six sondes on zappe
+	next if(@sondes < 6);
 
 	# ======================================================================
 	# Calcul de l'expression de gène
