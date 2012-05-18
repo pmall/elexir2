@@ -14,16 +14,16 @@ import subprocess
 # ==============================================================================
 
 # On récupère le répertoire de travail
-wd = os.getcwd()
+wd = sys.path[0]
 
 # On récupère la config
 config = yaml.load(file(wd + '/config.yml', 'r'))
 
 # Base de données
-HOST	= config['db_host']
-USER	= config['db_user']
-PASSWD	= config['db_pass']
-DBNAME	= config['db_name']
+DBHOST = config['db_host']
+DBUSER = config['db_user']
+DBPASS = config['db_pass']
+DBNAME = config['db_name']
 
 # Nombre de threads autorisés en même temps
 NBTHREADS = config['nb_threads']
@@ -143,7 +143,7 @@ def do_job(wd, job, sema):
 		id_analyse = job[2]
 		algo = 'create_excels'
 
-	dbh = MySQLdb.connect(host = HOST, user = USER, passwd = PASSWD, db = DBNAME)
+	dbh = MySQLdb.connect(host = DBHOST, user = DBUSER, passwd = DBPASS, db = DBNAME)
 	cursor = dbh.cursor()
 	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
