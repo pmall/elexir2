@@ -4,9 +4,9 @@ prefixe		= commandArgs()[5];
 img_width	= commandArgs()[6];
 img_height	= commandArgs()[7];
 
-# =============================================================================
+# ==============================================================================
 # ON RECUPERE LES DATAS
-# =============================================================================
+# ==============================================================================
 
 # On lit les datas
 data_qc = read.table(paste(out_dir, '/', prefixe, '.report.txt', sep = ''), header = TRUE);
@@ -21,9 +21,9 @@ data_sum = data_sum[, 2:(nb_puces + 1)];
 # On met a jour les noms des puces
 names(data_sum) = seq(1, nb_puces);
 
-# =============================================================================
+# ==============================================================================
 # AUC + Raw Intensities
-# =============================================================================
+# ==============================================================================
 
 # On enregistre le auc
 png(paste(out_dir, '/', 'pos_vs_neg_auc.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
@@ -51,9 +51,9 @@ legend(1, top, c('perfect match', 'background'), col = c('red', 'blue'), lty = 1
 
 dev.off();
 
-# =============================================================================
+# ==============================================================================
 # Toutes les metrixs sur le all probeset
-# =============================================================================
+# ==============================================================================
 
 # All probeset mean
 png(paste(out_dir, '/', 'all_probeset_mean.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
@@ -86,9 +86,9 @@ legend(1, top + 0.1, c('mad residual', 'rle'), col = c('blue', 'green'), lty = 1
 
 dev.off();
 
-# =============================================================================
+# ==============================================================================
 # Controle des valeurs du mad residual mean et du rle
-# =============================================================================
+# ==============================================================================
 
 # Controle mad residual mean
 png(paste(out_dir, '/', 'mad_residual_mean_controle.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
@@ -174,97 +174,198 @@ legend(1, top + 0.2, c('bac spike', 'polya spike', 'pos control'), col = c('blue
 
 dev.off();
 
-# =============================================================================
+# ==============================================================================
 # Metrixs sur les controles
-# =============================================================================
+# ==============================================================================
 
-# bac spikes
-d = cbind(data_qc$bac_spike.AFFX.r2.Ec.bioB.5_at, data_qc$bac_spike.AFFX.r2.Ec.bioB.M_at, data_qc$bac_spike.AFFX.r2.Ec.bioB.3_at, data_qc$bac_spike.AFFX.r2.Ec.bioB.5_at, data_qc$bac_spike.AFFX.r2.Ec.bioB.M_at, data_qc$bac_spike.AFFX.r2.Ec.bioB.3_at);
-biob_mean = apply(d, 1, mean);
-d = cbind(data_qc$bac_spike.AFFX.BioC.5_at, data_qc$bac_spike.AFFX.BioC.3_at, data_qc$bac_spike.AFFX.BioC.5_at, data_qc$bac_spike.AFFX.BioC.3_at);
-bioc_mean = apply(d, 1, mean);
-d = cbind(data_qc$bac_spike.AFFX.BioDn.5_at, data_qc$bac_spike.AFFX.BioDn.3_at, data_qc$bac_spike.AFFX.r2.Ec.bioD.5_at, data_qc$bac_spike.AFFX.r2.Ec.bioD.3_at);
-biod_mean = apply(d, 1, mean);
-d = cbind(data_qc$bac_spike.AFFX.CreX.5_at, data_qc$bac_spike.AFFX.CreX.3_at, data_qc$bac_spike.AFFX.r2.P1.cre.5_at, data_qc$bac_spike.AFFX.r2.P1.cre.3_at);
-cre_mean = apply(d, 1, mean);
+# Bac spike 5' !
 
-moyenne = mean(c(biob_mean, bioc_mean, biod_mean, cre_mean));
-max = max(c(biob_mean, bioc_mean, biod_mean, cre_mean));
-min = min(c(biob_mean, bioc_mean, biod_mean, cre_mean));
+biob = data_qc$bac_spike.AFFX.r2.Ec.bioB.5_at;
+bioc = data_qc$bac_spike.AFFX.r2.Ec.bioC.5_at;
+biod = data_qc$bac_spike.AFFX.r2.Ec.bioD.5_at;
+cre = data_qc$bac_spike.AFFX.r2.P1.cre.5_at;
+
+moyenne = mean(c(biob, bioc, biod, cre));
+max = max(c(biob, bioc, biod, cre));
+min = min(c(biob, bioc, biod, cre));
 top = max + (moyenne/2);
 bot = max(0, min - (moyenne/2));
 colors = rainbow(nb_puces);
 
-png(paste(out_dir, '/', 'bac_spike_ordre1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+png(paste(out_dir, '/', 'bac_spike_ordre_5_1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
 
-plot(cre_mean, type = 'b', main = 'Hybridization quality control 1', xlab = 'Chips', ylab = 'Intensity for each bacterial control', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
-lines(biod_mean, type = 'b', col = c('blue'));
-lines(bioc_mean, type = 'b', col = c('green'));
-lines(biob_mean, type = 'b', col = c('orange'));
+plot(cre, type = 'b', main = 'Hybridization quality control 5\' 1', xlab = 'Chips', ylab = 'Intensity for each bacterial control', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
+lines(biod, type = 'b', col = c('blue'));
+lines(bioc, type = 'b', col = c('green'));
+lines(biob, type = 'b', col = c('orange'));
 axis(side = 1, labels = seq(1, nb_puces), at = seq(1, nb_puces));
-legend(1, top + 1, c('Cre', 'bioB', 'bioC', 'bioD'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
+legend(1, top + 1, c('Cre', 'bioD', 'bioC', 'bioB'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
 
 dev.off();
 
-png(paste(out_dir, '/', 'bac_spike_ordre2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+png(paste(out_dir, '/', 'bac_spike_ordre_5_2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
 
-plot(c(biob_mean[1], bioc_mean[1], biod_mean[1], cre_mean[1]), type = 'l', main = 'Hybridization quality control 2', xlab = 'Bacterial controls', ylab = 'Intensity for each chip', xlim = c(1, 4) , ylim = c(min, max), col = colors[1], xaxt='n');
+plot(c(biob[1], bioc[1], biod[1], cre[1]), type = 'l', main = 'Hybridization quality control 5\' 2', xlab = 'Bacterial controls', ylab = 'Intensity for each chip', xlim = c(1, 4) , ylim = c(min, max), col = colors[1], xaxt='n');
 
 for(i in seq(2, nb_puces)){
-	lines(c(biob_mean[i], bioc_mean[i], biod_mean[i], cre_mean[i]), type = 'l', col = colors[i]);
+	lines(c(biob[i], bioc[i], biod[i], cre[i]), type = 'l', col = colors[i]);
 }
 
-axis(side = 1, labels = c('bioD', 'bioC', 'bioB', 'cre'), at = c(1, 2, 3, 4));
-
-#legend(1, max, seq(1, nb_puces), col = colors, lty = 1);
+axis(side = 1, labels = c('bioB', 'bioC', 'bioD', 'cre'), at = c(1, 2, 3, 4));
 
 dev.off();
 
-# polya spikes
-d = cbind(data_qc$polya_spike.AFFX.r2.Bs.lys.5_st, data_qc$polya_spike.AFFX.r2.Bs.lys.M_st, data_qc$polya_spike.AFFX.r2.Bs.lys.3_st);
-lys_mean = apply(d, 1, mean);
-d = cbind(data_qc$polya_spike.AFFX.r2.Bs.phe.5_st, data_qc$polya_spike.AFFX.r2.Bs.phe.M_st, data_qc$polya_spike.AFFX.r2.Bs.phe.3_st);
-phe_mean = apply(d, 1, mean);
-d = cbind(data_qc$polya_spike.AFFX.r2.Bs.thr.5_s_st, data_qc$polya_spike.AFFX.r2.Bs.thr.M_s_st, data_qc$polya_spike.AFFX.r2.Bs.thr.3_s_st);
-thr_mean = apply(d, 1, mean);
-d = cbind(data_qc$polya_spike.AFFX.r2.Bs.dap.5_st, data_qc$polya_spike.AFFX.r2.Bs.dap.M_st, data_qc$polya_spike.AFFX.r2.Bs.dap.3_st);
-dap_mean = apply(d, 1, mean);
+# Bac spike 3' !
 
-moyenne	= mean(c(thr_mean, phe_mean, lys_mean, dap_mean));
-max = max(c(thr_mean, phe_mean, lys_mean, dap_mean));
-min = min(c(thr_mean, phe_mean, lys_mean, dap_mean));
+biob = data_qc$bac_spike.AFFX.r2.Ec.bioB.3_at;
+bioc = data_qc$bac_spike.AFFX.r2.Ec.bioC.3_at;
+biod = data_qc$bac_spike.AFFX.r2.Ec.bioD.3_at;
+cre = data_qc$bac_spike.AFFX.r2.P1.cre.3_at;
+
+moyenne = mean(c(biob, bioc, biod, cre));
+max = max(c(biob, bioc, biod, cre));
+min = min(c(biob, bioc, biod, cre));
 top = max + (moyenne/2);
 bot = max(0, min - (moyenne/2));
 colors = rainbow(nb_puces);
 
-png(paste(out_dir, '/', 'polya_spike_ordre1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+png(paste(out_dir, '/', 'bac_spike_ordre_3_1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
 
-plot(dap_mean, type = 'b', main = 'Labeling quality control 1', xlab = 'Chips', ylab = 'Intensity for each polyA control RNA', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
-lines(thr_mean, type = 'b', col = c('blue'));
-lines(phe_mean, type = 'b', col = c('green'));
-lines(lys_mean, type = 'b', col = c('orange'));
+plot(cre, type = 'b', main = 'Hybridization quality control 3\' 1', xlab = 'Chips', ylab = 'Intensity for each bacterial control', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
+lines(biod, type = 'b', col = c('blue'));
+lines(bioc, type = 'b', col = c('green'));
+lines(biob, type = 'b', col = c('orange'));
+axis(side = 1, labels = seq(1, nb_puces), at = seq(1, nb_puces));
+legend(1, top + 1, c('Cre', 'bioD', 'bioC', 'bioB'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
+
+dev.off();
+
+png(paste(out_dir, '/', 'bac_spike_ordre_3_2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(c(biob[1], bioc[1], biod[1], cre[1]), type = 'l', main = 'Hybridization quality control 3\' 2', xlab = 'Bacterial controls', ylab = 'Intensity for each chip', xlim = c(1, 4) , ylim = c(min, max), col = colors[1], xaxt='n');
+
+for(i in seq(2, nb_puces)){
+	lines(c(biob[i], bioc[i], biod[i], cre[i]), type = 'l', col = colors[i]);
+}
+
+axis(side = 1, labels = c('bioB', 'bioC', 'bioD', 'cre'), at = c(1, 2, 3, 4));
+
+dev.off();
+
+# polya spikes 5'
+
+lys = data_qc$polya_spike.AFFX.r2.Bs.lys.5_st;
+phe = data_qc$polya_spike.AFFX.r2.Bs.phe.5_st;
+thr = data_qc$polya_spike.AFFX.r2.Bs.thr.5_s_st;
+dap = data_qc$polya_spike.AFFX.r2.Bs.dap.5_st;
+
+moyenne	= mean(c(thr, phe, lys, dap));
+max = max(c(thr, phe, lys, dap));
+min = min(c(thr, phe, lys, dap));
+top = max + (moyenne/2);
+bot = max(0, min - (moyenne/2));
+colors = rainbow(nb_puces);
+
+png(paste(out_dir, '/', 'polya_spike_ordre_5_1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(dap, type = 'b', main = 'Labeling quality control 5\' 1', xlab = 'Chips', ylab = 'Intensity for each polyA control RNA', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
+lines(thr, type = 'b', col = c('blue'));
+lines(phe, type = 'b', col = c('green'));
+lines(lys, type = 'b', col = c('orange'));
 axis(side = 1, labels = seq(1, nb_puces), at = seq(1, nb_puces));
 legend(1, top + 1, c('Dap', 'Thr', 'Phe', 'Lys'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
 
 dev.off();
 
-png(paste(out_dir, '/', 'polya_spike_ordre2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+png(paste(out_dir, '/', 'polya_spike_ordre_5_2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
 
-plot(c(lys_mean[1], phe_mean[1], thr_mean[1], dap_mean[1]), type = 'l', main = 'Labeling quality control 2', xlab = 'PolyA control RNA', ylab = 'Intensity for each chip', xlim = c(1, 4), ylim = c(min, max), col = colors[1], xaxt = 'n');
+plot(c(lys[1], phe[1], thr[1], dap[1]), type = 'l', main = 'Labeling quality control 5\' 2', xlab = 'PolyA control RNA', ylab = 'Intensity for each chip', xlim = c(1, 4), ylim = c(min, max), col = colors[1], xaxt = 'n');
 
 for(i in seq(2, nb_puces)){
-	lines(c(lys_mean[i], phe_mean[i], thr_mean[i], dap_mean[i]), type = 'l', col = colors[i]);
+	lines(c(lys[i], phe[i], thr[i], dap[i]), type = 'l', col = colors[i]);
 }
 
 axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
 
-#legend(1, max, seq(1, nb_puces), col = colors, lty = 1);
+dev.off();
+
+# polya spikes M
+
+lys = data_qc$polya_spike.AFFX.r2.Bs.lys.M_st;
+phe = data_qc$polya_spike.AFFX.r2.Bs.phe.M_st;
+thr = data_qc$polya_spike.AFFX.r2.Bs.thr.M_s_st;
+dap = data_qc$polya_spike.AFFX.r2.Bs.dap.M_st;
+
+moyenne	= mean(c(thr, phe, lys, dap));
+max = max(c(thr, phe, lys, dap));
+min = min(c(thr, phe, lys, dap));
+top = max + (moyenne/2);
+bot = max(0, min - (moyenne/2));
+colors = rainbow(nb_puces);
+
+png(paste(out_dir, '/', 'polya_spike_ordre_M_1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(dap, type = 'b', main = 'Labeling quality control M 1', xlab = 'Chips', ylab = 'Intensity for each polyA control RNA', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
+lines(thr, type = 'b', col = c('blue'));
+lines(phe, type = 'b', col = c('green'));
+lines(lys, type = 'b', col = c('orange'));
+axis(side = 1, labels = seq(1, nb_puces), at = seq(1, nb_puces));
+legend(1, top + 1, c('Dap', 'Thr', 'Phe', 'Lys'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
 
 dev.off();
 
-# =============================================================================
+png(paste(out_dir, '/', 'polya_spike_ordre_M_2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(c(lys[1], phe[1], thr[1], dap[1]), type = 'l', main = 'Labeling quality control M 2', xlab = 'PolyA control RNA', ylab = 'Intensity for each chip', xlim = c(1, 4), ylim = c(min, max), col = colors[1], xaxt = 'n');
+
+for(i in seq(2, nb_puces)){
+	lines(c(lys[i], phe[i], thr[i], dap[i]), type = 'l', col = colors[i]);
+}
+
+axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
+
+dev.off();
+
+# polya spikes 3'
+
+lys = data_qc$polya_spike.AFFX.r2.Bs.lys.3_st;
+phe = data_qc$polya_spike.AFFX.r2.Bs.phe.3_st;
+thr = data_qc$polya_spike.AFFX.r2.Bs.thr.3_s_st;
+dap = data_qc$polya_spike.AFFX.r2.Bs.dap.3_st;
+
+moyenne	= mean(c(thr, phe, lys, dap));
+max = max(c(thr, phe, lys, dap));
+min = min(c(thr, phe, lys, dap));
+top = max + (moyenne/2);
+bot = max(0, min - (moyenne/2));
+colors = rainbow(nb_puces);
+
+png(paste(out_dir, '/', 'polya_spike_ordre_3_1.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(dap, type = 'b', main = 'Labeling quality control 3\' 1', xlab = 'Chips', ylab = 'Intensity for each polyA control RNA', ylim = c(bot, top + 1), col = c('red'), xaxt = 'n');
+lines(thr, type = 'b', col = c('blue'));
+lines(phe, type = 'b', col = c('green'));
+lines(lys, type = 'b', col = c('orange'));
+axis(side = 1, labels = seq(1, nb_puces), at = seq(1, nb_puces));
+legend(1, top + 1, c('Dap', 'Thr', 'Phe', 'Lys'), col = c('red', 'blue', 'green', 'orange'), lty = 1);
+
+dev.off();
+
+png(paste(out_dir, '/', 'polya_spike_ordre_3_2.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
+
+plot(c(lys[1], phe[1], thr[1], dap[1]), type = 'l', main = 'Labeling quality control 3\' 2', xlab = 'PolyA control RNA', ylab = 'Intensity for each chip', xlim = c(1, 4), ylim = c(min, max), col = colors[1], xaxt = 'n');
+
+for(i in seq(2, nb_puces)){
+	lines(c(lys[i], phe[i], thr[i], dap[i]), type = 'l', col = colors[i]);
+}
+
+axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
+
+dev.off();
+
+# ==============================================================================
 # Boxplot RLE
-# =============================================================================
+# ==============================================================================
 
 png(paste(out_dir, '/', 'all_probeset_rle_boxplot.png', sep = ''), width = as.integer(img_width), height = as.integer(img_height));
 
@@ -275,9 +376,9 @@ boxplot(rle, xlim = c(1, nb_puces), main = 'Boxplot RLE');
 
 dev.off();
 
-# =============================================================================
+# ==============================================================================
 # PRINCIPAL COMPONENT ANALYSIS
-# =============================================================================
+# ==============================================================================
 
 # On inclu la librairie pca
 library(ade4);

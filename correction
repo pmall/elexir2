@@ -34,9 +34,6 @@ my $db_user = $config->{'db_user'};
 my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
-# Fichiers d'annotation
-my $dir_annotation = $config->{'dir_annotations'};
-
 # On défini un dossier temporaire
 my $tmp_dir = tempdir(CLEANUP => 1);
 
@@ -114,10 +111,16 @@ my @chips_files = (map {
 	$celdir . '/' . $dir_project . '/' . $_
 } @chips_names);
 
+# On crée la liste des fichier de puce pour la ligne de commande
 my $chips_files_list = join(' ', @chips_files);
 
 # On récupère les annotations
-my $pgf = $config->{'annotations'}{$type}{$organism}{'pgf'};
+# (Pour les ggh il y a deux pgf, le normal, et un autre avec seulement les
+# sondes exon qui ont plus de 2GC. Comme il n'y a pas de sondes bg avec moins de
+# 2GC, ça bug avec le fichier normal...)
+my $pgf = ($type eq 'ggh')
+	? $config->{'annotations'}{$type}{$organism}{'pgf_correction'};
+	: $config->{'annotations'}{$type}{$organism}{'pgf'};
 my $clf = $config->{'annotations'}{$type}{$organism}{'clf'};
 my $bgp = $config->{'annotations'}{$type}{$organism}{'bgp'};
 

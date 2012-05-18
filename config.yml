@@ -24,15 +24,22 @@ annotations:
       pgf: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.pgf
       clf: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.clf
       bgp: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.antigenomic.bgp
+      qcc: /data/elexir/annotations/HuEx-1_0-st-v2.r2/HuEx-1_0-st-v2.r2.qcc
+      mps: /data/elexir/annotations/HuEx-1_0-st-v2.r2.dt1.hg18.ps/HuEx-1_0-st-v2.r2.dt1.hg18.core.mps
     mouse:
       pgf: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.pgf
       clf: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.clf
       bgp: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.antigenomic.bgp
+      qcc: /data/elexir/annotations/MoEx-1_0-st-v1.r2/MoEx-1_0-st-v1.r2.qcc
+      mps: /data/elexir/annotations/MoEx-1_0-st-v1.r2.dt1.mm9.ps/MoEx-1_0-st-v1.r2.dt1.mm9.core.mps
   ggh:
     human:
-      pgf: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1_gc.pgf
+      pgf: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.pgf
+      pgf_correction: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1_gc.pgf
       clf: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.clf
       bgp: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.antigenomic.bgp
+      qcc: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.qcc
+      mps: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.TC.mps
 
 # Tables selon l'organisme
 table_sondes:
@@ -66,6 +73,9 @@ table_polya:
   mouse: souris_polya
 
 # Paramètres pour les algos
+qc:
+  algo: rma
+
 correction:
   algo: rma-bg,quant-norm,pm-only
 
