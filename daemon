@@ -28,89 +28,6 @@ DBNAME = config['db_name']
 # Nombre de threads autorisés en même temps
 NBTHREADS = config['nb_threads']
 
-# Répertoire dans lequel vit le daemon
-WORKDIR = '/'
-
-# Umask (?!)
-UMASK = 0
-
-# Nombre maximum de descripteur de fichiers
-MAXFD = 1024
-
-# On défini vers quelle sortie doivent être rédirigé les descripteur de fichiers
-if(hasattr(os, "devnull")):
-	REDIRECT_TO = os.devnull
-else:
-	REDIRECT_TO = "/dev/null"
-
-# ==============================================================================
-# Procédure permettant de daemoniser le script
-# ==============================================================================
-
-def daemonize():
-
-	# ======================================================================
-	# On crée le processus
-	# ======================================================================
-
-	# On fork un premier child
-	try:
-		pid = os.fork()
-	except OSError, e:
-		raise Exception, "%s [%d]" % (e.strerror, e.errno)
-
-	# Si on en est au parent
-	if(pid > 0):
-		# On exit le parent
-		os._exit(0)
-	else:
-		# On attribue un session_id
-		os.setsid()
-
-		# On fork un deuxième child
-		try:
-			pid = os.fork()
-		except OSError, e:
-			raise Exception, "%s [%d]" % (e.strerror, e.errno)
-
-		# Si on en est au premier child
-		if(pid > 0):
-			# On exit le premier child
-			os._exit(0)
-
-		else:
-			# On set le working_dir et le umask du daemon
-			os.chdir(WORKDIR)
-			os.umask(UMASK)
-
-	# ======================================================================
-	# On ferme les descripteurs de fichiers
-	# ======================================================================
-
-	import resource
-
-	# On récupère le nombre maximum de descripteur de fichier ouvrable sur la machine
-	maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-
-	# Si on peut en ouvrir une infinité, on utilise la valeur définie
-	if(maxfd == resource.RLIM_INFINITY):
-		maxfd = MAXFD
-  
-	# On ferme les descripteurs de fichiers de 0 à maxfd
-	for fd in range(0, maxfd):
-		try:
-			os.close(fd)
-		except OSError:
-			pass
-
-	# ======================================================================
-	# On rédirige les sorties standards vers la sortie définie
-	# ======================================================================
-
-	os.open(REDIRECT_TO, os.O_RDWR)
-	os.dup2(0, 1)
-	os.dup2(0, 2)
-
 # ==============================================================================
 # Fonction retournant la date/heure actuelle
 # ==============================================================================
@@ -119,7 +36,7 @@ def now():
 	return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S");
 
 # ==============================================================================
-# Fonction 
+# Fonction thread 
 # ==============================================================================
 
 def do_job(wd, job, sema):
@@ -158,8 +75,6 @@ def do_job(wd, job, sema):
 # ==============================================================================
 # Script / boucle infinie
 # ==============================================================================
-
-'''daemonize()'''
 
 while(1):
 	try:
