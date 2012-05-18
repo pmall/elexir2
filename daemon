@@ -163,7 +163,7 @@ def do_job(wd, job, sema):
 
 while(1):
 	try:
-		dbh = MySQLdb.connect(host = HOST, user = USER, passwd = PASSWD, db = DBNAME)
+		dbh = MySQLdb.connect(host = DBHOST, user = DBUSER, passwd = DBPASS, db = DBNAME)
 
 		sema = threading.Semaphore(NBTHREADS);
 
