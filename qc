@@ -4,6 +4,7 @@ use warnings;
 use YAML::XS qw(LoadFile);
 use DBI;
 use File::Temp qw(tempdir);
+use File::Path qw(make_path);
 use FindBin qw($Bin);
 use PDF::API2;
 use PDF::Table;
@@ -30,11 +31,17 @@ my $db_user = $config->{'db_user'};
 my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
-# On défini le chemin du pdf
-my $pdf_file = $config->{'dir_qc'} . '/' . $id_project . '/report.pdf';
-
 # Fichier qui contient la doc
 my $qc_doc = $FindBin::Bin . '/qc_doc';
+
+# On défini le dossier de sortie
+my $out_dir = $config->{'dir_qc'} . '/' . $id_project;
+
+# On défini le chemin du pdf
+my $pdf_file = $out_dir . '/report.pdf';
+
+# On crée le dossier de sortie
+make_path($out_dir);
 
 # On défini un dossier temporaire
 my $tmp_dir = tempdir(CLEANUP => 1);
@@ -109,7 +116,7 @@ my $chips_files_list = join(' ', @chips_files);
 
 # On échappe les parenthèses des noms de puce
 $chips_files_list =~ s/\(/\\(/g;
-$chips_files_list =~ s/\(/\\(/g;
+$chips_files_list =~ s/\)/\\)/g;
 
 # On récupère les annotations
 my $pgf = $config->{'annotations'}{$type}{$organism}{'pgf'};
