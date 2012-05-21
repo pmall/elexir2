@@ -208,7 +208,7 @@ my $page = $add_page->($pdf);
 
 # Rectangle vert
 my $blue_box = $page->gfx;
-$blue_box->fillcolor('green');
+$blue_box->fillcolor('purple');
 $blue_box->rect(0, 261/mm, $page_width, 36/mm);
 $blue_box->fill;
 
