@@ -31,6 +31,9 @@ my $db_user = $config->{'db_user'};
 my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
+# Script pour créer les images avec R
+my $qc_script = $FindBin::Bin . '/qc.r';
+
 # Fichier qui contient la doc
 my $qc_doc = $FindBin::Bin . '/qc_doc';
 
@@ -141,7 +144,7 @@ print 'Fin du traitement avec affymetrix power tools ' . "\n";
 
 print 'Début création des images avec R ' . "\n";
 
-print `R --slave --args $tmp_dir $algo $img_width $img_height < qc.r`;
+print `R --slave --args $tmp_dir $algo $img_width $img_height < $qc_script`;
 
 print 'Fin création des images avec R ' . "\n";
 
