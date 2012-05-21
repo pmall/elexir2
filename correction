@@ -119,7 +119,7 @@ my $chips_files_list = join(' ', @chips_files);
 # sondes exon qui ont plus de 2GC. Comme il n'y a pas de sondes bg avec moins de
 # 2GC, ça bug avec le fichier normal...)
 my $pgf = ($type eq 'ggh')
-	? $config->{'annotations'}{$type}{$organism}{'pgf_correction'};
+	? $config->{'annotations'}{$type}{$organism}{'pgf_correction'}
 	: $config->{'annotations'}{$type}{$organism}{'pgf'};
 my $clf = $config->{'annotations'}{$type}{$organism}{'clf'};
 my $bgp = $config->{'annotations'}{$type}{$organism}{'bgp'};
