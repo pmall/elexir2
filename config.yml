@@ -8,6 +8,9 @@ db_name_fasterdb:
   human: fasterdb_humain
   mouse: fasterdb_souris
 
+# Fichier de logs pour le daemon
+log_file: /data/logs/elexir2.log
+
 # Nombre de threads max que le demon peut lancer en même temps
 nb_threads: 2
 

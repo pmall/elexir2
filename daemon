@@ -64,8 +64,18 @@ def do_job(wd, job, sema):
 	cursor = dbh.cursor()
 	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
-	subprocess.Popen([wd + '/' + algo, str(id_analyse)], stdout=subprocess.PIPE)
-	out, err = p.communicate()
+	command_process = subprocess.Popen(
+		[wd + '/' + algo, str(id_analyse)],
+		stdin=subprocess.PIPE,
+		stdout=subprocess.PIPE,
+		stderr=subprocess.STDOUT,
+	)
+
+	command_output = command_process.communicate()[0]
+
+	log_file = open(config['log_file'], 'a')
+	log_file.write(command_output)
+	log_file.close();
 
 	cursor.execute('UPDATE jobs SET status = %(status)s, end = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'done', 'date':now()})
 	cursor.close
