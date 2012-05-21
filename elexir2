@@ -4,7 +4,7 @@ dir=$(dirname $(readlink -f $0))
 
 DAEMON="$dir/daemon" #ligne de commande du programme
 DAEMON_OPT=""  #argument à utiliser par le programme
-DAEMONUSER="pierre" #utilisateur du programme
+DAEMONUSER="elexir2" #utilisateur du programme
 DAEMON_NAME="daemon" #Nom du programme (doit être identique à l'exécutable)
 DAEMON_DISPLAY_NAME="elexir2"
 
