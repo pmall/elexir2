@@ -48,7 +48,7 @@ my $probes_db = DBI->connect(
 
 # On selectionne les infos de l'analyse
 my $select_infos_analyse_sth = $probes_db->prepare(
-	"SELECT p.id AS id_project, p.organism, a.type,
+	"SELECT p.id AS id_project, p.organism, a.name, a.type,
 	COUNT(DISTINCT ca.name) AS nb_rep_cont, COUNT(DISTINCT cb.name) AS nb_rep_test
 	FROM analyses AS a, projects AS p, groups AS la, groups AS lb, chips AS ca, chips AS cb
 	WHERE a.id_project = p.id
@@ -82,12 +82,13 @@ my $id_projet = $infos_analyse->{"id_project"};
 my $orga = $infos_analyse->{"organism"};
 my $nb_repl_cont = $infos_analyse->{"nb_rep_cont"};
 my $nb_repl_test = $infos_analyse->{"nb_rep_test"};
+my $name = $infos_analyse->{'name'};
 
 # on crée les variables du script qui déendent de l'analyse
 my $base_fasterdb = $config->{'db_name_fasterdb'}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/transcription.xls';
+my $fichier_sortie = $dir_sortie . '/' . $name . '_transcription.xls';
 
 # On crée les dossier
 make_path($dir_sortie);

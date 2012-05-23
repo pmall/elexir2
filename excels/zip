@@ -35,7 +35,7 @@ my $dbh = DBI->connect(
 );
 
 my $select_project_id_sth = $dbh->prepare(
-	"SELECT id_project FROM analyses WHERE id = ?"
+	"SELECT id_project, name FROM analyses WHERE id = ?"
 );
 
 # ==============================================================================
@@ -43,7 +43,7 @@ my $select_project_id_sth = $dbh->prepare(
 # ==============================================================================
 
 $select_project_id_sth->execute($id_analyse);
-my($id_projet) = $select_project_id_sth->fetchrow_array;
+my($id_projet, $name) = $select_project_id_sth->fetchrow_array;
 $select_project_id_sth->finish;
 
 # ==============================================================================
@@ -53,12 +53,12 @@ $select_project_id_sth->finish;
 my $dir_project = $dir_xls . '/' . $id_projet;
 my $dir_analyse = $dir_project . '/' . $id_analyse;
 
-my $files = join(' ', (
+my $files = join(' ', (map { $name . '_' . $_ } (
 	'transcription.xls',
 	'epissage.xls',
 	'epissage_SI.xls',
 	'epissage_SIsd.xls',
 	'epissage_psi.xls'
-));
+)));
 
 `cd $dir_analyse && zip files.zip $files && chmod -R 777 $dir_project`;
