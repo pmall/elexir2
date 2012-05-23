@@ -187,6 +187,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my $infos_sondes = $select_infos_sondes_sth->fetchall_hashref('probe_id');
 	$select_infos_sondes_sth->finish;
 
+	# Si le gène a moins de six sondes on zappe ça sert a rien
+	next if(scalar(keys %{$infos_sondes}) < 6);
+
 	# On récupère les valeurs de dabg de chaque sonde
 	my @sondes =();
 

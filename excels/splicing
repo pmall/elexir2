@@ -119,7 +119,6 @@ my $resultat			= Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # Feuilles
 my $f_resume			= $resultat->add_worksheet('Parametres et entites analysees');
-my $f_resultats			= $resultat->add_worksheet('Resultats');
 my $f_epissage_no_fdr		= $resultat->add_worksheet('NO FDR');
 my $f_epissage_fdr		= $resultat->add_worksheet('FDR');
 
