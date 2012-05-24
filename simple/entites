@@ -204,7 +204,7 @@ my $insert_entite_sth = $dbh->prepare(
 # Début de l'algo, on analyse les gènes avec un fc épissage
 # ==============================================================================
 
-my $i = 0;
+print 'Analyse des entités' . "\n";
 
 # On défini une liste d'entité (on les garde toutes dans une liste pour calculer
 # les pvals ajustés)
@@ -215,8 +215,6 @@ $select_genes_sth->execute;
 
 # Pour chaque gène
 while(my $gene = $select_genes_sth->fetchrow_hashref){
-
-	print '' . (++$i) . "\n";
 
 	# ======================================================================
 	# On récupère les infos sur les sondes exprimées

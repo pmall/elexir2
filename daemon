@@ -65,7 +65,7 @@ def do_job(wd, job, sema):
 	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
 	log_file = open(config['log_file'], 'a')
-	log_file.write(id_analyse + ' ' + now())
+	log_file.write(id_analyse + ' ' + algo + ' ' + now())
 	log_file.write("\n")
 
 	subprocess.call(

@@ -11,7 +11,6 @@ use Format;
 use Math;
 use Analyse;
 use Stats;
-use Data::Dumper;
 
 # ==============================================================================
 # Parametres
@@ -164,7 +163,7 @@ my $insert_gene_sth = $dbh->prepare(
 # On début l'algo, pour chaque gène
 # ==============================================================================
 
-my $i = 0;
+print 'Analyse des gènes' . "\n";
 
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
@@ -175,8 +174,6 @@ $select_genes_sth->execute($limit);
 
 # Pour chaque gène
 while(my($id_gene) = $select_genes_sth->fetchrow_array){
-
-	print '' . (++$i) . "\n";
 
 	# ======================================================================
 	# On récupère les intensités des sondes du gène

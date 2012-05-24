@@ -166,9 +166,7 @@ $dbh->do('CREATE TABLE ' . $table_si . ' (' . join(', ', @fields_table_SIs) . ',
 # On début l'algo, pour chaque gène avec un fc epissage non null
 # ==============================================================================
 
-print 'On calcule les valeurs de NI et de SI' . "\n";
-
-my $i = 0;
+print 'Calcul des valeurs de NI et de SI' . "\n";
 
 # On ouvre les fichiers de sortie
 open(OUT_NI, '>' . $file_ni);
@@ -179,8 +177,6 @@ $select_genes_sth->execute;
 
 # Pour chaque gène
 while(my $gene = $select_genes_sth->fetchrow_hashref){
-
-	print '' . (++$i) . "\n";
 
 	# ======================================================================
 	# On récupère les intensités des sondes du gène
@@ -249,14 +245,14 @@ close(OUT_SI);
 # On ajoute le contenu des fichiers dans la base de données
 # ==============================================================================
 
-print 'Ajout des NIs dans la base de données' . "\n";
+print 'Insertion des NIs dans la base de données' . "\n";
 
 my $mysql_ni = "mysql -h $db_host -u $db_user -p$db_pass $db_name";
    $mysql_ni.= " -e \"LOAD DATA LOCAL INFILE '$file_ni' INTO TABLE $table_ni\"";
 
 `$mysql_ni`;
 
-print 'Ajout des SIs dans la base de données' . "\n";
+print 'Insertion des SIs dans la base de données' . "\n";
 
 my $mysql_si = "mysql -h $db_host -u $db_user -p$db_pass $db_name";
    $mysql_si.= " -e \"LOAD DATA LOCAL INFILE '$file_si' INTO TABLE $table_si\"";
