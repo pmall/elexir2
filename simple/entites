@@ -60,9 +60,11 @@ my $select_infos_analyse_sth = $dbh->prepare(
 # On selectionne les puces du projet
 my $select_chips_sth = $dbh->prepare(
 	"SELECT g.letter, c.condition, c.num
-	FROM groups AS g, chips AS c
-	WHERE g.condition = c.condition
-	AND g.id_analysis = ?"
+	FROM analyses AS a, chips AS c, groups AS g
+	WHERE a.id_project = c.id_project
+	AND a.id = g.id_analysis
+	AND c.condition = g.condition
+	AND a.id = ?"
 );
 
 # ==============================================================================
@@ -79,6 +81,7 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'organism'}};
 my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}}{$infos_analyse->{'type_chips'}};
 my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
@@ -118,6 +121,22 @@ my $select_intensite_sth = $dbh->prepare(
 # On selectionne les SIs du gène
 my $select_sis_sth = $dbh->prepare(
 	"SELECT * FROM " . $table_si . " WHERE gene_id = ?"
+);
+
+# ==============================================================================
+# On prépare les requetes sur la bonne base fasterdb
+# ==============================================================================
+
+# On se connecte a fasterdb
+my $dbh_fdb = DBI->connect(
+	'DBI:mysql:' . $base_fasterdb . ':' . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# On selectionne les exons des gènes
+my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
+	"SELECT COUNT(id) AS nb_exons FROM exons_genomiques WHERE id_gene = ?"
 );
 
 # ==============================================================================
@@ -203,6 +222,11 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	# On récupère les infos sur les sondes exprimées
 	# ======================================================================
 
+	# On récupère le nombre d'exons du gène
+	$select_nb_exons_gene_sth->execute($gene->{'gene_id'});
+	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
+	$select_nb_exons_gene_sth->finish;
+
 	# On récupère les infos des sondes du gène
 	$select_infos_sondes_sth->execute($gc_max, $nb_occ_max, $gene->{'gene_id'});
 	my $infos_sondes = $select_infos_sondes_sth->fetchall_arrayref({});
@@ -228,6 +252,41 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			} @{$infos_sondes}));
 
 		}
+
+	}
+
+	# ======================================================================
+	# Si le gene a au moins 4 exons on l'analyse seulement si au moins la
+	# moitié de ses exons sont ciblés par au moins 2 sondes
+	# ======================================================================
+
+	# Si le gène a au moins 4 exons on le garde seulement si 50% des exons
+	# ont au moins deux sondes.
+	if($nb_exons >= 4){
+
+		# On récupère les sondes exoniques parmis les sondes exprimés
+		my @infos_sondes_exons = (grep {
+			$_->{'entite_type'} == 1
+		} @infos_sondes_exprimes);
+
+		# On compte le nombre de sondes par exon
+		my %sondes_par_exons = ();
+
+		foreach my $infos_sonde_exon (@infos_sondes_exons){
+
+			$sondes_par_exons{$infos_sonde_exon->{'exon_pos'}}++;
+
+		}
+
+		# On récupère le nombre d'exons qui sont ciblés par au moins
+		# deux sondes
+		my $nb_exons_2_sondes = grep {
+			$sondes_par_exons{$_} > 1
+		} keys %sondes_par_exons;
+
+		# On zappe si il n'y a pas 50% des exons qui sont ciblés par
+		# au moins deux sondes
+		next if($nb_exons_2_sondes < int($nb_exons/2));
 
 	}
 
