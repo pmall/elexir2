@@ -178,6 +178,8 @@ $select_genes_sth->execute;
 # Pour chaque gène
 while(my $gene = $select_genes_sth->fetchrow_hashref){
 
+	#print $gene->{'gene_id'} . "\n";
+
 	# ======================================================================
 	# On récupère les intensités des sondes du gène
 	# ======================================================================

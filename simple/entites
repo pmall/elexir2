@@ -218,6 +218,8 @@ $select_genes_sth->execute;
 # Pour chaque gène
 while(my $gene = $select_genes_sth->fetchrow_hashref){
 
+	#print $gene->{'gene_id'} . "\n";
+
 	# ======================================================================
 	# On récupère les infos sur les sondes exprimées
 	# ======================================================================
@@ -597,6 +599,9 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	push(@entites, @entites_gene);
 
 }
+
+# On ferme la connection à R
+$R->stopR;
 
 # ======================================================================
 # On calcule les pvalues ajustées et on ajoute dans la bdd

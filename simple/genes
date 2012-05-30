@@ -177,6 +177,8 @@ $select_genes_sth->execute($limit);
 # Pour chaque gène
 while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
+	#print $id_gene . "\n";
+
 	# ======================================================================
 	# On récupère les intensités des sondes du gène
 	# ======================================================================
@@ -295,6 +297,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	});
 
 }
+
+# On ferme la connection à R
+$R->stopR;
 
 # ==============================================================================
 # On calcule les p values ajustées
