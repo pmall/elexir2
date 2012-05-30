@@ -81,34 +81,19 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'organism'}};
 my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}}{$infos_analyse->{'type_chips'}};
 my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
-# On prépare les requetes sur la bonne base fasterdb
-# ==============================================================================
-
-# On se connecte a fasterdb
-my $dbh_fdb = DBI->connect(
-	'DBI:mysql:' . $base_fasterdb . ':' . $db_host,
-	$db_user,
-	$db_pass
-);
-
-# On selectionne les gènes
-my $select_genes_sth = $dbh_fdb->prepare("SELECT id FROM genes LIMIT ?");
-
-# On selectionne le nombre d'exons des gènes
-my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
-	"SELECT COUNT(id) AS nb_exons FROM exons_genomiques WHERE id_gene = ?"
-);
-
-# ==============================================================================
 # On prépare la requete pour les sondes avec ces infos
 # ==============================================================================
+
+# On selectionne les gènes
+my $select_genes_sth = $dbh->prepare(
+	"SELECT DISTINCT(gene_id) FROM " . $table_sondes . " LIMIT ?"
+);
 
 # On selectionne les sondes d'un gène
 my $select_infos_sondes_sth = $dbh->prepare(
@@ -165,7 +150,8 @@ my @fields_trans = (
 	'epi_pval DECIMAL(12,5) UNSIGNED',
 	'epi_adjp DECIMAL(12,5) UNSIGNED',
 	'epi_nb_sondes SMALLINT UNSIGNED',
-	'epi_nb_exons SMALLINT UNSIGNED'
+	'epi_nb_exons SMALLINT UNSIGNED',
+	'a_utiliser_pour_splicing TINYINT UNSIGNED'
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -190,7 +176,7 @@ $select_genes_sth->execute($limit);
 
 # Pour chaque gène
 while(my($id_gene) = $select_genes_sth->fetchrow_array){
-print $id_gene . "\n";
+
 	# ======================================================================
 	# On récupère les intensités des sondes du gène
 	# ======================================================================
@@ -262,80 +248,31 @@ print $id_gene . "\n";
 	my $p_value_trans = ttest($R, log2($fc_gene_trans), log2(@fcs_trans));
 
 	# ======================================================================
-	# Si le gene a au moins 4 exons on vérifie si au moins la moitié de ses
-	# exons a au moins deux sondes
+	# Etape de lissage pour l'épissage
 	# ======================================================================
 
-	# Booléen pour dire si le gene passe ce critère
-	my $homogene = 1;
+	# On selectionne les sondes qui passe le lissage de l'épissage
+	my @sondes_epissage = lissage_epissage(\@exp, \@sondes);
 
-	# On selectionne son nombre d'exon du gène
-	$select_nb_exons_gene_sth->execute($id_gene);
-	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
-	$select_nb_exons_gene_sth->finish;
-
-	# Si le gène a au moins quatres exons
-	if($nb_exons >= 4){
-
-		# On compte le nombre de sondes par exon
-		my %sondes_par_exons = ();
-
-		foreach my $probe_id (keys %{$infos_sondes}){
-
-			$sondes_par_exons{$infos_sondes->{$probe_id}->{'exon_pos'}}++;
-
-		}
-
-		# On récupère le nombre d'exons qui sont ciblés par au moins
-		# deux sondes
-		my $nb_exons_2_sondes = grep {
-			$sondes_par_exons{$_} > 1
-		} keys %sondes_par_exons;
-
-		# On met a jour le booleen homogene
-		$homogene = ($nb_exons_2_sondes >= int($nb_exons/2))
-
-	}
-
-	# ======================================================================
-	# Analyse epissage
-	# ======================================================================
-
-	my @sondes_epissage = ();
 	my $fc_gene_epissage;
 	my $p_value_epissage;
 
-	# Si le gène est homogene
-	if($homogene){
+	# Seulement si on a plus de 6 sondes épissage
+	if(@sondes_epissage >= 6){
 
 		# ==============================================================
-		# Etape de lissage pour l'épissage
+		# Calcul des fold change et de la pvalue pour l'épissage
 		# ==============================================================
 
-		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = lissage_epissage(\@exp, \@sondes);
+		# On calcul les fold change des sondes epissage selon si l'analyse
+		# est paire ou non
+		my @fcs_epissage = fcs_sondes(\@exp, \@sondes_epissage);
 
-		# Seulement si on a plus de 6 sondes épissage
-		if(@sondes_epissage >= 6){
+		# le fc du gène est la médiane des fc des sondes
+		$fc_gene_epissage = median(@fcs_epissage);
 
-			# ======================================================
-			# Calcul des fold change et de la pvalue pour l'épissage
-			# ======================================================
-
-			# On calcul les fold change des sondes epissage selon si
-			# l'analyse est paire ou non
-			my @fcs_epissage = fcs_sondes(
-				\@exp,
-				\@sondes_epissage
-			);
-
-			# le fc du gène est la médiane des fc des sondes
-			$fc_gene_epissage = median(@fcs_epissage);
-
-			# On calcule la p value pour l'épissage
-			$p_value_epissage = ttest($R, log2($fc_gene_epissage), log2(@fcs_epissage));
-
-		}
+		# On calcule la p value pour l'épissage
+		$p_value_epissage = ttest($R, log2($fc_gene_epissage), log2(@fcs_epissage));
 
 	}
 
@@ -353,7 +290,8 @@ print $id_gene . "\n";
 		'fc_epi' => $fc_gene_epissage,
 		'p_value_epi' => $p_value_epissage,
 		'nb_sondes_epi' => scalar(@sondes_epissage),
-		'nb_exons_epi' => scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_epissage))
+		'nb_exons_epi' => scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_epissage)),
+		'a_utiliser_pour_splicing' => (defined $fc_gene_epissage)
 	});
 
 }
@@ -389,7 +327,8 @@ for(my $i = 0; $i < @genes; $i++){
 		$gene->{'p_value_epi'},
 		$adjp_epi[$i],
 		$gene->{'nb_sondes_epi'},
-		$gene->{'nb_exons_epi'}
+		$gene->{'nb_exons_epi'},
+		$gene->{'a_utiliser_pour_splicing'}
 	);
 
 }
