@@ -60,11 +60,9 @@ my $select_infos_analyse_sth = $dbh->prepare(
 # On selectionne les conditions du projet
 my $select_chips_sth = $dbh->prepare(
 	"SELECT g.letter, c.condition, c.num
-	FROM analyses AS a, chips AS c, groups AS g
-	WHERE a.id_project = c.id_project
-	AND a.id = g.id_analysis
-	AND c.condition = g.condition
-	AND a.id = ?"
+	FROM groups AS g, chips AS c
+	WHERE g.condition = c.condition
+	AND g.id_analysis = ?"
 );
 
 # ==============================================================================
