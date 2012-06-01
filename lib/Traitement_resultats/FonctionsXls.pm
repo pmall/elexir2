@@ -555,22 +555,47 @@ sub requete_genes_regulation_xls{
 
 sub requete_entite_caracteristiques_xls {
 
-    my ($base, $table_carac_entites, $id, $type_num) = @_;
+    my ($dbh, $table_entite, $id) = @_;
 
-    my $req =
-        "SELECT `id`, `num_type`, `nom_type`, `gene_id`, `position`, `sequence`, `is_exon`
-        FROM $table_carac_entites
-        WHERE `id` = $id AND `num_type` = $type_num ;";
-    
-    my $select = $base -> prepare ($req);
-    
-    $select -> execute;
-    
-    my $h_carac_entite = $select -> fetchrow_hashref();
-    
-    $select -> finish;
-    
-    return $h_carac_entite;
+	my $select_id_oldschool_sth = $dbh->prepare(
+		"SELECT id_elexir, type, id_gene, exon_pos, start_sur_gene, end_sur_gene, is_exon
+		FROM $table_entite
+		WHERE id = ?"
+	);
+
+	# On selectionne les caractéristiques de l'entité
+	$select_id_oldschool_sth->execute($id);
+	my $caracs_entite = $select_id_oldschool_sth->fetchrow_hashref;
+	$select_id_oldschool_sth->finish;
+
+	# Traduction du type
+	my %name2num = (
+		'exon' => 1,
+		'prom' => 2,
+		'polya' => 3,
+		'donnor' => 5,
+		'acceptor' => 6,
+		'deletion' => 7,
+		'intron-retention' => 4
+	);
+
+	# On défini la chaine position
+	my $raw_pos = $caracs_entite->{'exon_pos'} . ':' . $caracs_entite->{'start_sur_gene'} . '-' . $caracs_entite->{'end_sur_gene'};
+
+	my $pos = ($caracs_entite->{'type'} eq 'intron-retention')
+		? 'i' . $raw_pos
+		: 'e' . $raw_pos;
+
+	# On retourne un hash d'entité à la old school
+	return {
+		'id' => $caracs_entite->{'id_elexir'},
+		'num_type' => $name2num{$caracs_entite->{'type'}},
+		'nom_type' => $caracs_entite->{'type'},
+		'gene_id' => $caracs_entite->{'id_gene'},
+		'position' => $pos,
+		'sequence' => '',
+		'is_exon' => $caracs_entite->{'is_exon'}
+	};
 
 }
 

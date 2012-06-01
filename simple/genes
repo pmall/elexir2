@@ -4,7 +4,6 @@ use warnings;
 use YAML::XS qw(LoadFile);
 use DBI;
 use List::MoreUtils qw(uniq);
-use Statistics::R;
 use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
@@ -33,10 +32,6 @@ my $db_name = $config->{'db_name'};
 my $gc_max = $config->{'simple'}{'gc_max'};
 my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
-
-# On ouvre une session R pour le script
-my $R = Statistics::R->new();
-$R->startR;
 
 # ==============================================================================
 # On prépare les requetes
@@ -82,8 +77,8 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # ==============================================================================
 
 my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}}{$infos_analyse->{'type_chips'}};
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
+my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
@@ -97,11 +92,10 @@ my $select_genes_sth = $dbh->prepare(
 
 # On selectionne les sondes d'un gène
 my $select_infos_sondes_sth = $dbh->prepare(
-	"SELECT probe_id, exon_pos
+	"SELECT probe_id, nb_occ, gc_content, exon_pos
 	FROM " . $table_sondes . "
 	WHERE entite_type = 1
-	AND gc_content < ?
-	AND nb_occ = ?
+	AND utiliser_dans_analyse = 1
 	AND gene_id = ?"
 );
 
@@ -177,25 +171,35 @@ $select_genes_sth->execute($limit);
 # Pour chaque gène
 while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
-	#print $id_gene . "\n";
+	print $id_gene . "\n";
 
 	# ======================================================================
 	# On récupère les intensités des sondes du gène
 	# ======================================================================
 
 	# On récupère les infos des sondes
-	$select_infos_sondes_sth->execute($gc_max, $nb_occ_max, $id_gene);
+	$select_infos_sondes_sth->execute($id_gene);
 	my $infos_sondes = $select_infos_sondes_sth->fetchall_hashref('probe_id');
 	$select_infos_sondes_sth->finish;
 
 	# Si le gène a moins de six sondes on zappe ça sert a rien
 	next if(scalar(keys %{$infos_sondes}) < 6);
 
+	# On selectionne les sondes qui ont les bonnes caractéristiques
+	my $ids_probes_ok = [grep {
+		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
+		and
+		$infos_sondes->{$_}->{'gc_content'} <= $gc_max
+	} keys %{$infos_sondes}];
+
+	# Si le gène a moins de six sondes avec de bon critères on zappe
+	next if(@{$ids_probes_ok} < 6);
+
 	# On récupère les valeurs de dabg de chaque sonde
 	my @sondes =();
 
 	# Pour chaque id de sonde
-	foreach my $probe_id (keys %{$infos_sondes}){
+	foreach my $probe_id (@{$ids_probes_ok}){
 
 		# On récupère les valeurs de dabg de la sonde
 		$select_dabg_sth->execute($probe_id);
@@ -247,7 +251,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my $fc_gene_trans = median(@fcs_trans);
 
 	# On calcule la p value pour la transcription
-	my $p_value_trans = ttest($R, log2($fc_gene_trans), log2(@fcs_trans));
+	my $p_value_trans = ttest(log2($fc_gene_trans), log2(@fcs_trans));
 
 	# ======================================================================
 	# Etape de lissage pour l'épissage
@@ -274,7 +278,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$fc_gene_epissage = median(@fcs_epissage);
 
 		# On calcule la p value pour l'épissage
-		$p_value_epissage = ttest($R, log2($fc_gene_epissage), log2(@fcs_epissage));
+		$p_value_epissage = ttest(log2($fc_gene_epissage), log2(@fcs_epissage));
 
 	}
 
@@ -282,6 +286,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# On ajoute les valeurs à la liste de gène
 	# ======================================================================
 
+	# On ajoute le gène à la liste
 	push(@genes, {
 		'id' => $id_gene,
 		'expression' => \@expr,
@@ -297,9 +302,6 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	});
 
 }
-
-# On ferme la connection à R
-$R->stopR;
 
 # ==============================================================================
 # On calcule les p values ajustées

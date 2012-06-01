@@ -45,27 +45,16 @@ annotations:
       mps: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.TC.mps
 
 # Tables selon l'organisme
+table_entites:
+  human: humain_fdb1_entites
+  mouse: souris_fdb1_entites
+
 table_sondes:
   human:
-    exon: humain_probes_status_exon
-    ggh: humain_probes_status_ggh
+    exon: humain_probes_status_fdb1_exon
+    ggh: humain_probes_status_fdb1_ggh
   mouse:
-    exon: souris_probes_status_exon
-
-table_entites:
-  human: humain_entites
-  mouse: souris_entites
-
-table_entites_sondes:
-  human:
-    exon: humain_entites_sondes_exon
-    ggh: humain_entites_sondes_ggh
-  mouse:
-    exon: souris_entites_sondes_exon
-
-table_carac_entites:
-  human: humain_carac_entites
-  mouse: souris_carac_entites
+    exon: souris_probes_status_fdb1_exon
 
 table_prom:
   human: humain_prom
@@ -83,7 +72,7 @@ correction:
   algo: rma-bg,quant-norm,pm-only
 
 simple:
-  gc_max: 18
+  gc_max: 17
   nb_occ_max: 1
   seuil_dabg: 0.05
   seuil_si: 0.137503524

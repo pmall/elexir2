@@ -96,7 +96,7 @@ my $base_fasterdb = $config->{'db_name_fasterdb'}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $table_sondes = $config->{'table_sondes'}{$orga}{$type_chips};
-my $table_carac_entites = $config->{'table_carac_entites'}{$orga};
+my $table_entites = $config->{'table_entites'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage.xls';
 
@@ -710,10 +710,9 @@ sub process {
         while( my ($entite_id, $h_data) = each %$h_entites ){
 
             # Informations de l'entité
-            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_carac_entites, $h_data->{"carac"}->{"num_id"}, $h_data->{"carac"}->{"num_type"});
+            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_entites, $h_data->{"carac"}->{"num_id"});
             my @data_entite = ($h_carac_entite->{"nom_type"}, $h_carac_entite->{"position"}, $h_data->{"carac"}->{"nb_sondes"}, $h_carac_entite->{"sequence"});
-            
-    
+
             # Si l'entité traitée n'est pas un exon : on ne la traite que si elle n'est pas égale à l'exon
             if( $h_carac_entite->{"num_type"} == 1 || ( $h_carac_entite->{"num_type"} != 1 && $h_carac_entite->{"is_exon"} != 1 ) ){
             
@@ -783,7 +782,7 @@ sub process {
             
                 # On incrémente le num de la ligne (= nb entités)
                 $num_ligne++;
-            
+
             }
 
         }

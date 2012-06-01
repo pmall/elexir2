@@ -3,6 +3,9 @@ use strict;
 use warnings;
 use List::Util qw(min);
 use List::MoreUtils qw(uniq);
+use Statistics::Distributions;
+use lib $FindBin::Bin;
+use Math;
 use Exporter qw(import);
 
 our @EXPORT = qw(ttest adjust_pvals);
@@ -11,6 +14,7 @@ our @EXPORT = qw(ttest adjust_pvals);
 # Fonction ttest
 # ==============================================================================
 
+=head
 # Effectue un ttest à partir d'une valeur moyenne/mediane/whatever et de la
 # liste des échantillons qui a permi de calculer cette valeur
 sub ttest{
@@ -33,7 +37,35 @@ sub ttest{
 	my @outs = split(/ /, $out);
 	my $p_value = $outs[1];
 
+	# On clean les objets de R
+	$R->clean_up;
+
 	return $p_value;
+
+}
+=cut
+
+# Effectue un ttest à partir d'une valeur moyenne/mediane/whatever et de la
+# liste des échantillons qui a permi de calculer cette valeur
+sub ttest{
+
+	my($value, @samples) = @_;
+
+	# Si tout les fc sont identiques on bouge le premier de 0.01
+	# sinon sd(@samples) = 0 et erreur
+	if(uniq(@samples) == 1){ $samples[0]+= 0.01; }
+
+	# On calcule t valeur de notre sample
+	my $t = mean(@samples)/(sd(@samples)/(@samples**0.5));
+
+	# On recherche la valeur critique (degré de liberté : N - 1)
+	my $t_prob = Statistics::Distributions::tprob(@samples - 1, $t);
+
+	# Si on compare a une valeur négative, il faut 1 - $t_prob
+	if($value < 0){ $t_prob = 1 - $t_prob; }
+
+	# On retourne la p value
+	return $t_prob;
 
 }
 
@@ -64,11 +96,17 @@ sub adjust_pvals{
 	# On les "classe" "en escalier" :)
 	my @list_cor_ord = ();
 
+	my $min = min(@list_cor);
+
 	for(my $i = 0; $i < @list_cor; $i++){
 
-		my $min = min($list_cor[$i], @list_cor[($i + 1)..$#list_tri]);
-
 		push(@list_cor_ord, $min);
+
+		if($list_cor[$i] == $min){
+
+			$min = min(@list_cor[($i + 1)..$#list_tri]);
+
+		}
 
 	}
 

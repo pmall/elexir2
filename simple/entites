@@ -4,7 +4,6 @@ use warnings;
 use YAML::XS qw(LoadFile);
 use DBI;
 use List::MoreUtils qw(uniq);
-use Statistics::R;
 use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
@@ -33,10 +32,6 @@ my $gc_max = $config->{'simple'}{'gc_max'};
 my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
 my $const_si = $config->{'simple'}{'seuil_si'};
-
-# On ouvre une session R pour le script
-my $R = Statistics::R->new();
-$R->startR;
 
 # ==============================================================================
 # Préparation des requètes pour les infos du projet
@@ -83,8 +78,8 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
 my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'organism'}};
 my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}}{$infos_analyse->{'type_chips'}};
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
+my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
 my $table_si = get_table_si($infos_analyse->{'id_project'}, $id_analyse);
 my $table_splicing = get_table_splicing($infos_analyse->{'id_project'}, $id_analyse);
@@ -100,11 +95,9 @@ my $select_genes_sth = $dbh->prepare(
 
 # On selectionne les sondes d'un gène
 my $select_infos_sondes_sth = $dbh->prepare(
-	"SELECT probe_id, exon_pos, entite_id, entite_type
+	"SELECT probe_id, nb_occ, gc_content, exon_pos, entite_id, entite_type
 	FROM " . $table_sondes . "
-	WHERE align = 'as'
-	AND gc_content < ?
-	AND nb_occ = ?
+	WHERE utiliser_dans_analyse = 1
 	AND gene_id = ?"
 );
 
@@ -218,7 +211,7 @@ $select_genes_sth->execute;
 # Pour chaque gène
 while(my $gene = $select_genes_sth->fetchrow_hashref){
 
-	#print $gene->{'gene_id'} . "\n";
+	print $gene->{'gene_id'} . "\n";
 
 	# ======================================================================
 	# On récupère les infos sur les sondes exprimées
@@ -230,9 +223,16 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	$select_nb_exons_gene_sth->finish;
 
 	# On récupère les infos des sondes du gène
-	$select_infos_sondes_sth->execute($gc_max, $nb_occ_max, $gene->{'gene_id'});
+	$select_infos_sondes_sth->execute($gene->{'gene_id'});
 	my $infos_sondes = $select_infos_sondes_sth->fetchall_arrayref({});
 	$select_infos_sondes_sth->finish;
+
+	# Si les sondes n'ont pas de bonnes caractéristiques on zappe
+	$infos_sondes = [grep {
+		$_->{'nb_occ'} <= $nb_occ_max
+		and
+		$_->{'gc_content'} <= $gc_max
+	} @{$infos_sondes}];
 
 	# On récupère les ids des sondes (la même sonde peut apparaitre plusieur
 	# fois pour différentes entitées)
@@ -308,241 +308,231 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	# On défini une liste d'entité du gène
 	my @entites_gene = ();
 
-	# On vire les entités négatives (WTF ?)
-	@infos_sondes_exprimes = (grep { $_->{'entite_type'} > 0 } @infos_sondes_exprimes);
+	# On récupère la liste des id uniques d'entités
+	my @uniq_id_entites = uniq(map {
+		$_->{'entite_id'} . ':' . $_->{'entite_type'}
+	} (grep {
+		$_->{'entite_id'} > 0
+	} @infos_sondes_exprimes));
 
-	# On récupère la liste des id d'entités
-	my @ids_entites = uniq(map { $_->{'entite_id'} } @infos_sondes_exprimes);
+	# Pour chaque entite
+	foreach my $uniq_id_entite (@uniq_id_entites){
 
-	# Pour chaque exons
-	foreach my $id_entite (@ids_entites){
+		# ======================================================
+		# On selectionne les sondes de l'entité
+		# ======================================================
 
-		# On récupère les sondes de cet exon
-		my @infos_sondes_exon = grep { $_->{'entite_id'} == $id_entite } @infos_sondes_exprimes;
+		# On récupère les sondes de cette entité
+		my @infos_sondes_entite = grep {
+			$_->{'entite_id'} . ':' . $_->{'entite_type'} eq $uniq_id_entite
+		} @infos_sondes_exprimes;
 
-		# On récupère les types d'entité de l'exon
-		my @types_entites = uniq(map { $_->{'entite_type'} } @infos_sondes_exon);
+		# Si le type d'entité a moins de 3 sondes on zappe
+		next if(@infos_sondes_entite < 3);
 
-		# Pour chaque type d'entite
-		foreach my $type_entite (@types_entites){
+		# ======================================================
+		# On selectionne les valeurs des sondes de l'entité
+		# ======================================================
 
-			# ======================================================
-			# On selectionne les sondes de l'entité
-			# ======================================================
+		my @sondes_entite = ();
 
-			# On récupère les sondes de ce type d'entite
-			my @infos_sondes_entite = grep {
-				$_->{'entite_type'} == $type_entite
-			} @infos_sondes_exon;
+		foreach my $infos_sonde_entite (@infos_sondes_entite){
 
-			# Si le type d'entité a moins de 3 sondes on zappe
-			next if(@infos_sondes_entite < 3);
+			# On récupère les intensités
+			$select_intensite_sth->execute($infos_sonde_entite->{'probe_id'});
+			my $intensites = $select_intensite_sth->fetchrow_hashref;
+			$select_intensite_sth->finish;
 
-			# ======================================================
-			# On selectionne les valeurs des sondes de l'entité
-			# ======================================================
+			# On récupère les valeurs de SI
+			my $SIs = (grep {
+				$infos_sonde_entite->{'probe_id'} == $_->{'probe_id'}
+			} @SIs)[0];
 
-			my @sondes_entite = ();
+			# On met les intensités et les si dans un hash,
+			# que l'on ajoute a la liste
+			push(@sondes_entite, {%{$intensites}, %{$SIs}});
 
-			foreach my $infos_sonde_entite (@infos_sondes_entite){
+		}
 
-				# On récupère les intensités
-				$select_intensite_sth->execute($infos_sonde_entite->{'probe_id'});
-				my $intensites = $select_intensite_sth->fetchrow_hashref;
-				$select_intensite_sth->finish;
+		# ======================================================
+		# On calcule les valeurs d'expression de l'entité
+		# ======================================================
 
-				# On récupère les valeurs de SI
-				my $SIs = (grep {
-					$infos_sonde_entite->{'probe_id'} == $_->{'probe_id'}
-				} @SIs)[0];
+		# On calcule l'expression de l'entité
+		my @expr = expression(\@exp, \@sondes_entite);
 
-				# On met les intensités et les si dans un hash,
-				# que l'on ajoute a la liste
-				push(@sondes_entite, {%{$intensites}, %{$SIs}});
+		# ======================================================
+		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
+		# ======================================================
 
-			}
+		my $si_entite;
+		my @SIs_entite = ();
+		my @SIs_a_tester = ();
 
-			# ======================================================
-			# On calcule les valeurs d'expression de l'entité
-			# ======================================================
+		# => On pourra condenser quand on fera base 10 partout
 
-			# On calcule l'expression de l'entité
-			my @expr = expression(\@exp, \@sondes_entite);
+		# La seule diff c'est que pour np on test avec tout les
+		# si des sondes, avec p on test avec les si des paires
+		# de replicats
+		# Le reste pourrais être un seul algo
 
-			# ======================================================
-			# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
-			# ======================================================
+		# Si l'expérience est paire
+		if($infos_analyse->{'type'} eq 'paire'){
 
-			my $si_entite;
-			my @SIs_entite = ();
-			my @SIs_a_tester = ();
+			# Pour chaque paires on fait la médiane des SIs
+			for(my $i = 1; $i <= @exp; $i++){
 
-			# => On pourra condenser quand on fera base 10 partout
-
-			# La seule diff c'est que pour np on test avec tout les
-			# si des sondes, avec p on test avec les si des paires
-			# de replicats
-			# Le reste pourrais être un seul algo
-
-			# Si l'expérience est paire
-			if($infos_analyse->{'type'} eq 'paire'){
-
-				# Pour chaque paires on fait la médiane des SIs
-				for(my $i = 1; $i <= @exp; $i++){
-
-					# On récupère la médiane des SIs de ce replicat
-					push(@SIs_entite, median(map {
-						$_->{'SI' . $i}
-					} @sondes_entite));
-
-				}
-
-				# Les SIs des replicats sont les SIs a tester
-				@SIs_a_tester = @SIs_entite;
-
-				# Le SI de l'entité est la médiane des SI
-				# des paires (en base 10 !!)
-				my @SIs_base10 = ();
-
-				foreach(@SIs_entite){ push(@SIs_base10, 2**$_); }
-
-				$si_entite = log2(median(@SIs_base10));
-
-			}else{
-
-				# Les SIs a tester sont tous les SIs de chaque sondes
-				@SIs_a_tester = (map { $_->{'SI1'} } @sondes_entite);
-
-				# Le SI de du replicat est la médiane des SIs des sondes
-				push(@SIs_entite, median(@SIs_a_tester));
-
-				# Le SI de l'entité est égal au SI du replicat
-				$si_entite = $SIs_entite[0];
+				# On récupère la médiane des SIs de ce replicat
+				push(@SIs_entite, median(map {
+					$_->{'SI' . $i}
+				} @sondes_entite));
 
 			}
 
-			# On fait le test stat sur le SI de l'entité
-			my $p_value = ttest($R, $si_entite, @SIs_a_tester);
+			# Les SIs des replicats sont les SIs a tester
+			@SIs_a_tester = @SIs_entite;
 
-			# ======================================================
-			# On calcule le PSI de l'entité
-			# ======================================================
+			# Le SI de l'entité est la médiane des SI
+			# des paires (en base 10 !!)
+			my @SIs_base10 = ();
 
-			my $psi_control;
-			my $psi_test;
-			my $psi_sd_control;
-			my $psi_sd_test;
-			my $psi_fc;
-			my $psi_sd_fc;
-			my $p_value_psi;
+			foreach(@SIs_entite){ push(@SIs_base10, 2**$_); }
 
-			# on récupère les fcs psis de chaque paire de replicat
-			my @psis_control = ();
-			my @psis_test = ();
-			my @psis_fcs = ();
+			$si_entite = log2(median(@SIs_base10));
+
+		}else{
+
+			# Les SIs a tester sont tous les SIs de chaque sondes
+			@SIs_a_tester = (map { $_->{'SI1'} } @sondes_entite);
+
+			# Le SI de du replicat est la médiane des SIs des sondes
+			push(@SIs_entite, median(@SIs_a_tester));
+
+			# Le SI de l'entité est égal au SI du replicat
+			$si_entite = $SIs_entite[0];
+
+		}
+
+		# On fait le test stat sur le SI de l'entité
+		my $p_value = ttest($si_entite, @SIs_a_tester);
+
+		# ======================================================
+		# On calcule le PSI de l'entité
+		# ======================================================
+
+		my $psi_control;
+		my $psi_test;
+		my $psi_sd_control;
+		my $psi_sd_test;
+		my $psi_fc;
+		my $psi_sd_fc;
+		my $p_value_psi;
+
+		# on récupère les fcs psis de chaque paire de replicat
+		my @psis_control = ();
+		my @psis_test = ();
+		my @psis_fcs = ();
+
+		for(my $i = 1; $i <= @exp; $i++){
+
+			my $index_cont = ($i - 1) * 2;
+			my $index_test = ($i * 2) - 1;
+
+			my $psi_control = 100 * ($expr[$index_cont] / (2**$gene->{'control' . $i}));
+			my $psi_test = 100 * ($expr[$index_test] / (2**$gene->{'test' . $i}));
+
+			push(@psis_control, $psi_control);
+			push(@psis_test, $psi_test);
+			push(@psis_fcs, $psi_test/$psi_control);
+
+		}
+
+		# On calcule le psi test et le psi control
+		$psi_control = median(@psis_control);
+		$psi_test = median(@psis_test);
+
+		# le psi_fc de l'entité est la médiane des psis_fcs
+		$psi_fc = median(@psis_fcs);
+
+		# On calcule certains trucs seulement si l'analyse est paire
+		if($infos_analyse->{'type'} eq 'paire'){
+
+			# On calcule les standard deviation
+			$psi_sd_control = sd(@psis_control);
+			$psi_sd_test = sd(@psis_test);
+
+			# le psi_sd_fc de l'entité est le sd des psis_fc
+			$psi_sd_fc = sd(@psis_fcs);
+
+			# test stat
+			$p_value_psi = ttest(log2($psi_fc), log2(@psis_fcs));
+
+		}
+
+		# ======================================================
+		# On calcule si l'entité est "cohérente"
+		# ======================================================
+
+		# On récupère le nombre de sondes de l'entité
+		my $nb_sondes = @sondes_entite;
+
+		# Pour chaque sonde on calcule la médiane de ses si
+		# et on compte le nombre de sondes up et de sondes down
+		my $nb_ups = 0;
+		my $nb_downs = 0;
+
+		foreach my $sonde_entite (@sondes_entite){
+
+			# On calcule le si de la sonde
+			my @sis_sonde = ();
 
 			for(my $i = 1; $i <= @exp; $i++){
 
-				my $index_cont = ($i - 1) * 2;
-				my $index_test = ($i * 2) - 1;
-
-				my $psi_control = 100 * ($expr[$index_cont] / (2**$gene->{'control' . $i}));
-				my $psi_test = 100 * ($expr[$index_test] / (2**$gene->{'test' . $i}));
-
-				push(@psis_control, $psi_control);
-				push(@psis_test, $psi_test);
-				push(@psis_fcs, $psi_test/$psi_control);
+				push(@sis_sonde, $sonde_entite->{'SI' . $i});
 
 			}
 
-			# On calcule le psi test et le psi control
-			$psi_control = median(@psis_control);
-			$psi_test = median(@psis_test);
+			my $si_sonde = median(@sis_sonde);
 
-			# le psi_fc de l'entité est la médiane des psis_fcs
-			$psi_fc = median(@psis_fcs);
-
-			# On calcule certains trucs seulement si l'analyse est paire
-			if($infos_analyse->{'type'} eq 'paire'){
-
-				# On calcule les standard deviation
-				$psi_sd_control = sd(@psis_control);
-				$psi_sd_test = sd(@psis_test);
-
-				# le psi_sd_fc de l'entité est le sd des psis_fc
-				$psi_sd_fc = sd(@psis_fcs);
-
-				# test stat
-				$p_value_psi = ttest($R, log2($psi_fc), log2(@psis_fcs));
-
-			}
-
-			# ======================================================
-			# On calcule si l'entité est "cohérente"
-			# ======================================================
-
-			# On récupère le nombre de sondes de l'entité
-			my $nb_sondes = @sondes_entite;
-
-			# Pour chaque sonde on calcule la médiane de ses si
-			# et on compte le nombre de sondes up et de sondes down
-			my $nb_ups = 0;
-			my $nb_downs = 0;
-
-			foreach my $sonde_entite (@sondes_entite){
-
-				# On calcule le si de la sonde
-				my @sis_sonde = ();
-
-				for(my $i = 1; $i <= @exp; $i++){
-
-					push(@sis_sonde, $sonde_entite->{'SI' . $i});
-
-				}
-
-				my $si_sonde = median(@sis_sonde);
-
-				# Si la sonde est up ou down on la compte
-				if($si_sonde >= $const_si){ $nb_ups++; }
-				if($si_sonde <= (-1 * $const_si)){ $nb_downs++; }
-
-			}
-
-			# On récupère la limite
-			my $limit = ($nb_sondes < 5) ? 3 : int($nb_sondes*4/5);
-
-			# On regarde si l'entité est globalement up ou down
-			my $is_up = ($nb_ups >= $limit);
-			my $is_down = ($nb_downs >= $limit);
-
-			# Si l'entité est up ou down, elle est robuste
-			my $is_robust = ($is_up or $is_down);
-
-			# ======================================================
-			# On ajoute l'entité à la liste des entites
-			# ======================================================
-
-			push(@entites_gene, {
-				'id' => $id_entite,
-				'id_gene' => $gene->{'gene_id'},
-				'type' => $infos_sondes_entite[0]->{'entite_type'},
-				'exon_pos' => $infos_sondes_entite[0]->{'exon_pos'},
-				'nb_sondes' => $nb_sondes,
-				'expression' => \@expr,
-				'SIs' => \@SIs_entite,
-				'SI' => $si_entite,
-				'p_value' => $p_value,
-				'psi_control' => $psi_control,
-				'psi_test' => $psi_test,
-				'psi_sd_control' => $psi_sd_control,
-				'psi_sd_test' => $psi_sd_test,
-				'psi_fc' => $psi_fc,
-				'psi_sd_fc' => $psi_sd_fc,
-				'p_value_psi' => $p_value_psi,
-				'is_robust' => $is_robust
-			});
+			# Si la sonde est up ou down on la compte
+			if($si_sonde >= $const_si){ $nb_ups++; }
+			if($si_sonde <= (-1 * $const_si)){ $nb_downs++; }
 
 		}
+
+		# On récupère la limite
+		my $limit = ($nb_sondes < 5) ? 3 : int($nb_sondes*4/5);
+
+		# On regarde si l'entité est globalement up ou down
+		my $is_up = ($nb_ups >= $limit);
+		my $is_down = ($nb_downs >= $limit);
+
+		# Si l'entité est up ou down, elle est robuste
+		my $is_robust = ($is_up or $is_down);
+
+		# ======================================================
+		# On ajoute l'entité à la liste des entites
+		# ======================================================
+
+		push(@entites_gene, {
+			'id' => $infos_sondes_entite[0]->{'entite_id'},
+			'id_gene' => $gene->{'gene_id'},
+			'type' => $infos_sondes_entite[0]->{'entite_type'},
+			'exon_pos' => $infos_sondes_entite[0]->{'exon_pos'},
+			'nb_sondes' => $nb_sondes,
+			'expression' => \@expr,
+			'SIs' => \@SIs_entite,
+			'SI' => $si_entite,
+			'p_value' => $p_value,
+			'psi_control' => $psi_control,
+			'psi_test' => $psi_test,
+			'psi_sd_control' => $psi_sd_control,
+			'psi_sd_test' => $psi_sd_test,
+			'psi_fc' => $psi_fc,
+			'psi_sd_fc' => $psi_sd_fc,
+			'p_value_psi' => $p_value_psi,
+			'is_robust' => $is_robust
+		});
 
 	}
 
@@ -589,7 +579,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On fait un test seulement si l'analyse est paire
 		if($infos_analyse->{'type'} eq 'paire'){
 
-			$entite_gene->{'p_value_sd'} = ttest($R, $entite_gene->{'SIsd'}, @{$entite_gene->{'SIsds'}});
+			$entite_gene->{'p_value_sd'} = ttest($entite_gene->{'SIsd'}, @{$entite_gene->{'SIsds'}});
 
 		}
 
@@ -599,9 +589,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	push(@entites, @entites_gene);
 
 }
-
-# On ferme la connection à R
-$R->stopR;
 
 # ======================================================================
 # On calcule les pvalues ajustées et on ajoute dans la bdd
