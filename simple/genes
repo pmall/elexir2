@@ -162,8 +162,8 @@ my @fields_trans = (
 	'epi_nb_exons SMALLINT UNSIGNED'
 );
 
-#$dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
-#$dbh->do('CREATE TABLE ' . $table_trans . ' (' . join(', ', @fields_trans) . ')');
+$dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
+$dbh->do('CREATE TABLE ' . $table_trans . ' (' . join(', ', @fields_trans) . ')');
 
 my $insert_gene_sth = $dbh->prepare(
 	"INSERT INTO $table_trans VALUES(" . join(', ', ('?')x@fields_trans) . ")"
