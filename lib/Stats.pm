@@ -56,7 +56,7 @@ sub ttest{
 	if(uniq(@samples) == 1){ $samples[0]+= 0.01; }
 
 	# On calcule t valeur de notre sample
-	my $t = mean(@samples)/(sd(@samples)/(@samples**0.5));
+	my $t = mean(@samples)/(sd_est(@samples)/(@samples**0.5));
 
 	# On recherche la valeur critique (degré de liberté : N - 1)
 	my $t_prob = Statistics::Distributions::tprob(@samples - 1, $t);

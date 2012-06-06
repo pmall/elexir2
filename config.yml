@@ -75,10 +75,10 @@ simple:
   gc_max: 17
   nb_occ_max: 1
   seuil_dabg: 0.05
-  seuil_si: 0.137503524
+  seuil_si: 1.1 # En base 10 !
 
 excel:
-  seuil_transcription: 0.263034406
-  seuil_epissage: 1.45
+  seuil_transcription: 1.2 # En base 10 !
+  seuil_epissage: 1.45 # En base 10 !
   seuil_pval: 0.05
   seuil_fc_gene: 2

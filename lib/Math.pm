@@ -4,7 +4,7 @@ use warnings;
 use List::Util qw(sum);
 use Exporter qw(import);
 
-our @EXPORT = qw(mean variance sd median log2 round);
+our @EXPORT = qw(mean variance sd sd_est median log2 round);
 
 # ==============================================================================
 # Fonctions stats descriptive
@@ -26,6 +26,13 @@ sub variance{
 }
 
 sub sd{
+
+	# On retourne la racine carrée de la variance
+	return ((variance(@_))**0.5);
+
+}
+
+sub sd_est{
 
 	# On calcule le coeff pour l'estimation sur la population
 	my $cor = @_/(@_-1);

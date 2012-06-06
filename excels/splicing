@@ -369,6 +369,17 @@ sub requetage {
 
     my ($h_gene_reg, $correction_fdr) = @_;
 
+    # Traduction du type
+    my %name2num = (
+        'exon' => 1,
+        'prom' => 2,
+        'polya' => 3,
+        'intron-retention' => 4,
+        'donor' => 5,
+        'acceptor' => 6,
+        'deletion' => 7
+    );
+
     my %h_communs_bon_fc_gene      = ();
     my %h_communs_mauv_fc_gene     = ();
     my %h_non_communs_bon_fc_gene  = ();
@@ -389,7 +400,7 @@ sub requetage {
         my $nb_sondes   = $data[$#data];
         my %h_carac_entites = ( "full_id"   => $entite_id,
                                 "num_id"    => $id,
-                                "num_type"  => $entite_type,
+                                "num_type"  => $name2num{$entite_type},
                                 "nb_sondes" => $nb_sondes );
 
 
@@ -490,7 +501,7 @@ sub requetage {
 
             # Valeurs pour xls
             my ($reg_si, $SI) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si);
-            
+
             # SI/FCgene
             my $rapport_si_gene = rapport_si_entite_fc_gene($h_gene_reg->{$gene_id}, $reg_si, $SI);
 
@@ -710,7 +721,7 @@ sub process {
         while( my ($entite_id, $h_data) = each %$h_entites ){
 
             # Informations de l'entité
-            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_entites, $h_data->{"carac"}->{"num_id"});
+            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_entites, $h_data->{"carac"}->{"num_id"}, $h_data->{"carac"}->{"num_type"});
             my @data_entite = ($h_carac_entite->{"nom_type"}, $h_carac_entite->{"position"}, $h_data->{"carac"}->{"nb_sondes"}, $h_carac_entite->{"sequence"});
 
             # Si l'entité traitée n'est pas un exon : on ne la traite que si elle n'est pas égale à l'exon
@@ -754,7 +765,7 @@ sub process {
                 }else{
                     @data_psi = ("-", "-", "-", "-", "-", "-", "-", "-", "-");
                 }
-                
+
                 # Pourcentage ch_sondes
                 my $select_ch_probes = $probes_db -> prepare (
                     "SELECT count(probe_id)

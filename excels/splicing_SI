@@ -95,7 +95,7 @@ my $base_fasterdb = $config->{'db_name_fasterdb'}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $table_sondes = $config->{'table_sondes'}{$orga}{$type_chips};
-my $table_carac_entites = $config->{'table_carac_entites'}{$orga};
+my $table_entites = $config->{'table_entites'}{$orga};
 my $table_prom = $config->{'table_prom'}{$orga};
 my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
@@ -242,14 +242,14 @@ if ( $est_paire ) {
             FROM $table_splicing
             WHERE entite_type = 8
             AND is_robust = 1 
-            AND ABS(SI) >= LOG2($seuil_epissage)";
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
     }else{
         $requete_si =
             "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, nb_sondes
             FROM $table_splicing
             WHERE entite_type != 8
             AND is_robust = 1 
-            AND ABS(SI) >= LOG2($seuil_epissage)";
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
     }
 
     # On récupère toutes les valeurs de SIsd et psi (is_robust=1 simplement pour pas bouffer de mémoire vive)
@@ -274,14 +274,14 @@ if ( $est_paire ) {
             FROM $table_splicing
             WHERE entite_type = 8
             AND is_robust = 1 
-            AND ABS(SI) >= LOG2($seuil_epissage)";
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
     }else{
         $requete_si =
             "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, nb_sondes
             FROM $table_splicing
             WHERE entite_type != 8
             AND is_robust = 1 
-            AND ABS(SI) >= LOG2($seuil_epissage)";
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
     }
 
     # On récupère toutes les valeurs de SIsd et psi (is_robust=1 simplement pour pas bouffer de mémoire vive)
@@ -409,6 +409,17 @@ sub requetage_si {
 
     my ($h_gene_reg) = @_;
 
+    # Traduction du type
+    my %name2num = (
+        'exon' => 1,
+        'prom' => 2,
+        'polya' => 3,
+        'intron-retention' => 4,
+        'donor' => 5,
+        'acceptor' => 6,
+        'deletion' => 7
+    );
+
     my %h_no_fdr_bon_fc_gene  = ();
     my %h_no_fdr_mauv_fc_gene = ();
     my %h_fdr_bon_fc_gene     = ();
@@ -443,7 +454,7 @@ sub requetage_si {
             
             # Valeurs pour xls
             my ($reg_si, $SI, $SIs) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si, \@SIs);
-            
+
             # REL et FE
             my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
             
@@ -456,7 +467,7 @@ sub requetage_si {
                 if( $is_good_gene ){
                 
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -469,7 +480,7 @@ sub requetage_si {
                 }else{
                 
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -491,7 +502,7 @@ sub requetage_si {
                 if( $is_good_gene ){
                 
                     $h_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -504,7 +515,7 @@ sub requetage_si {
                 }else{
                 
                     $h_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -528,7 +539,7 @@ sub requetage_si {
 
             # Valeurs pour xls
             my ($reg_si, $SI) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si);
-            
+
             # REL et FE
             my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
 
@@ -541,7 +552,7 @@ sub requetage_si {
                 if( $is_good_gene ){
                 
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -554,7 +565,7 @@ sub requetage_si {
                 }else{
                 
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -576,7 +587,7 @@ sub requetage_si {
                 if( $is_good_gene ){
                 
                     $h_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -589,7 +600,7 @@ sub requetage_si {
                 }else{
                 
                     $h_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
@@ -651,6 +662,17 @@ sub requetage_sisd_psi {
 
     my ($h_gene_reg) = @_;
 
+    # Traduction du type
+    my %name2num = (
+        'exon' => 1,
+        'prom' => 2,
+        'polya' => 3,
+        'intron-retention' => 4,
+        'donor' => 5,
+        'acceptor' => 6,
+        'deletion' => 7
+    );
+
     my %h_si_sd = ();
     my %h_psi   = ();
 
@@ -668,7 +690,7 @@ sub requetage_sisd_psi {
         
         # Le fold du gène est ok ou pas
         my $is_good_gene = ( $h_gene_reg->{$gene_id}->{"fold"} < $seuil_fiabilite_fcGene ) ? 1 : 0;
-        
+
         if( $est_paire ){
         
             # ---------------- Data SIsd ---------------- #
@@ -689,7 +711,7 @@ sub requetage_sisd_psi {
                 
                 # Hash résultat                
                 $h_si_sd{$entite_id}->{"num_id"}     = $id;
-                $h_si_sd{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si_sd{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si_sd{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si_sd{$entite_id}->{"regulation"} = $reg_sisd;
                 $h_si_sd{$entite_id}->{"si"}         = $SIsd;
@@ -725,7 +747,7 @@ sub requetage_sisd_psi {
                 
                 # Hash résultat
                 $h_psi{$entite_id}->{"num_id"}     = $id;
-                $h_psi{$entite_id}->{"num_type"}   = $entite_type;
+                $h_psi{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_psi{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_psi{$entite_id}->{"regulation"} = $reg_psi;
                 $h_psi{$entite_id}->{"control"}    = $psi_control;
@@ -758,7 +780,7 @@ sub requetage_sisd_psi {
 
                 # Hash résultat
                 $h_si_sd{$entite_id}->{"num_id"}     = $id;
-                $h_si_sd{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si_sd{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si_sd{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si_sd{$entite_id}->{"regulation"} = $reg_sisd;
                 $h_si_sd{$entite_id}->{"si"}         = $SIsd;
@@ -785,10 +807,10 @@ sub requetage_sisd_psi {
 
                 # REL et FE
                 my ($RELpsi, $FEpsi) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_psi, $psi_fc);
-                
+
                 # Hash résultat
                 $h_psi{$entite_id}->{"num_id"}     = $id;
-                $h_psi{$entite_id}->{"num_type"}   = $entite_type;
+                $h_psi{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_psi{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_psi{$entite_id}->{"regulation"} = $reg_psi;
                 $h_psi{$entite_id}->{"control"}    = $psi_control;
@@ -895,7 +917,7 @@ sub process {
             
             # ---------------- Info entité ----------------- #
             
-            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_carac_entites, $entite_courante->{"num_id"}, $entite_courante->{"num_type"});
+            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_entites, $entite_courante->{"num_id"}, $entite_courante->{"num_type"});
             # On réannote mieux l'entité si elle est définie comme étant un exon
             my $type_entite = reannote_exon($gene_courant, $h_carac_entite);
             # Pourcentage ch_sondes

@@ -51,7 +51,7 @@ sub ecriture {
         $num_col++;
 
         # Lien url misea
-        if ( $data_cellule =~ /^.*http.*elexir.*$/i ) {
+        if ($data_cellule and $data_cellule =~ /^.*http.*elexir.*$/i ) {
             $feuille->write_url($ligne, $num_col, $data_cellule, 'ELEXIR', $format);
 
         # Data
@@ -83,23 +83,14 @@ sub get_regulation_fold_for_xls_from_log2_to_base10 {
     
 
     my $regulation;
-    if ( $fold >= 0 ) {
+    if ($fold >= 1 ) {
         $regulation = "up";
-        $fold = round((2**$fold), 2);
-        if ( $array_folds ){
-        	foreach(@$array_folds){
-                $_ = round((2**$_), 2);
-            }
-        }
+        $fold = round($fold, 2);
+	$array_folds = [map { round($_, 2) } @{$array_folds}];
     }else{
         $regulation = "down";
-        $fold = round((1/(2**$fold)), 2);
-        if ( $array_folds ){
-            foreach(@$array_folds){
-                $_ = round((1/(2**$_)), 2);
-            }
-        }
-    
+	$fold = round(1/$fold, 2);
+	$array_folds = [map { round(1/$_, 2) } @{$array_folds}];
     }
 
 
@@ -119,27 +110,16 @@ sub get_regulation_fold_from_log2_to_base10 {
 
     my ($fold, $array_folds) = @_;
     
-
     my $regulation;
-    if ( $fold >= 0 ) {
+    if ( $fold >= 1 ) {
         $regulation = "up";
-        $fold = (2**$fold);
-        if ( $array_folds ){
-        	foreach(@$array_folds){
-                $_ = (2**$_);
-            }
-        }
+        $fold = round($fold, 2);
+	$array_folds = [map { round($_, 2) } @{$array_folds}];
     }else{
         $regulation = "down";
-        $fold = (1/(2**$fold));
-        if ( $array_folds ){
-            foreach(@$array_folds){
-                $_ = (1/(2**$_));
-            }
-        }
-    
+	$fold = round(1/$fold, 2);
+	$array_folds = [map { round(1/$_, 2) } @{$array_folds}];
     }
-
 
     return ($regulation, $fold, $array_folds);
     
@@ -163,20 +143,11 @@ sub get_regulation_fold_for_xls_from_base10_to_base10 {
     if ( $fold >= 1 ) {
         $regulation = "up";
         $fold = round($fold, 2);
-        if ( $array_folds ){
-        	foreach(@$array_folds){
-                $_ = round($_, 2);
-            }
-        }
+	$array_folds = [map { round($_, 2) } @{$array_folds}];
     }else{
         $regulation = "down";
-        $fold = round((1/$fold), 2);
-        if ( $array_folds ){
-            foreach(@$array_folds){
-                $_ = round((1/$_), 2);
-            }
-        }
-    
+	$fold = round(1/$fold, 2);
+	$array_folds = [map { round(1/$_) } @{$array_folds}];
     }
 
 
@@ -196,11 +167,10 @@ sub get_regulation_fold_from_base10_to_base10 {
     
     my $regulation;
     if ( $fold >= 1 ) {
-        return ("up", $fold);
+        return ("up", round($fold, 2));
         
     }else{
-        return ("down", (1/$fold));
-
+        return ("down", round(1/$fold, 2));
     }
     
 }
@@ -555,29 +525,18 @@ sub requete_genes_regulation_xls{
 
 sub requete_entite_caracteristiques_xls {
 
-    my ($dbh, $table_entite, $id) = @_;
+    my ($dbh, $table_entite, $id, $num_type) = @_;
 
-	my $select_id_oldschool_sth = $dbh->prepare(
+	my $select_caracs_entite_sth = $dbh->prepare(
 		"SELECT id_elexir, type, id_gene, exon_pos, start_sur_gene, end_sur_gene, is_exon
 		FROM $table_entite
 		WHERE id = ?"
 	);
 
 	# On selectionne les caractéristiques de l'entité
-	$select_id_oldschool_sth->execute($id);
-	my $caracs_entite = $select_id_oldschool_sth->fetchrow_hashref;
-	$select_id_oldschool_sth->finish;
-
-	# Traduction du type
-	my %name2num = (
-		'exon' => 1,
-		'prom' => 2,
-		'polya' => 3,
-		'donnor' => 5,
-		'acceptor' => 6,
-		'deletion' => 7,
-		'intron-retention' => 4
-	);
+	$select_caracs_entite_sth->execute($id);
+	my $caracs_entite = $select_caracs_entite_sth->fetchrow_hashref;
+	$select_caracs_entite_sth->finish;
 
 	# On défini la chaine position
 	my $raw_pos = $caracs_entite->{'exon_pos'} . ':' . $caracs_entite->{'start_sur_gene'} . '-' . $caracs_entite->{'end_sur_gene'};
@@ -589,7 +548,7 @@ sub requete_entite_caracteristiques_xls {
 	# On retourne un hash d'entité à la old school
 	return {
 		'id' => $caracs_entite->{'id_elexir'},
-		'num_type' => $name2num{$caracs_entite->{'type'}},
+		'num_type' => $num_type,
 		'nom_type' => $caracs_entite->{'type'},
 		'gene_id' => $caracs_entite->{'id_gene'},
 		'position' => $pos,

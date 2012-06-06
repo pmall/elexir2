@@ -154,7 +154,7 @@ $f_resume->write(0, 0, date(), $format_cell_no_center);
 
 # Paramètres utilisés
 $f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
-my @parametre_fc   = ("Seuil fold", round((2**$seuil_trans), 2));
+my @parametre_fc   = ("Seuil fold", $seuil_trans);
 my @parametre_pval = ("Seuil p-value", $seuil_pval);
 &FonctionsXls::ecriture(\@parametre_fc, $f_resume, 3, $format_resume_cell);
 &FonctionsXls::ecriture(\@parametre_pval, $f_resume, 4, $format_resume_cell);
@@ -174,7 +174,7 @@ my $h_genes_carac = &RequetesCourantes::requete_genes_caracteristiques($faster_d
 my $req_trans =
     "SELECT `gene_id`, `trans_fc`, `trans_pval`, `trans_adjp`, `trans_nb_sondes`, `trans_nb_exons`
     FROM $table_trans
-    WHERE abs( `trans_fc` ) >= $seuil_trans ;";
+    WHERE abs(log2( `trans_fc` )) >= log2($seuil_trans) ;";
     
 
 # ------------------- Exécution de la requete --------------------- #

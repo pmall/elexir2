@@ -95,7 +95,7 @@ my $base_fasterdb = $config->{'db_name_fasterdb'}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $table_sondes = $config->{'table_sondes'}{$orga}{$type_chips};
-my $table_carac_entites = $config->{'table_carac_entites'}{$orga};
+my $table_entites = $config->{'table_entites'}{$orga};
 my $table_prom = $config->{'table_prom'}{$orga};
 my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
@@ -410,6 +410,17 @@ sub requetage_psi {
 
     my ($h_gene_reg) = @_;
 
+    # Traduction du type
+    my %name2num = (
+        'exon' => 1,
+        'prom' => 2,
+        'polya' => 3,
+        'intron-retention' => 4,
+        'donor' => 5,
+        'acceptor' => 6,
+        'deletion' => 7
+    );
+
     my %h_no_fdr_bon_fc_gene  = ();
     my %h_no_fdr_mauv_fc_gene = ();
     my %h_fdr_bon_fc_gene     = ();
@@ -462,7 +473,7 @@ sub requetage_psi {
                 
                     # Hash résultat
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -481,7 +492,7 @@ sub requetage_psi {
                 
                     # Hash résultat
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -509,7 +520,7 @@ sub requetage_psi {
                 
                     # Hash résultat
                     $h_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                     $h_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -528,7 +539,7 @@ sub requetage_psi {
                 
                     # Hash résultat
                     $h_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -568,7 +579,7 @@ sub requetage_psi {
                 
                 # Hash résultat
                 $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                 $h_no_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -587,7 +598,7 @@ sub requetage_psi {
                 
                 # Hash résultat
                 $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $entite_type;
+                $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
                 $h_no_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
@@ -651,6 +662,17 @@ sub requetage_si_sisd {
 
     my ($h_gene_reg) = @_;
 
+    # Traduction du type
+    my %name2num = (
+        'exon' => 1,
+        'prom' => 2,
+        'polya' => 3,
+        'intron-retention' => 4,
+        'donor' => 5,
+        'acceptor' => 6,
+        'deletion' => 7
+    );
+
     my %h_si    = ();
     my %h_si_sd = ();
 
@@ -689,7 +711,7 @@ sub requetage_si_sisd {
                 
                 # Hash résultat                
                 $h_si{$entite_id}->{"num_id"}     = $id;
-                $h_si{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si{$entite_id}->{"regulation"} = $reg_si;
                 $h_si{$entite_id}->{"si"}         = $SI;
@@ -721,7 +743,7 @@ sub requetage_si_sisd {
                 
                 # Hash résultat                
                 $h_si_sd{$entite_id}->{"num_id"}     = $id;
-                $h_si_sd{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si_sd{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si_sd{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si_sd{$entite_id}->{"regulation"} = $reg_sisd;
                 $h_si_sd{$entite_id}->{"si"}         = $SIsd;
@@ -752,7 +774,7 @@ sub requetage_si_sisd {
 
                 # Hash résultat
                 $h_si{$entite_id}->{"num_id"}     = $id;
-                $h_si{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si{$entite_id}->{"regulation"} = $reg_si;
                 $h_si{$entite_id}->{"si"}         = $SI;
@@ -780,7 +802,7 @@ sub requetage_si_sisd {
                 
                 # Hash résultat
                 $h_si_sd{$entite_id}->{"num_id"}     = $id;
-                $h_si_sd{$entite_id}->{"num_type"}   = $entite_type;
+                $h_si_sd{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                 $h_si_sd{$entite_id}->{"gene_id"}    = $gene_id;
                 $h_si_sd{$entite_id}->{"regulation"} = $reg_sisd;
                 $h_si_sd{$entite_id}->{"si"}         = $SIsd;
@@ -882,7 +904,7 @@ sub process {
             
             # ---------------- Info entité ----------------- #
             
-            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_carac_entites, $entite_courante->{"num_id"}, $entite_courante->{"num_type"});
+            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $table_entites, $entite_courante->{"num_id"}, $entite_courante->{"num_type"});
             # On réannote mieux l'entité si elle est définie comme étant un exon
             my $type_entite = reannote_exon($gene_courant, $h_carac_entite);
             # Pourcentage ch_sondes

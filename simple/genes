@@ -34,7 +34,7 @@ my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
 
 # ==============================================================================
-# On prépare les requetes
+# On récupère les infos de l'exp
 # ==============================================================================
 
 # On se connecte a elexir
@@ -44,32 +44,10 @@ my $dbh = DBI->connect(
 	$db_pass
 );
 
-# On selectionne les infos de l'analyse
-my $select_infos_analyse_sth = $dbh->prepare(
-	"SELECT p.id AS id_project, p.type AS type_chips, p.organism, a.type
-	FROM analyses AS a, projects AS p
-	WHERE a.id_project = p.id
-	AND a.id = ?"
-);
+# On récupère les infos de l'analyse
+my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 
-# On selectionne les conditions du projet
-my $select_chips_sth = $dbh->prepare(
-	"SELECT g.letter, c.condition, c.num
-	FROM analyses AS a, chips AS c, groups AS g
-	WHERE a.id_project = c.id_project
-	AND a.id = g.id_analysis
-	AND c.condition = g.condition
-	AND a.id = ?"
-);
-
-# ==============================================================================
-# On teste si l'analyse existe bien
-# ==============================================================================
-
-$select_infos_analyse_sth->execute($id_analyse);
-
-my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
-
+# Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
 # ==============================================================================
@@ -125,22 +103,12 @@ my $select_intensite_sth = $dbh->prepare(
 );
 
 # ==============================================================================
-# On récupère la description de l'expérience
-# ==============================================================================
-
-my @exp = decrire(
-	$select_chips_sth,
-	$id_analyse,
-	$infos_analyse->{'type'}
-);
-
-# ==============================================================================
 # On crée la table qui contient les valeurs des gène
 # ==============================================================================
 
 my @fields_expr = ();
 
-for(my $i = 1; $i <= @exp; $i++){
+for(my $i = 1; $i <= @{$infos_analyse->{'design'}}; $i++){
 
 	push(@fields_expr, 'control' . $i);
 	push(@fields_expr, 'test' . $i);
@@ -150,12 +118,12 @@ for(my $i = 1; $i <= @exp; $i++){
 my @fields_trans = (
 	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
 	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_expr),
-	'trans_fc DECIMAL(10,5) NOT NULL',
+	'trans_fc DECIMAL(10,5) UNSIGNED NOT NULL',
 	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
 	'trans_adjp DECIMAL(12,10) UNSIGNED NOT NULL',
 	'trans_nb_sondes SMALLINT UNSIGNED NOT NULL',
 	'trans_nb_exons SMALLINT UNSIGNED NOT NULL',
-	'epi_fc DECIMAL(10,5)',
+	'epi_fc DECIMAL(10,5) UNSIGNED',
 	'epi_pval DECIMAL(12,5) UNSIGNED',
 	'epi_adjp DECIMAL(12,5) UNSIGNED',
 	'epi_nb_sondes SMALLINT UNSIGNED',
@@ -199,7 +167,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Si le gène a moins de six sondes on zappe ça sert a rien
 	next if(scalar(keys %{$infos_sondes}) < 6);
 
-	# On selectionne les sondes qui ont les bonnes caractéristiques
+	# On vire les sondes qui ont pas les bonnes caractéristiques
 	my $ids_probes_ok = [grep {
 		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
 		and
@@ -221,7 +189,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimé
-		if(dabg($seuil_dabg, \@exp, $dabg)){
+		if(dabg($seuil_dabg, $infos_analyse->{'design'}, $dabg)){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -242,14 +210,14 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Calcul de l'expression de gène
 	# ======================================================================
 
-	my @expr = expression(\@exp, \@sondes);
+	my @expr = expression($infos_analyse->{'design'}, \@sondes);
 
 	# ======================================================================
 	# Etape de lissage pour la transcription
 	# ======================================================================
 
 	# On selectionne les sondes qui passe le lissage transcription
-	my @sondes_trans = lissage_transcription(\@exp, \@sondes);
+	my @sondes_trans = lissage_transcription($infos_analyse->{'design'}, \@sondes);
 
 	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
 	next if(@sondes_trans < 6);
@@ -259,7 +227,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# On calcul les fold change des sondes
-	my @fcs_trans = fcs_sondes(\@exp, \@sondes_trans);
+	my @fcs_trans = fcs_sondes($infos_analyse->{'design'}, \@sondes_trans);
 
 	# le fc du gène est la médiane des fc des sondes
 	my $fc_gene_trans = median(@fcs_trans);
@@ -320,7 +288,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		# ==============================================================
 
 		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = lissage_epissage(\@exp, \@sondes);
+		@sondes_epissage = lissage_epissage($infos_analyse->{'design'}, \@sondes);
 
 		# Seulement si on a plus de 6 sondes épissage
 		if(@sondes_epissage >= 6){
@@ -331,7 +299,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 			# On calcul les fold change des sondes epissage selon si l'analyse
 			# est paire ou non
-			my @fcs_epissage = fcs_sondes(\@exp, \@sondes_epissage);
+			my @fcs_epissage = fcs_sondes($infos_analyse->{'design'}, \@sondes_epissage);
 
 			# le fc du gène est la médiane des fc des sondes
 			$fc_gene_epissage = median(@fcs_epissage);
@@ -404,13 +372,13 @@ for(my $i = 0; $i < @genes; $i++){
 	# On insert le gène dans la bdd
 	$insert_gene_sth->execute(
 		$gene->{'id'},
-		(map { log2($_) } (@{$gene->{'expression'}})),
-		log2($gene->{'fc_trans'}),
+		(map { $_ } (@{$gene->{'expression'}})),
+		$gene->{'fc_trans'},
 		$gene->{'p_value_trans'},
 		$adjp_trans[$i],
 		$gene->{'nb_sondes_trans'},
 		$gene->{'nb_exons_trans'},
-		log2($gene->{'fc_epi'}),
+		$gene->{'fc_epi'},
 		$gene->{'p_value_epi'},
 		$adjp_epi[$i],
 		$gene->{'nb_sondes_epi'},

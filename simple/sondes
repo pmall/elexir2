@@ -158,13 +158,13 @@ for(my $i = 1; $i <= @exp; $i++){
 my @fields_table_NIs = (
 	'probe_id INT UNSIGNED NOT NULL',
 	'gene_id INT UNSIGNED NOT NULL',
-	(map { $_ . ' DECIMAL(10,5) NOT NULL' } @fields_NIs)
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_NIs)
 );
 
 my @fields_table_SIs = (
 	'probe_id INT UNSIGNED NOT NULL',
 	'gene_id INT UNSIGNED NOT NULL',
-	(map { $_ . ' DECIMAL(10,5) NOT NULL' } @fields_SIs)
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs)
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_ni);
@@ -235,13 +235,13 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 			foreach(@{$p->{'control'}}){
 
-				push(@NIs, log2($sonde->{$_}) - $gene->{'control' . $i});
+				push(@NIs, ($sonde->{$_}/$gene->{'control' . $i}));
 
 			}
 
 			foreach(@{$p->{'test'}}){
 
-				push(@NIs, log2($sonde->{$_}) - $gene->{'test' . $i});
+				push(@NIs, ($sonde->{$_}/$gene->{'test' . $i}));
 
 			}
 
@@ -255,7 +255,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @fcs = fcs_sonde(\@exp, $sonde);
 
 		# Puis on soustrait le fc epissage du gène a chaque fc (en log2)
-		foreach(@fcs){ push(@SIs, log2($_) - $gene->{'epi_fc'}) }
+		foreach(@fcs){ push(@SIs, ($_/$gene->{'epi_fc'})) }
 
 		# On ajoute dans le fichier SI
 		print OUT_SI join("\t", ($sonde->{'probe_id'}, $gene->{'gene_id'}, @SIs)) . "\n";

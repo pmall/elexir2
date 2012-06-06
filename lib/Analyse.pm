@@ -6,23 +6,72 @@ use lib $FindBin::Bin;
 use Math;
 use Exporter qw(import);
 
-our @EXPORT = qw(decrire dabg lissage_transcription lissage_epissage expression
-	fcs_sondes fcs_sonde);
+our @EXPORT = qw(get_infos_analyse get_design dabg lissage_transcription
+	lissage_epissage expression fcs_sondes fcs_sonde sis_sonde);
 
 # ==============================================================================
-# Description d'un expérience (retourne une liste qui va bien pour les calculs)
+# Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
+# passé en paramètre
 # ==============================================================================
 
-sub decrire{
+sub get_infos_analyse{
 
-	my($sth, $id_analyse, $type_analyse) = @_;
+	my($dbh, $id_analyse) = @_;
 
+	# On selectionne les infos de l'analyse
+	my $select_infos_analyse_sth = $dbh->prepare(
+		"SELECT p.id AS id_project, p.type AS type_chips, p.organism, a.type
+		FROM analyses AS a, projects AS p
+		WHERE a.id_project = p.id
+		AND a.id = ?"
+	);
+
+	# On selectionne les infos de l'analyse
+	$select_infos_analyse_sth->execute($id_analyse);
+	my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
+	$select_infos_analyse_sth->finish;
+
+	# On retourne undef si il n'y a pas d'analyse correspondant à l'id
+	return undef if(!$infos_analyse);
+
+	# On décrit l'expérience
+	$infos_analyse->{'design'} = get_design(
+		$dbh,
+		$id_analyse,
+		$infos_analyse->{'type'}
+	);
+
+	# On retourne les infos
+	return $infos_analyse;
+
+}
+
+# ==============================================================================
+# Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
+# passé en paramètre
+# ==============================================================================
+
+sub get_design{
+
+	my($dbh, $id_analyse, $type_analyse) = @_;
+
+	# On selectionne les conditions du projet
+	my $select_chips_sth = $dbh->prepare(
+		"SELECT g.letter, c.condition, c.num
+		FROM analyses AS a, chips AS c, groups AS g
+		WHERE a.id_project = c.id_project
+		AND a.id = g.id_analysis
+		AND c.condition = g.condition
+		AND a.id = ?"
+	);
+
+	# On défini le nom des condition
 	my %letter2type = ('A' => 'control', 'B' => 'test');
 	my @exp = ();
 
-	$sth->execute($id_analyse);
+	$select_chips_sth->execute($id_analyse);
 
-	while(my($letter, $condition, $num) = $sth->fetchrow_array){
+	while(my($letter, $condition, $num) = $select_chips_sth->fetchrow_array){
 
 		my $type = $letter2type{$letter};
 
@@ -52,7 +101,7 @@ sub decrire{
 
 	}
 
-	return @exp;
+	return \@exp;
 
 }
 
@@ -219,7 +268,6 @@ sub lissage_epissage{
 				abs($_->{$sample} - $mean) <= $sd
 			} @sondes_lisses;
 
-
 		}
 
 	}
@@ -323,5 +371,25 @@ sub fcs_sonde{
 
 }
 
+# ==============================================================================
+# Fonctions pour le si
+# ==============================================================================
+
+sub sis_sonde{
+
+	my($ref_exp, $fc, $sonde) = @_;
+
+	my @SIs = ();
+
+	# On calcule les SIs
+	# pour ça il faut récupérer les folds déjà
+	my @fcs = fcs_sonde($ref_exp, $sonde);
+
+	# Si de la sonde (cad, fc de la sonde sur fc du groupe)
+	foreach(@fcs){ push(@SIs, ($_/$fc)) }
+
+	return @SIs;
+
+}
 
 1;
