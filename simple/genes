@@ -54,8 +54,8 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'organism'}};
-my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'organism'}}{$infos_analyse->{'type_chips'}};
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
+my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'type_chips'}}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
 my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
 my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
 my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);

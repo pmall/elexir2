@@ -20,7 +20,7 @@ sub get_infos_analyse{
 
 	# On selectionne les infos de l'analyse
 	my $select_infos_analyse_sth = $dbh->prepare(
-		"SELECT p.id AS id_project, p.type AS type_chips, p.organism, a.type
+		"SELECT p.id AS id_project, p.type AS type_chips, a.version, p.organism, a.type
 		FROM analyses AS a, projects AS p
 		WHERE a.id_project = p.id
 		AND a.id = ?"

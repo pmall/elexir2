@@ -4,10 +4,6 @@ db_user: elexir2
 db_pass: pandas
 db_name: elexir2
 
-db_name_fasterdb:
-  human: fasterdb_humain
-  mouse: fasterdb_souris
-
 # Fichier de logs pour le daemon
 log_file: /data/logs/elexir2.log
 
@@ -44,17 +40,37 @@ annotations:
       qcc: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.qcc
       mps: /data/elexir/annotations/hGlue_3_0_v1.R-JETTA_lib_annot_files/hGlue_3_0_v1.TC.mps
 
-# Tables selon l'organisme
+# Noms de fasterdb selon qu'on est sur la version 1 ou 2
+db_name_fasterdb:
+  fdb1:
+    human: fasterdb_humain
+    mouse: fasterdb_souris
+  fdb2:
+    human: fasterdb2_humain
+    mouse: fasterdb2_souris
+
+# Tables selon le type de puces, la version de fasterdb et l'organisme
 table_entites:
-  human: humain_fdb1_entites
-  mouse: souris_fdb1_entites
+  fdb1:
+    human: humain_fdb1_entites
+    mouse: souris_fdb1_entites
+  fdb2:
+    human: humain_fdb2_entites
+    mouse: souris_fdb2_entites
 
 table_sondes:
-  human:
-    exon: humain_probes_status_fdb1_exon
-    ggh: humain_probes_status_fdb1_ggh
-  mouse:
-    exon: souris_probes_status_fdb1_exon
+  exon:
+    fdb1:
+      human: humain_probes_status_fdb1_exon
+      mouse: souris_probes_status_fdb1_exon
+    fdb2:
+      human: humain_probes_status_fdb2_exon
+      mouse: souris_probes_status_fdb2_exon
+  ggh:
+    fdb1:
+      human: humain_probes_status_fdb1_ggh
+    fdb2:
+      human: humain_probes_status_fdb2_ggh
 
 table_prom:
   human: humain_prom
