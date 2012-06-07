@@ -10,6 +10,7 @@ use Format;
 use Math;
 use Analyse;
 use Stats;
+use Data::Dumper;
 
 # ==============================================================================
 # Parametres
@@ -49,6 +50,9 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+print Dumper($infos_analyse->{'design'});
+print Dumper($infos_analyse->{'conditions'});
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
@@ -189,7 +193,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimé
-		if(dabg($seuil_dabg, $infos_analyse->{'design'}, $dabg)){
+		if(dabg($infos_analyse->{'design'}, $seuil_dabg, $dabg)){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -210,14 +214,14 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Calcul de l'expression de gène
 	# ======================================================================
 
-	my @expr = expression($infos_analyse->{'design'}, \@sondes);
+	my @expr = expressions($infos_analyse->{'design'}, \@sondes);
 
 	# ======================================================================
 	# Etape de lissage pour la transcription
 	# ======================================================================
 
 	# On selectionne les sondes qui passe le lissage transcription
-	my @sondes_trans = lissage_transcription($infos_analyse->{'design'}, \@sondes);
+	my @sondes_trans = lissage_transcription($infos_analyse->{'conditions'}, \@sondes);
 
 	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
 	next if(@sondes_trans < 6);
@@ -288,7 +292,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		# ==============================================================
 
 		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = lissage_epissage($infos_analyse->{'design'}, \@sondes);
+		@sondes_epissage = lissage_epissage($infos_analyse->{'conditions'}, \@sondes);
 
 		# Seulement si on a plus de 6 sondes épissage
 		if(@sondes_epissage >= 6){

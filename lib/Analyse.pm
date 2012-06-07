@@ -8,7 +8,7 @@ use Math;
 use Exporter qw(import);
 
 our @EXPORT = qw(get_infos_analyse get_design dabg lissage_transcription
-	lissage_epissage expression fcs_sondes fcs_sonde sis_sonde);
+	lissage_epissage expressions fcs_sondes fcs_sonde sis_sonde);
 
 # ==============================================================================
 # Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
@@ -36,7 +36,7 @@ sub get_infos_analyse{
 	return undef if(!$infos_analyse);
 
 	# On décrit l'expérience
-	$infos_analyse->{'design'} = get_design(
+	($infos_analyse->{'design'}, $infos_analyse->{'conditions'}) = get_design(
 		$dbh,
 		$id_analyse,
 		$infos_analyse->{'type'}
@@ -66,43 +66,61 @@ sub get_design{
 		AND a.id = ?"
 	);
 
+	# On fait le design de l'exp et les samples
+
 	# On défini le nom des condition
 	my %letter2type = ('A' => 'control', 'B' => 'test');
-	my @exp = ();
+	my $design = [];
+	my $conditions = {};
 
 	$select_chips_sth->execute($id_analyse);
 
 	while(my($letter, $condition, $num) = $select_chips_sth->fetchrow_array){
 
+		# On défini le nom du sample
+		my $sample = $condition . '_' . $num;
+
+		# On ajoute au sample
+		if(!$conditions->{$letter}){
+
+			$conditions->{$letter} = [$sample];
+
+		}else{
+
+			push(@{$conditions->{$letter}}, $sample);
+
+		}
+
+		# On ajoute au design
 		my $type = $letter2type{$letter};
 
 		if($type_analyse eq 'paire'){
 
-			if(!$exp[$num - 1]){
+			if(!$design->[$num - 1]){
 
-				$exp[$num - 1] = { $type => [$condition . '_' . $num] };
+				$design->[$num - 1] = { $type => [$sample] };
 
 			}else{
 
-				$exp[$num - 1]->{$type} = [$condition . '_' . $num];
+				$design->[$num - 1]->{$type} = [$sample];
 
 			}
 
 		}else{
 
-			if(!$exp[0]){
+			if(!$design->[0]){
 
-				$exp[0] = { 'control' => [], 'test' => [] };
+				$design->[0] = { 'control' => [], 'test' => [] };
 
 			}
 
-			push(@{$exp[0]->{$type}}, $condition . '_' . $num);
+			push(@{$design->[0]->{$type}}, $sample);
 
 		}
 
 	}
 
-	return new Design(\@exp);
+	return(new Design($design), $conditions);
 
 }
 
@@ -114,15 +132,14 @@ sub get_design{
 # d'au moins une condition, 0 sinon
 sub dabg{
 
-	my($seuil, $ref_exp, $sonde) = @_;
+	my($ref_design, $seuil, $sonde) = @_;
 
-	my @exp = @{$ref_exp};
 	my $nb_control = 0;
 	my $nb_test = 0;
 	my $nb_exp_control = 0;
 	my $nb_exp_test = 0;
 
-	foreach my $paire (@exp){
+	foreach my $paire (@{$ref_design}){
 
 		foreach(@{$paire->{'control'}}){
 
@@ -166,64 +183,32 @@ sub dabg{
 # moins l'écart type des intensités de chaque réplicat d'AU MOINS une condition
 sub lissage_transcription{
 
-	my($ref_exp, $ref_sondes) = @_;
+	my($ref_conditions, $ref_sondes) = @_;
 
-	my @exp = @{$ref_exp};
-	my @sondes = @{$ref_sondes};
-
-	# On défini la liste des sondes à utiliser pour la transcription
+	# A priori il y en a aucune, on les ajoute au fur et a mesure
 	my @sondes_lisses = ();
 
-	# On récupère les samples des deux conditions
-	my %conditions = ('control' => [], 'test' => []);
+	# Pour chaque condition
+	foreach(keys %{$ref_conditions}){
 
-	foreach my $paire (@exp){
+		# On lisse les sondes de cette condition
+		my @sondes_condition = lissage_condition(
+			$ref_conditions->{$_},
+			$ref_sondes
+		);
 
-		push(@{$conditions{'control'}}, @{$paire->{'control'}});
-		push(@{$conditions{'test'}}, @{$paire->{'test'}});
+		# On récupère les ids des sondes déjà présente
+		my @ids_sondes = map {$_->{'probe_id'}} @sondes_lisses;
 
-	}
+		# On fait l'union des sondes déjà présente et de celles de la
+		# condition
+		foreach my $sonde (@sondes_condition){
 
-	# Pour chaque conditions
-	foreach my $condition (keys %conditions){
-
-		# On part du principe que toutes les sondes sont gardé dans la
-		# condition et on va les éliminer
-		my @sondes_cond = @sondes;
-
-		# Pour chaque replicat de la condition
-		foreach my $sample (@{$conditions{$condition}}){
-
-			# On récupère les sondes du sample
-			my @sondes_rep = map { $_->{$sample} } @sondes;
-
-			# On calcule la médiane et l'écart type
-			my $mean = mean(@sondes_rep);
-			my $sd = sd(@sondes_rep);
-
-			# On garde seulement les sondes dont la valeur est comprise
-			# dans la moyenne +/- l'écart type
-			# Ca en élimine un certain nombre de sondes, replicat
-			# après réplicat
-			@sondes_cond = grep {
-				abs($_->{$sample} - $mean) <= $sd
-			} @sondes_cond;
-
-		}
-
-		# Union des listes de sondes des conditions
-		# On ajoute les sondes gardés pour la condition à la liste des
-		# sondes lissées en évitant les doublons
-		foreach my $sonde_cond (@sondes_cond){
-
-			# On récupère les ids des sondes déjà là
-			my @probes_ids = map {$_->{'probe_id'}} @sondes_lisses;
-
-			# Si la sonde n'est pas déjà dans la liste
-			if(!($sonde_cond->{'probe_id'} ~~ @probes_ids)){
+			# Si la sonde est pas la on l'ajoute
+			if(!($sonde->{'probe_id'} ~~ @ids_sondes)){
 
 				# On l'ajoute
-				push(@sondes_lisses, $sonde_cond);
+				push(@sondes_lisses, $sonde);
 
 			}
 
@@ -241,55 +226,68 @@ sub lissage_transcription{
 # (cad de tous les réplicats)
 sub lissage_epissage{
 
-	my($ref_design, $ref_sondes) = @_;
+	my($ref_conditions, $ref_sondes) = @_;
 
-	my @sondes = @{$ref_sondes};
+	# On prend toutes les sondes et on les élimines au fur et a mesure
+	my @sondes_lisses = @{$ref_sondes};
 
-	# On défini la liste des sondes à utiliser pour l'épissage
-	my @sondes_lisses = @sondes;
+	# Pour chaque conditions
+	foreach (keys %{$ref_conditions}){
 
-	# Pour chaque paires
-	foreach my $paire (@{$ref_design}){
+		# On lisse les sondes de cette condition
+		my @sondes_condition = lissage_condition(
+			$ref_conditions->{$_},
+			$ref_sondes
+		);
 
-		@sondes_lisses = lissage_replicat($paire->{'control'}, @sondes);
-		@sondes_lisses = lissage_replicat($paire->{'test'}, @sondes);
+		my @sondes_lisses_tmp = ();
+
+		# On récupère les ids des sondes présentes dans la condition
+		my @ids_sondes = map {$_->{'probe_id'}} @sondes_condition;
+
+		# On fait l'intersection des sondes déjà présentes et des sondes
+		# de la condition
+		foreach my $sonde (@sondes_lisses){
+
+			if($sonde->{'probe_id'} ~~ @ids_sondes){
+
+				push(@sondes_lisses_tmp, $sonde);
+
+			}
+
+		}
+
+		@sondes_lisses = @sondes_lisses_tmp;
 
 	}
 
+	# On retourne la liste des sondes lisses
 	return @sondes_lisses;
 
 }
 
-# ==============================================================================
-# Retourne les sondes lissées sur un replicat
-# ==============================================================================
+sub lissage_condition{
 
-sub lissage_replicat{
+	my($ref_condition, $ref_sondes) = @_;
 
-	my($ref_design, @sondes) = @_;
+	# A priori toutes les sondes sont ok et on les élimine
+	my @sondes_lisses = @{$ref_sondes};
 
-	my @sondes_lisses = @sondes;
+	# Pour chaque sample de la condition
+	foreach my $sample (@{$ref_condition}){
 
-	if(ref($ref_design) eq 'Design'){
+		# On récupère les valeurs des sondes pour ce sample
+		my @valeurs_sample = map { $_->{$sample} } @{$ref_sondes};
 
-		@sondes_lisses = lissage_epissage($ref_design, \@sondes);
+		# On calcule la moyenne et la sd de ce sample
+		my $mean = mean(@valeurs_sample);
+		my $sd = sd(@valeurs_sample);
 
-	}else{
-
-		foreach my $sample (@{$ref_design}){
-
-			my @valeurs_sample = map { $_->{$sample} } @sondes;
-
-			my $mean = mean(@valeurs_sample);
-			my $sd = sd(@valeurs_sample);
-
-			# On garde seulement les sondes comprise dans la moyenne
-			# + / - la sd
-			@sondes_lisses = grep {
-				abs($_->{$sample} - $mean) <= $sd
-			} @sondes_lisses;
-
-		}
+		# On garde seulement les sondes comprise dans la moyenne
+		# + / - la sd
+		@sondes_lisses = grep {
+			abs($_->{$sample} - $mean) <= $sd
+		} @sondes_lisses;
 
 	}
 
@@ -304,19 +302,16 @@ sub lissage_replicat{
 # Retourne les valeurs d'expression d'un groupe de sonde
 # (mediane de tout les samples d'un réplicat puis médiane de ces valeurs
 # => une valeur par replicat)
-sub expression{
+sub expressions{
 
 	my($ref_design, $ref_sondes) = @_;
 
-	my @design = @{$ref_design};
-	my @sondes = @{$ref_sondes};
-
 	my @expressions = ();
 
-	foreach my $paire (@design){
+	foreach my $paire (@{$ref_design}){
 
-		push(@expressions, expression_replicat($paire->{'control'}, @sondes));
-		push(@expressions, expression_replicat($paire->{'test'}, @sondes));
+		push(@expressions, expressions_replicat($paire->{'control'}, $ref_sondes));
+		push(@expressions, expressions_replicat($paire->{'test'}, $ref_sondes));
 
 	}
 
@@ -328,23 +323,23 @@ sub expression{
 # Retourne les valeurs d'expression d'un replicat
 # ==============================================================================
 
-sub expression_replicat{
+sub expressions_replicat{
 
-	my($ref_design, @sondes) = @_;
+	my($ref_design, $ref_sondes) = @_;
 
 	my @expressions = ();
 
 	if(ref($ref_design) eq 'Design'){
 
-		push(@expressions, expression($ref_design, \@sondes));
+		push(@expressions, expressions($ref_design, $ref_sondes));
 
 	}else{
 
 		my @medians = ();
 
-		foreach my $sonde (@sondes){
+		foreach my $sonde (@{$ref_sondes}){
 
-			push(@medians, map { $sonde->{$_} } @{$ref_design});
+			push(@medians, median(map { $sonde->{$_} } @{$ref_design}));
 
 		}
 
@@ -365,11 +360,9 @@ sub fcs_sondes{
 
 	my($ref_design, $ref_sondes) = @_;
 
-	my @sondes = @{$ref_sondes};
-
 	my @fcs = ();
 
-	foreach my $sonde (@sondes){
+	foreach my $sonde (@{$ref_sondes}){
 
 		# On calcule la médiane des fc des replicats (dans le cas d'une
 		# exp impaire, il n'y en a qu'un, donc faire la médiane change
@@ -391,12 +384,10 @@ sub fcs_sonde{
 
 	my($ref_design, $sonde) = @_;
 
-	my @design = @{$ref_design};
-
 	my @fcs_replicats = ();
 
 	# Un compteur pour toutes les paires
-	foreach my $paire (@design){
+	foreach my $paire (@{$ref_design}){
 
 		# On récupère la valeur de la sonde pour ce replicat
 		# => moyenne des samples si exp non paire
@@ -438,13 +429,14 @@ sub valeur_somme_sonde{
 }
 
 # ==============================================================================
-# Fonctions pour le si
+# Retourne la liste des SIs d'une sonde (une par paire de replicat)
 # ==============================================================================
 
 sub sis_sonde{
 
-	my($ref_exp, $fc, $sonde) = @_;
+	my($ref_exp, $fc_groupe, $sonde) = @_;
 
+	# On initialise la liste de SIs
 	my @SIs = ();
 
 	# On calcule les SIs
@@ -452,8 +444,9 @@ sub sis_sonde{
 	my @fcs = fcs_sonde($ref_exp, $sonde);
 
 	# Si de la sonde (cad, fc de la sonde sur fc du groupe)
-	foreach(@fcs){ push(@SIs, ($_/$fc)) }
+	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
 
+	# On retourne la liste de SIs de la sonde
 	return @SIs;
 
 }
