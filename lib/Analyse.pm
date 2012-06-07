@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
+use Design;
 use Math;
 use Exporter qw(import);
 
@@ -101,7 +102,7 @@ sub get_design{
 
 	}
 
-	return \@exp;
+	return new Design(\@exp);
 
 }
 
@@ -240,30 +241,50 @@ sub lissage_transcription{
 # (cad de tous les réplicats)
 sub lissage_epissage{
 
-	my($ref_exp, $ref_sondes) = @_;
+	my($ref_design, $ref_sondes) = @_;
 
-	my @exp = @{$ref_exp};
 	my @sondes = @{$ref_sondes};
 
 	# On défini la liste des sondes à utiliser pour l'épissage
 	my @sondes_lisses = @sondes;
 
 	# Pour chaque paires
-	foreach my $p (@exp){
+	foreach my $paire (@{$ref_design}){
 
-		foreach my $sample (@{$p->{'control'}}, @{$p->{'test'}}){
+		@sondes_lisses = lissage_replicat($paire->{'control'}, @sondes);
+		@sondes_lisses = lissage_replicat($paire->{'test'}, @sondes);
 
-			# On récupère les sondes du réplicat
-			my @sondes_rep = map {$_->{$sample}} @sondes;
+	}
 
-			# On calcule la médiane et l'écart type
-			my $mean = mean(@sondes_rep);
-			my $sd = sd(@sondes_rep);
+	return @sondes_lisses;
 
-			# On garde seulement les sondes dont la valeur est comprise
-			# dans la moyenne +/- l'écart type
-			# Ca en élimine un certain nombre de sondes, replicat
-			# après réplicat
+}
+
+# ==============================================================================
+# Retourne les sondes lissées sur un replicat
+# ==============================================================================
+
+sub lissage_replicat{
+
+	my($ref_design, @sondes) = @_;
+
+	my @sondes_lisses = @sondes;
+
+	if(ref($ref_design) eq 'Design'){
+
+		@sondes_lisses = lissage_epissage($ref_design, \@sondes);
+
+	}else{
+
+		foreach my $sample (@{$ref_design}){
+
+			my @valeurs_sample = map { $_->{$sample} } @sondes;
+
+			my $mean = mean(@valeurs_sample);
+			my $sd = sd(@valeurs_sample);
+
+			# On garde seulement les sondes comprise dans la moyenne
+			# + / - la sd
 			@sondes_lisses = grep {
 				abs($_->{$sample} - $mean) <= $sd
 			} @sondes_lisses;
@@ -285,44 +306,64 @@ sub lissage_epissage{
 # => une valeur par replicat)
 sub expression{
 
-	my($ref_exp, $ref_sondes) = @_;
+	my($ref_design, $ref_sondes) = @_;
 
-	my @exp = @{$ref_exp};
+	my @design = @{$ref_design};
 	my @sondes = @{$ref_sondes};
 
-	my @medians = ();
+	my @expressions = ();
 
-	for(my $i = 1; $i <= @exp; $i++){
+	foreach my $paire (@design){
 
-		my $paire = $exp[$i - 1];
-
-		my @values_controls = ();
-		my @values_tests = ();
-
-		foreach my $sonde (@sondes){
-
-			push(@values_controls, median(map { $sonde->{$_} } @{$paire->{'control'}}));
-			push(@values_tests, median(map { $sonde->{$_} } @{$paire->{'test'}}));
-
-		}
-
-		push(@medians, median(@values_controls));
-		push(@medians, median(@values_tests));
+		push(@expressions, expression_replicat($paire->{'control'}, @sondes));
+		push(@expressions, expression_replicat($paire->{'test'}, @sondes));
 
 	}
 
-	return @medians;
+	return @expressions;
 
 }
 
 # ==============================================================================
-# Fonctions pour le fold change
+# Retourne les valeurs d'expression d'un replicat
+# ==============================================================================
+
+sub expression_replicat{
+
+	my($ref_design, @sondes) = @_;
+
+	my @expressions = ();
+
+	if(ref($ref_design) eq 'Design'){
+
+		push(@expressions, expression($ref_design, \@sondes));
+
+	}else{
+
+		my @medians = ();
+
+		foreach my $sonde (@sondes){
+
+			push(@medians, map { $sonde->{$_} } @{$ref_design});
+
+		}
+
+		push(@expressions, median(@medians));
+
+	}
+
+	return @expressions;
+
+}
+
+# ==============================================================================
+# Fonctions pour le fold change (utilitée de cette fonction ??)
 # ==============================================================================
 
 # Retourne la liste des médianes des fold changes d'un groupe de sonde
 sub fcs_sondes{
 
-	my($ref_exp, $ref_sondes) = @_;
+	my($ref_design, $ref_sondes) = @_;
 
 	my @sondes = @{$ref_sondes};
 
@@ -333,7 +374,7 @@ sub fcs_sondes{
 		# On calcule la médiane des fc des replicats (dans le cas d'une
 		# exp impaire, il n'y en a qu'un, donc faire la médiane change
 		# rien)
-		push(@fcs, median(fcs_sonde($ref_exp, $sonde)));
+		push(@fcs, median(fcs_sonde($ref_design, $sonde)));
 
 	}
 
@@ -341,33 +382,58 @@ sub fcs_sondes{
 
 }
 
+# ==============================================================================
 # Retourne tous les fold change d'une sonde
 # (=> un par paire de replicat)
+# ==============================================================================
+
 sub fcs_sonde{
 
-	my($ref_exp, $sonde) = @_;
+	my($ref_design, $sonde) = @_;
 
-	my @exp = @{$ref_exp};
+	my @design = @{$ref_design};
 
 	my @fcs_replicats = ();
 
 	# Un compteur pour toutes les paires
-	for(my $i = 1; $i <= @exp; $i++){
+	foreach my $paire (@design){
 
-		# On récupère la paire courante
-		my $paire = $exp[$i - 1];
-
-		# On fait les moyenne des samples des replicats (pour les exp
-		# paires ça change rien puisqu'il y a un seul sample par replicat)
-		my $moyenne_control = mean(map { $sonde->{$_} } @{$paire->{'control'}});
-		my $moyenne_test = mean(map { $sonde->{$_} } @{$paire->{'test'}});
+		# On récupère la valeur de la sonde pour ce replicat
+		# => moyenne des samples si exp non paire
+		# => fold change des deux sous condition si composée
+		my $valeur_control = valeur_somme_sonde($paire->{'control'}, $sonde);
+		my $valeur_test = valeur_somme_sonde($paire->{'test'}, $sonde);
 
 		# On ajoute le fc du replicat a la liste des fc des replicats
-		push(@fcs_replicats, ($moyenne_test/$moyenne_control));
+		push(@fcs_replicats, ($valeur_test/$valeur_control));
 
 	}
 
 	return @fcs_replicats;
+
+}
+
+# ==============================================================================
+# Retourne une valeur unique de la sonde pour un design donné
+# ==============================================================================
+
+sub valeur_somme_sonde{
+
+	my($ref_design, $sonde) = @_;
+
+	if(ref($ref_design) eq 'Design'){
+
+		return mean(fcs_sonde($ref_design, $sonde));
+		# => Fait toujours la moyenne sur un seul fold change car on
+		# ne fait pas (encore) de composée dont une partie est composée
+		# de plusieurs exp...
+		# A voir quelle bonne fonction d'agrégation utiliser ce jour là :)
+
+	}else{
+
+		return mean(map {$sonde->{$_}} @{$ref_design});
+
+	}
 
 }
 
