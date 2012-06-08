@@ -91,12 +91,8 @@ sub ttest{
 
 sub adjust_pvals{
 
-	my ($list) = @_;
-
-	my @list = @{$list};
-
 	# On classe les pvalues (définies) dans l'ordre croissant
-	my @list_tri = (sort {$a <=> $b} (grep { defined $_ } @list));
+	my @list_tri = (sort {$a <=> $b} (grep { defined $_ } @_));
 
 	# On corrige les pvaleurs
 	my @list_cor = ();
@@ -138,7 +134,7 @@ sub adjust_pvals{
 	# On refait une liste avec les valeurs corrigées, dans le bon ordre
 	my @list_cor_ordre_origine = ();
 
-	foreach my $val (@list){
+	foreach my $val (@_){
 
 		my $val_cor = (defined $val) ? $h_pval_pvalcor{$val} : undef;
 

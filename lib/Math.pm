@@ -10,9 +10,18 @@ our @EXPORT = qw(mean variance sd sd_est median log2 round);
 # Fonctions stats descriptive
 # ==============================================================================
 
+sub round{
+
+	my($value, $nb_decimals) = @_;
+
+	return sprintf('%0.' . $nb_decimals . 'f', $value);
+
+}
+
 sub mean{
 
 	return sum(@_)/@_
+
 }
 
 sub variance{
@@ -64,14 +73,6 @@ sub log2{
 	foreach(@_){ push(@logs, log($_)/log(2)); }
 
 	return (wantarray) ? @logs : $logs[0];
-
-}
-
-sub round{
-
-	my($value, $nb_decimals) = @_;
-
-	return sprintf('%0.' . $nb_decimals . 'f', $value);
 
 }
 

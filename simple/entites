@@ -51,7 +51,7 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
 # petit raccourcit...
-my $paire = ($infos_analyse->{'type'} eq 'paire');
+my $paire = ($infos_analyse->{'paired'});
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
@@ -481,8 +481,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 # ==============================================================================
 
 # On corrige les pvalues des si
-my @pvals_si = map { $_->{'p_value'} } @entites;
-my @adjp_si = adjust_pvals(\@pvals_si);
+my @adjp_si = adjust_pvals(map { $_->{'p_value'} } @entites);
 
 # Si l'analyse est paire on corrige les autres pvalues
 my @adjp_value_sd = ();
@@ -490,11 +489,8 @@ my @adjp_value_psi = ();
 
 if($paire){
 
-	my @pvals_sd = map { $_->{'p_value_sd'} } @entites;
-	my @pvals_psi = map { $_->{'p_value_psi'} } @entites;
-
-	@adjp_value_sd = adjust_pvals(\@pvals_sd);
-	@adjp_value_psi = adjust_pvals(\@pvals_psi);
+	@adjp_value_sd = adjust_pvals(map { $_->{'p_value_sd'} } @entites);
+	@adjp_value_psi = adjust_pvals(map { $_->{'p_value_psi'} } @entites);
 
 }
 

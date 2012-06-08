@@ -193,7 +193,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimé
-		if(dabg($infos_analyse->{'design'}, $seuil_dabg, $dabg)){
+		if(dabg($infos_analyse->{'conditions'}, $seuil_dabg, $dabg)){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -359,13 +359,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 # On calcule les p values ajustées
 # ==============================================================================
 
-# On récupère la totalité des listes de pvalues trans et epi
-my @pvals_trans = map { $_->{'p_value_trans'} } @genes;
-my @pvals_epi = map { $_->{'p_value_epi'} } @genes;
-
 # On les corrige
-my @adjp_trans = adjust_pvals(\@pvals_trans);
-my @adjp_epi = adjust_pvals(\@pvals_epi);
+my @adjp_trans = adjust_pvals(map { $_->{'p_value_trans'} } @genes);
+my @adjp_epi = adjust_pvals(map { $_->{'p_value_epi'} } @genes);
 
 # Pour chaque gène
 for(my $i = 0; $i < @genes; $i++){

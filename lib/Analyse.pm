@@ -21,7 +21,8 @@ sub get_infos_analyse{
 
 	# On selectionne les infos de l'analyse
 	my $select_infos_analyse_sth = $dbh->prepare(
-		"SELECT p.id AS id_project, p.type AS type_chips, a.version, p.organism, a.type
+		"SELECT a.id, p.id AS id_project, p.type AS type_chips,
+		a.version, p.organism, a.type, a.paired
 		FROM analyses AS a, projects AS p
 		WHERE a.id_project = p.id
 		AND a.id = ?"
@@ -35,46 +36,24 @@ sub get_infos_analyse{
 	# On retourne undef si il n'y a pas d'analyse correspondant à l'id
 	return undef if(!$infos_analyse);
 
-	# On décrit l'expérience
-	($infos_analyse->{'design'}, $infos_analyse->{'conditions'}) = get_design(
-		$dbh,
-		$id_analyse,
-		$infos_analyse->{'type'}
-	);
-
-	# On retourne les infos
-	return $infos_analyse;
-
-}
-
-# ==============================================================================
-# Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
-# passé en paramètre
-# ==============================================================================
-
-sub get_design{
-
-	my($dbh, $id_analyse, $type_analyse) = @_;
-
-	# On selectionne les conditions du projet
+	# On selectionne les puces de l'analyse
 	my $select_chips_sth = $dbh->prepare(
 		"SELECT g.letter, c.condition, c.num
 		FROM analyses AS a, chips AS c, groups AS g
 		WHERE a.id_project = c.id_project
 		AND a.id = g.id_analysis
 		AND c.condition = g.condition
-		AND a.id = ?"
+		AND a.id = ?
+		ORDER BY num ASC"
 	);
 
-	# On fait le design de l'exp et les samples
-
-	# On défini le nom des condition
-	my %letter2type = ('A' => 'control', 'B' => 'test');
-	my $design = [];
+	# On défini les conditions de l'analyse
 	my $conditions = {};
 
-	$select_chips_sth->execute($id_analyse);
+	# On selectionne les puces
+	$select_chips_sth->execute($infos_analyse->{'id'});
 
+	# Pour chaque puces
 	while(my($letter, $condition, $num) = $select_chips_sth->fetchrow_array){
 
 		# On défini le nom du sample
@@ -91,86 +70,49 @@ sub get_design{
 
 		}
 
-		# On ajoute au design
-		my $type = $letter2type{$letter};
-
-		if($type_analyse eq 'paire'){
-
-			if(!$design->[$num - 1]){
-
-				$design->[$num - 1] = { $type => [$sample] };
-
-			}else{
-
-				$design->[$num - 1]->{$type} = [$sample];
-
-			}
-
-		}else{
-
-			if(!$design->[0]){
-
-				$design->[0] = { 'control' => [], 'test' => [] };
-
-			}
-
-			push(@{$design->[0]->{$type}}, $sample);
-
-		}
-
 	}
 
-	return(new Design($design), $conditions);
+	$infos_analyse->{'conditions'} = $conditions;
+
+	# On récupère le design de l'analyse
+	$infos_analyse->{'design'} = get_design($infos_analyse);
+
+	# On retourne les infos
+	return $infos_analyse;
 
 }
 
 # ==============================================================================
-# Calcul de l'expression d'une sonde a partir du dabg
+# Retourne le design d'une analyse
 # ==============================================================================
 
-# Retourne 1 si la sonde est exprimée dans au moins la moitié des replicats
-# d'au moins une condition, 0 sinon
-sub dabg{
+sub get_design{
 
-	my($ref_design, $seuil, $sonde) = @_;
+	my($infos_analyse) = @_;
 
-	my $nb_control = 0;
-	my $nb_test = 0;
-	my $nb_exp_control = 0;
-	my $nb_exp_test = 0;
+	# On défini le design de l'expérience
+	my $design = [];
 
-	foreach my $paire (@{$ref_design}){
+	# On calcule le nombre de paires de replicats
+	my $nb_paires_replicats = ($infos_analyse->{'paired'})
+		? @{$infos_analyse->{'conditions'}->{'A'}}
+		: 1;
 
-		foreach(@{$paire->{'control'}}){
+	# Pour chaque paire de replicat
+	for(my $i = 0; $i < $nb_paires_replicats; $i++){
 
-			$nb_control++;
-
-			# valeur dabg divisé par 10000 (pour avoir le float)
-			my $dabg = $sonde->{$_}/10000;
-
-			if($dabg <= $seuil){ $nb_exp_control++; }
-
-		}
-
-		foreach(@{$paire->{'test'}}){
-
-			$nb_test++;
-
-			# valeur dabg divisé par 10000 (pour avoir le float)
-			my $dabg = $sonde->{$_}/10000;
-
-			if($dabg <= $seuil){ $nb_exp_test++; }
-
-		}
+		$design->[$i] = {
+			'control' => ($infos_analyse->{'paired'})
+				? [@{$infos_analyse->{'conditions'}->{'A'}}[$i]]
+				: $infos_analyse->{'conditions'}->{'A'},
+			'test' => ($infos_analyse->{'paired'})
+				? [@{$infos_analyse->{'conditions'}->{'B'}}[$i]]
+				: $infos_analyse->{'conditions'}->{'B'} 
+		};
 
 	}
 
-	# On retourne 1 si la sonde est exprimée dans la moitié des réplicats
-	# d'au moins une condition
-	my $exp_control = $nb_exp_control > ($nb_control/2);
-	my $exp_test = $nb_exp_test > ($nb_test/2);
-
-	return ($exp_control or $exp_test);
+	return new Design($design);
 
 }
 
@@ -197,7 +139,7 @@ sub union{
 
 	}
 
-	return \@union;
+	return @union;
 
 }
 
@@ -224,10 +166,47 @@ sub inter{
 
 	}
 
-	return \@inter;
+	return @inter;
 
 }
 
+# ==============================================================================
+# Retourne vrai si la sonde passe le seuil du dabg dans au moins la moitiée
+# des puces d'au moins une condition
+# ==============================================================================
+
+sub dabg{
+
+	my($ref_conditions, $seuil, $sonde) = @_;
+
+	# Pour chaque condition
+	foreach(keys %{$ref_conditions}){
+
+		my $nb_exp_cond = 0;
+
+		# Pour chaque sample
+		foreach my $sample (@{$ref_conditions->{$_}}){
+
+			# valeur dabg divisé par 10000 (pour avoir le float)
+			my $dabg = $sonde->{$sample}/10000;
+
+			if($dabg <= $seuil){ $nb_exp_cond++; }
+
+		}
+
+		# Si la sonde est exprimée dans plus de la moitié des samples de
+		# la condition on la garde
+		if($nb_exp_cond > (@{$ref_conditions->{$_}}/2)){
+
+			return 1;
+
+		}
+
+	}
+
+	return 0;
+
+}
 
 # ==============================================================================
 # Retourne une liste de sondes lissées pour la transcription
@@ -254,7 +233,7 @@ sub lissage_transcription{
 
 		# On fait l'union des sondes déjà présentes et de celles qui
 		# passent le lissage pour cette condition
-		@sondes_lisses = @{union(\@sondes_lisses, \@sondes_condition)};
+		@sondes_lisses = union(\@sondes_lisses, \@sondes_condition);
 
 	}
 
@@ -288,7 +267,7 @@ sub lissage_epissage{
 
 		# On fait l'intersection des sondes déjà presentes et de celles
 		# qui passent le lissage pour cette condition
-		@sondes_lisses = @{inter(\@sondes_lisses, \@sondes_condition)};
+		@sondes_lisses = inter(\@sondes_lisses, \@sondes_condition);
 
 	}
 

@@ -50,10 +50,10 @@ def do_job(wd, job, sema):
 	if(job[3] == 'preprocessing'):
 		id_analyse = job[1]
 		algo = 'correction'
-	if(job[3] == 'paire'):
+	if(job[3] == 'simple'):
 		id_analyse = job[2]
 		algo = 'analyse_simple'
-	if(job[3] == 'impaire'):
+	if(job[3] == 'simple'):
 		id_analyse = job[2]
 		algo = 'analyse_simple'
 	if(job[3] == 'excels'):
