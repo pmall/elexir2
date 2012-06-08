@@ -49,7 +49,20 @@ sub ttest{
 # liste des échantillons qui a permi de calculer cette valeur
 sub ttest{
 
-	my($value, @samples) = @_;
+	my($alternative, @samples) = @_;
+
+	# On formatte et valide l'alternative
+	if($alternative == 0){
+		$alternative = 'lesser'
+	}elsif($alternative == 1){
+		$alternative = 'greater'
+	}elsif(!($alternative eq 'lesser'
+		or $alternative eq 'greater'
+		or $alternative eq 'twosided')){
+
+		die('ttest : l\'alternative doit être 0, 1, lesser, greater ou twosided');
+
+	}
 
 	# Si tout les fc sont identiques on bouge le premier de 0.01
 	# sinon sd(@samples) = 0 et erreur
@@ -58,11 +71,14 @@ sub ttest{
 	# On calcule t valeur de notre sample
 	my $t = mean(@samples)/(sd_est(@samples)/(@samples**0.5));
 
-	# On recherche la valeur critique (degré de liberté : N - 1)
+	# On recherche la proba d'avoir une valeur t plus élevée pour
+	# ce degré de liberté == alternative greater
 	my $t_prob = Statistics::Distributions::tprob(@samples - 1, $t);
 
-	# Si on compare a une valeur négative, il faut 1 - $t_prob
-	if($value < 0){ $t_prob = 1 - $t_prob; }
+	# Selon l'alternative demandé on calcule la pvalue
+	# greater on laisse tel quel
+	if($alternative eq 'lesser'){ $t_prob = 1 - $t_prob; }
+	if($alternative eq 'twosided'){ $t_prob = 2*$t_prob }
 
 	# On retourne la p value
 	return $t_prob;

@@ -237,7 +237,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my $fc_gene_trans = median(@fcs_trans);
 
 	# On calcule la p value pour la transcription
-	my $p_value_trans = ttest(log2($fc_gene_trans), log2(@fcs_trans));
+	my $p_value_trans = ttest((log2($fc_gene_trans) >= 0), log2(@fcs_trans));
 
 	# ======================================================================
 	# Analyse au niveau de l'épissage
@@ -309,7 +309,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			$fc_gene_epissage = median(@fcs_epissage);
 
 			# On calcule la p value pour l'épissage
-			$p_value_epissage = ttest(log2($fc_gene_epissage), log2(@fcs_epissage));
+			$p_value_epissage = ttest((log2($fc_gene_epissage) >= 0), log2(@fcs_epissage));
 
 		}
 

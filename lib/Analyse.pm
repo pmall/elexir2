@@ -175,7 +175,62 @@ sub dabg{
 }
 
 # ==============================================================================
-# Fonctions de lissage
+# Retourne l'union de deux listes de sondes
+# ==============================================================================
+
+sub union{
+
+	my($ref_sondes1, $ref_sondes2) = @_;
+
+	my @union = @{$ref_sondes1};
+
+	# On récupère les ids des probes déjà dans l'union
+	my @ids_sondes = map {$_->{'probe_id'}} @union;
+
+	foreach my $sonde (@{$ref_sondes2}){
+
+		if(!($sonde->{'probe_id'} ~~ @ids_sondes)){
+
+			push(@union, $sonde);
+
+		}
+
+	}
+
+	return \@union;
+
+}
+
+# ==============================================================================
+# Retourne l'intersection de deux listes de sondes
+# ==============================================================================
+
+sub inter{
+
+	my($ref_sondes1, $ref_sondes2) = @_;
+
+	my @inter = ();
+
+	# On récupère les ids des probes déjà dans l'union
+	my @ids_sondes = map {$_->{'probe_id'}} @{$ref_sondes1};
+
+	foreach my $sonde (@{$ref_sondes2}){
+
+		if($sonde->{'probe_id'} ~~ @ids_sondes){
+
+			push(@inter, $sonde);
+
+		}
+
+	}
+
+	return \@inter;
+
+}
+
+
+# ==============================================================================
+# Retourne une liste de sondes lissées pour la transcription
 # ==============================================================================
 
 # Filtre une liste de sondes par un lissage de type transcription
@@ -197,28 +252,19 @@ sub lissage_transcription{
 			$ref_sondes
 		);
 
-		# On récupère les ids des sondes déjà présente
-		my @ids_sondes = map {$_->{'probe_id'}} @sondes_lisses;
-
-		# On fait l'union des sondes déjà présente et de celles de la
-		# condition
-		foreach my $sonde (@sondes_condition){
-
-			# Si la sonde est pas la on l'ajoute
-			if(!($sonde->{'probe_id'} ~~ @ids_sondes)){
-
-				# On l'ajoute
-				push(@sondes_lisses, $sonde);
-
-			}
-
-		}
+		# On fait l'union des sondes déjà présentes et de celles qui
+		# passent le lissage pour cette condition
+		@sondes_lisses = @{union(\@sondes_lisses, \@sondes_condition)};
 
 	}
 
 	return @sondes_lisses;
 
 }
+
+# ==============================================================================
+# Retourne une liste de sondes lissées pour l'épissage
+# ==============================================================================
 
 # Filtre une liste de sondes par un lissage de type épissage
 # Cad on garde les sondes dont l'intensité est comprise dans la moyenne plus ou
@@ -240,24 +286,9 @@ sub lissage_epissage{
 			$ref_sondes
 		);
 
-		my @sondes_lisses_tmp = ();
-
-		# On récupère les ids des sondes présentes dans la condition
-		my @ids_sondes = map {$_->{'probe_id'}} @sondes_condition;
-
-		# On fait l'intersection des sondes déjà présentes et des sondes
-		# de la condition
-		foreach my $sonde (@sondes_lisses){
-
-			if($sonde->{'probe_id'} ~~ @ids_sondes){
-
-				push(@sondes_lisses_tmp, $sonde);
-
-			}
-
-		}
-
-		@sondes_lisses = @sondes_lisses_tmp;
+		# On fait l'intersection des sondes déjà presentes et de celles
+		# qui passent le lissage pour cette condition
+		@sondes_lisses = @{inter(\@sondes_lisses, \@sondes_condition)};
 
 	}
 
@@ -265,6 +296,10 @@ sub lissage_epissage{
 	return @sondes_lisses;
 
 }
+
+# ==============================================================================
+# Retourne les sondes lissées sur une condition
+# ==============================================================================
 
 sub lissage_condition{
 
