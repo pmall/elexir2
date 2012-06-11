@@ -177,34 +177,85 @@ sub inter{
 
 sub dabg{
 
-	my($ref_conditions, $seuil, $sonde) = @_;
+	my($ref_design, $seuil, $sonde) = @_;
 
-	# Pour chaque condition
-	foreach(keys %{$ref_conditions}){
+	# On reçoit soit un design, soit une liste de samples
+	if(ref($ref_design) eq 'Design'){
 
-		my $nb_exp_cond = 0;
+		# On calcule combien de reps controle et de rep tests sont
+		# exprimés
+		my $nb_reps = @{$ref_design};
+		my $nb_exp_cont = 0;
+		my $nb_exp_test = 0;
 
-		# Pour chaque sample
-		foreach my $sample (@{$ref_conditions->{$_}}){
+		# Pour chaque paire de replicats
+		foreach my $paire (@{$ref_design}){
+
+			# On calcule si la sonde est exprimée dans controle et
+			# si elle est exprimé dans test
+			$nb_exp_cont++ if(dabg($paire->{'control'}, $seuil, $sonde));
+			$nb_exp_test++ if(dabg($paire->{'test'}, $seuil, $sonde));
+
+		}
+
+		# Si exprimée dans la moitié des reps controle ou la moitié des
+		# reps test, on retourne true
+		return ($nb_exp_cont > ($nb_reps/2) or $nb_exp_test > ($nb_reps/2));
+
+	}else{
+
+		# Si la sonde est exprimée dans plus de la moitié des samples
+		# on retourne true
+		my $nb_samples = @{$ref_design};
+		my $nb_exp = 0;
+
+		foreach my $sample (@{$ref_design}){
 
 			# valeur dabg divisé par 10000 (pour avoir le float)
 			my $dabg = $sonde->{$sample}/10000;
 
-			if($dabg <= $seuil){ $nb_exp_cond++; }
+			$nb_exp++ if($dabg <= $seuil);
 
 		}
 
-		# Si la sonde est exprimée dans plus de la moitié des samples de
-		# la condition on la garde
-		if($nb_exp_cond > (@{$ref_conditions->{$_}}/2)){
-
-			return 1;
-
-		}
+		# Si la sonde est exprimée dans plus de la moitié des samples on
+		# retourne true
+		return ($nb_exp > ($nb_samples/2));
 
 	}
 
-	return 0;
+}
+
+# ==============================================================================
+# Retourne les sondes lissées sur une condition
+# ==============================================================================
+
+sub lissage_condition{
+
+	my($ref_condition, $ref_sondes) = @_;
+
+	# A priori toutes les sondes sont ok et on les élimine
+	my @sondes_lisses = @{$ref_sondes};
+
+	# Pour chaque sample de la condition
+	foreach my $sample (@{$ref_condition}){
+
+		# On récupère les valeurs des sondes pour ce sample
+		my @valeurs_sample = map { $_->{$sample} } @{$ref_sondes};
+
+		# On calcule la moyenne et la sd de ce sample
+		my $mean = mean(@valeurs_sample);
+		my $sd = sd(@valeurs_sample);
+
+		# On garde seulement les sondes comprise dans la moyenne
+		# + / - la sd
+		@sondes_lisses = grep {
+			abs($_->{$sample} - $mean) <= $sd
+		} @sondes_lisses;
+
+	}
+
+	return @sondes_lisses;
 
 }
 
@@ -272,39 +323,6 @@ sub lissage_epissage{
 	}
 
 	# On retourne la liste des sondes lisses
-	return @sondes_lisses;
-
-}
-
-# ==============================================================================
-# Retourne les sondes lissées sur une condition
-# ==============================================================================
-
-sub lissage_condition{
-
-	my($ref_condition, $ref_sondes) = @_;
-
-	# A priori toutes les sondes sont ok et on les élimine
-	my @sondes_lisses = @{$ref_sondes};
-
-	# Pour chaque sample de la condition
-	foreach my $sample (@{$ref_condition}){
-
-		# On récupère les valeurs des sondes pour ce sample
-		my @valeurs_sample = map { $_->{$sample} } @{$ref_sondes};
-
-		# On calcule la moyenne et la sd de ce sample
-		my $mean = mean(@valeurs_sample);
-		my $sd = sd(@valeurs_sample);
-
-		# On garde seulement les sondes comprise dans la moyenne
-		# + / - la sd
-		@sondes_lisses = grep {
-			abs($_->{$sample} - $mean) <= $sd
-		} @sondes_lisses;
-
-	}
-
 	return @sondes_lisses;
 
 }

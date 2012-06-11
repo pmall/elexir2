@@ -78,11 +78,6 @@ my $dbh_fdb = DBI->connect(
 # On selectionne les gènes
 my $select_genes_sth = $dbh_fdb->prepare("SELECT id FROM genes LIMIT ?");
 
-# On selectionne le nombre d'exons d'un gène
-my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
-	"SELECT COUNT(id) AS nb_exons FROM exons_genomiques WHERE id_gene = ?"
-);
-
 # ==============================================================================
 # On prépare la requete pour les sondes avec ces infos
 # ==============================================================================
@@ -110,28 +105,12 @@ my $select_intensite_sth = $dbh->prepare(
 # On crée la table qui contient les valeurs des gène
 # ==============================================================================
 
-my @fields_expr = ();
-
-for(my $i = 1; $i <= @{$infos_analyse->{'design'}}; $i++){
-
-	push(@fields_expr, 'control' . $i);
-	push(@fields_expr, 'test' . $i);
-
-}
-
 my @fields_trans = (
 	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
-	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_expr),
-	'trans_fc DECIMAL(10,5) UNSIGNED NOT NULL',
-	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
-	'trans_adjp DECIMAL(12,10) UNSIGNED NOT NULL',
-	'trans_nb_sondes SMALLINT UNSIGNED NOT NULL',
-	'trans_nb_exons SMALLINT UNSIGNED NOT NULL',
-	'epi_fc DECIMAL(10,5) UNSIGNED',
-	'epi_pval DECIMAL(12,5) UNSIGNED',
-	'epi_adjp DECIMAL(12,5) UNSIGNED',
-	'epi_nb_sondes SMALLINT UNSIGNED',
-	'epi_nb_exons SMALLINT UNSIGNED'
+	'fc DECIMAL(10,5) UNSIGNED NOT NULL',
+	'pval DECIMAL(12,10) UNSIGNED NOT NULL',
+	'nb_sondes SMALLINT UNSIGNED NOT NULL',
+	'nb_exons SMALLINT UNSIGNED NOT NULL'
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -193,7 +172,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimé
-		if(dabg($infos_analyse->{'design'}, $seuil_dabg, $dabg)){
+		if(dabg($infos_analyse->{'conditions'}, $seuil_dabg, $dabg)){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -211,178 +190,38 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	next if(@sondes < 6);
 
 	# ======================================================================
-	# Calcul de l'expression de gène
-	# ======================================================================
-
-	my @expr = expressions($infos_analyse->{'design'}, \@sondes);
-
-	# ======================================================================
-	# Etape de lissage pour la transcription
-	# ======================================================================
-
-	# On selectionne les sondes qui passe le lissage transcription
-	my @sondes_trans = lissage_transcription($infos_analyse->{'conditions'}, \@sondes);
-
-	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
-	next if(@sondes_trans < 6);
-
-	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription
 	# ======================================================================
 
 	# On calcul les fold change des sondes
-	my @fcs_trans = fcs_sondes($infos_analyse->{'design'}, \@sondes_trans);
+	my @fcs = fcs_sondes($infos_analyse->{'design'}, \@sondes);
 
 	# le fc du gène est la médiane des fc des sondes
-	my $fc_gene_trans = median(@fcs_trans);
+	my $fc = median(@fcs);
 
 	# On calcule la p value pour la transcription
-	my $p_value_trans = ttest((log2($fc_gene_trans) >= 0), log2(@fcs_trans));
-
-	# ======================================================================
-	# Analyse au niveau de l'épissage
-	# ======================================================================
-
-	# On déclare les valeurs d'épissage
-	my @sondes_epissage = ();
-	my $fc_gene_epissage;
-	my $p_value_epissage;
-
-	# ======================================================================
-	# Si le gene a au moins 4 exons on vérifie si au moins la moitié de ses
-	# exons a au moins deux sondes
-	# ======================================================================
-
-	# Booléen pour dire si le gene passe ce critère
-	my $homogene = 1;
-
-	# On selectionne son nombre d'exon du gène
-	$select_nb_exons_gene_sth->execute($id_gene);
-	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
-	$select_nb_exons_gene_sth->finish;
-
-	# Si le gène a au moins quatres exons
-	if($nb_exons >= 4){
-
-		# On compte le nombre de sondes par exon
-		my %sondes_par_exons = ();
-
-		foreach my $sonde (@sondes){
-
-			$sondes_par_exons{$infos_sondes->{$sonde->{'probe_id'}}->{'exon_pos'}}++;
-
-		}
-
-		# On récupère le nombre d'exons qui sont ciblés par au moins
-		# deux sondes
-		my $nb_exons_2_sondes = grep {
-			$sondes_par_exons{$_} > 1
-		} keys %sondes_par_exons;
-
-		# On met a jour le booleen homogene
-		$homogene = ($nb_exons_2_sondes >= int($nb_exons/2));
-
-	}
-
-	# Si le gène est homogène on calcule les valeurs d'épissage
-	if($homogene){
-
-		# ==============================================================
-		# Etape de lissage pour l'épissage
-		# ==============================================================
-
-		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = lissage_epissage($infos_analyse->{'conditions'}, \@sondes);
-
-		# Seulement si on a plus de 6 sondes épissage
-		if(@sondes_epissage >= 6){
-
-			# ======================================================
-			# Calcul des fold change et de la pvalue pour l'épissage
-			# ======================================================
-
-			# On calcul les fold change des sondes epissage selon si l'analyse
-			# est paire ou non
-			my @fcs_epissage = fcs_sondes($infos_analyse->{'design'}, \@sondes_epissage);
-
-			# le fc du gène est la médiane des fc des sondes
-			$fc_gene_epissage = median(@fcs_epissage);
-
-			# On calcule la p value pour l'épissage
-			$p_value_epissage = ttest((log2($fc_gene_epissage) >= 0), log2(@fcs_epissage));
-
-		}
-
-	}
+	my $p_value = ttest((log2($fc) >= 0), log2(@fcs));
 
 	# ======================================================================
 	# On calcule le nombre de sondes et d'exons utilisés dans l'analyse
 	# ======================================================================
 
 	# NB sondes utilisées pour la transcription
-	my $nb_sondes_trans = @sondes_trans;
+	my $nb_sondes = @sondes;
 
 	# NB exons cibles par des sondes lors de la transcription
-	my $nb_exons_trans = scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_trans));
-
-	# NB sondes utilisées pour l'épissage
-	my $nb_sondes_epissage = ($homogene == 1)
-		? @sondes_epissage
-		: undef;
-
-	# NB exons cibles par des sondes lors de l'épissage
-	my $nb_exons_epissage = ($homogene == 1)
-		? scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_epissage))
-		: undef;
+	my $nb_exons = scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes));
 
 	# ======================================================================
-	# On ajoute les valeurs à la liste de gène
+	# On ajoute le gène a la bdd
 	# ======================================================================
 
-	# On ajoute le gène à la liste
-	push(@genes, {
-		'id' => $id_gene,
-		'expression' => \@expr,
-		'fc_trans' => $fc_gene_trans,
-		'p_value_trans' => $p_value_trans,
-		'nb_sondes_trans' => $nb_sondes_trans,
-		'nb_exons_trans' => $nb_exons_trans,
-		'fc_epi' => $fc_gene_epissage,
-		'p_value_epi' => $p_value_epissage,
-		'nb_sondes_epi' => $nb_sondes_epissage,
-		'nb_exons_epi' => $nb_exons_epissage
-	});
-
-}
-
-# ==============================================================================
-# On calcule les p values ajustées
-# ==============================================================================
-
-# On les corrige
-my @adjp_trans = adjust_pvals(map { $_->{'p_value_trans'} } @genes);
-my @adjp_epi = adjust_pvals(map { $_->{'p_value_epi'} } @genes);
-
-# Pour chaque gène
-for(my $i = 0; $i < @genes; $i++){
-
-	# On récupère le gènes
-	my $gene = $genes[$i];
-
-	# On insert le gène dans la bdd
 	$insert_gene_sth->execute(
-		$gene->{'id'},
-		(map { $_ } (@{$gene->{'expression'}})),
-		$gene->{'fc_trans'},
-		$gene->{'p_value_trans'},
-		$adjp_trans[$i],
-		$gene->{'nb_sondes_trans'},
-		$gene->{'nb_exons_trans'},
-		$gene->{'fc_epi'},
-		$gene->{'p_value_epi'},
-		$adjp_epi[$i],
-		$gene->{'nb_sondes_epi'},
-		$gene->{'nb_exons_epi'}
+		$id_gene,
+		$fc,
+		$p_value,
+		$nb_sondes,
+		$nb_exons
 	);
 
 }
