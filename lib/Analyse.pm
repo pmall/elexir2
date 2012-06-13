@@ -9,7 +9,7 @@ use Data::Dumper;
 use Exporter qw(import);
 
 our @EXPORT = qw(get_infos_analyse dabg lissage_transcription
-	lissage_epissage expressions fcs_sonde sis_sonde);
+	lissage_epissage expressions homogene fcs_sonde sis_sonde);
 
 # ==============================================================================
 # Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
@@ -448,6 +448,41 @@ sub expression_replicat{
 }
 
 # ==============================================================================
+# Retourne si un groupe de sondes est homogene ou non
+# ==============================================================================
+
+sub homogene{
+
+	my($infos_sondes, $ref_sondes, $nb_exons, $nb_exons_min,$nb_min_par_exon) = @_;
+
+	# Valeurs par défaut
+	$nb_exons_min //= 4; # /
+	$nb_min_par_exon //= 2; # /
+
+	# Si il y a moin de $nb_exons_min exons, on retourne true
+	return 1 if($nb_exons < $nb_exons_min);
+
+	# On compte le nombre de sondes par exon
+	my %sondes_par_exons = ();
+
+	foreach my $sonde (@{$ref_sondes}){
+
+		$sondes_par_exons{$infos_sondes->{$sonde->{'probe_id'}}->{'exon_pos'}}++;
+
+	}
+
+	# On récupère le nombre d'exons qui sont ciblés par au moins
+	# deux sondes
+	my $nb_exons_2_sondes = grep {
+		$sondes_par_exons{$_} >= $nb_min_par_exon
+	} keys %sondes_par_exons;
+
+	# On met a jour le booleen homogene
+	return ($nb_exons_2_sondes >= int($nb_exons/2));
+
+}
+
+# ==============================================================================
 # Retourne tous les fold change d'une sonde, un par paire de replicat
 # ==============================================================================
 
@@ -508,6 +543,18 @@ sub sis_sonde{
 
 	# On retourne la liste de SIs de la sonde
 	return @SIs;
+
+}
+
+# ==============================================================================
+# Retourne vrai si les sondes du groupe sont cohérentes
+# ==============================================================================
+
+sub is_robust{
+
+	my($ref_sondes, $seuil) = @_;
+
+	return 'kikou';
 
 }
 

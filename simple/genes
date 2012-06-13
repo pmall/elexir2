@@ -245,6 +245,14 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# On calcule la p value pour la transcription
 	my $p_value_trans = ttest((log2($fc_gene_trans) >= 0), log2(@fcs_trans));
 
+	# NB sondes utilisées pour la transcription
+	my $nb_sondes_trans = @sondes_trans;
+
+	# NB exons cibles par des sondes lors de la transcription
+	my $nb_exons_trans = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_trans));
+
 	# ======================================================================
 	# Analyse au niveau de l'épissage
 	# ======================================================================
@@ -253,45 +261,20 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my @sondes_epissage = ();
 	my $fc_gene_epissage;
 	my $p_value_epissage;
+	my $nb_sondes_epissage;
+	my $nb_exons_epissage;
 
 	# ======================================================================
-	# Si le gene a au moins 4 exons on vérifie si au moins la moitié de ses
-	# exons a au moins deux sondes
+	# On fait l'épissage seulement si le gène est homogène
 	# ======================================================================
-
-	# Booléen pour dire si le gene passe ce critère
-	my $homogene = 1;
 
 	# On selectionne son nombre d'exon du gène
 	$select_nb_exons_gene_sth->execute($id_gene);
 	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
 	$select_nb_exons_gene_sth->finish;
 
-	# Si le gène a au moins quatres exons
-	if($nb_exons >= 4){
-
-		# On compte le nombre de sondes par exon
-		my %sondes_par_exons = ();
-
-		foreach my $sonde (@sondes){
-
-			$sondes_par_exons{$infos_sondes->{$sonde->{'probe_id'}}->{'exon_pos'}}++;
-
-		}
-
-		# On récupère le nombre d'exons qui sont ciblés par au moins
-		# deux sondes
-		my $nb_exons_2_sondes = grep {
-			$sondes_par_exons{$_} > 1
-		} keys %sondes_par_exons;
-
-		# On met a jour le booleen homogene
-		$homogene = ($nb_exons_2_sondes >= int($nb_exons/2));
-
-	}
-
 	# Si le gène est homogène on calcule les valeurs d'épissage
-	if($homogene){
+	if(homogene($infos_sondes, \@sondes, $nb_exons)){
 
 		# ==============================================================
 		# Etape de lissage pour l'épissage
@@ -323,33 +306,17 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 				log2(@fcs_epissage)
 			);
 
+			# NB sondes utilisées pour l'épissage
+			$nb_sondes_epissage = @sondes_epissage;
+
+			# NB exons cibles par des sondes lors de l'épissage
+			$nb_exons_epissage = scalar(uniq(map {
+				$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+			} @sondes_epissage));
+
 		}
 
 	}
-
-	# ======================================================================
-	# On calcule le nombre de sondes et d'exons utilisés dans l'analyse
-	# ======================================================================
-
-	# NB sondes utilisées pour la transcription
-	my $nb_sondes_trans = @sondes_trans;
-
-	# NB exons cibles par des sondes lors de la transcription
-	my $nb_exons_trans = scalar(uniq(map {
-		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-	} @sondes_trans));
-
-	# NB sondes utilisées pour l'épissage
-	my $nb_sondes_epissage = ($homogene == 1)
-		? @sondes_epissage
-		: undef;
-
-	# NB exons cibles par des sondes lors de l'épissage
-	my $nb_exons_epissage = ($homogene == 1)
-		? scalar(uniq(map {
-			$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-		} @sondes_epissage))
-		: undef;
 
 	# ======================================================================
 	# On ajoute les valeurs à la liste de gène

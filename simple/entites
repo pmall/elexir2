@@ -124,7 +124,7 @@ for(my $i = 0; $i < @{$infos_analyse->{'design'}}; $i++){
 
 my @fields_splicing = ();
 
-push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL');
+push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
 push(@fields_splicing, 'gene_id INT UNSIGNED NOT NULL');
 push(@fields_splicing, 'entite_type ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
 push(@fields_splicing, 'entite_pos SMALLINT UNSIGNED NOT NULL');
@@ -149,7 +149,7 @@ push(@fields_splicing, 'nb_sondes SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'is_robust TINYINT UNSIGNED NOT NULL');
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_splicing);
-$dbh->do('CREATE TABLE ' . $table_splicing . ' (' . join(', ', @fields_splicing) . ', PRIMARY KEY (id_entite, gene_id, entite_type))');
+$dbh->do('CREATE TABLE ' . $table_splicing . ' (' . join(', ', @fields_splicing) . ')');
 
 my $insert_entite_sth = $dbh->prepare(
 	"INSERT INTO $table_splicing VALUES(" . join(', ', ('?')x@fields_splicing) . ")"
@@ -299,7 +299,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		$si_entite = median(@SIs_entite);
 
 		# On calcule la pvalue
-		$p_value = ttest(log2($si_entite), log2(@SIs_a_tester));
+		$p_value = ttest((log2($si_entite) >= 0), log2(@SIs_a_tester));
 
 		# ==============================================================
 		# On calcule le PSI de l'entité
@@ -351,7 +351,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			$psi_sd_fc = sd(@psis_fcs);
 
 			# test stat
-			$p_value_psi = ttest(log2($psi_fc), log2(@psis_fcs));
+			$p_value_psi = ttest((log2($psi_fc) >= 0), log2(@psis_fcs));
 
 		}
 
@@ -405,7 +405,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			'id_gene' => $gene->{'gene_id'},
 			'type' => $entite->{'type'},
 			'exon_pos' => $entite->{'exon_pos'},
-			'nb_sondes' => $nb_sondes,
 			'expression' => \@expr,
 			'SIs' => \@SIs_entite,
 			'SI' => $si_entite,
@@ -420,6 +419,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			'psi_fc' => $psi_fc,
 			'psi_sd_fc' => $psi_sd_fc,
 			'p_value_psi' => $p_value_psi,
+			'nb_sondes' => $nb_sondes,
 			'is_robust' => $is_robust
 		});
 
@@ -470,7 +470,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# On fait un test seulement si l'analyse est paire
 			if($paire){
 
-				$entite_gene->{'p_value_sd'} = ttest(log2($entite_gene->{'SIsd'}), log2(@{$entite_gene->{'SIsds'}}));
+				$entite_gene->{'p_value_sd'} = ttest((log2($entite_gene->{'SIsd'}) >= 0), log2(@{$entite_gene->{'SIsds'}}));
 
 			}
 

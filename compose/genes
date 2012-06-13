@@ -82,6 +82,11 @@ my $dbh_fdb = DBI->connect(
 # On selectionne les gènes
 my $select_genes_sth = $dbh_fdb->prepare("SELECT id FROM genes LIMIT ?");
 
+# On selectionne le nombre d'exons d'un gène
+my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
+	"SELECT COUNT(id) AS nb_exons FROM exons_genomiques WHERE id_gene = ?"
+);
+
 # ==============================================================================
 # On prépare la requete pour les sondes avec ces infos
 # ==============================================================================
@@ -218,6 +223,17 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	# Si il n'y a pas six sondes dans chaque comparaison on zappe
 	next if(@sondes_ba < 6 or @sondes_dc < 6 or @sondes_oj < 6);
+
+	# ======================================================================
+	# Si le gène n'est pas homogène ça sert a rien de continuer
+	# ======================================================================
+
+	# On selectionne le nombre d'exons du gène
+	$select_nb_exons_gene_sth->execute($id_gene);
+	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
+	$select_nb_exons_gene_sth->finish;
+
+	next if(!homogene($infos_sondes, \@sondes_oj, $nb_exons));
 
 	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription
