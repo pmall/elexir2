@@ -51,8 +51,12 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
-print Dumper($infos_analyse->{'design'});
-print Dumper($infos_analyse->{'conditions'});
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'compose'){
+
+	die('Le script composé ne fonctionne que sur les analyses composées :o)');
+
+}
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
@@ -107,10 +111,18 @@ my $select_intensite_sth = $dbh->prepare(
 
 my @fields_trans = (
 	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
-	'fc DECIMAL(10,5) UNSIGNED NOT NULL',
-	'pval DECIMAL(12,10) UNSIGNED NOT NULL',
-	'nb_sondes SMALLINT UNSIGNED NOT NULL',
-	'nb_exons SMALLINT UNSIGNED NOT NULL'
+	'fc_ba DECIMAL(10,5) UNSIGNED NOT NULL',
+	'fc_dc DECIMAL(10,5) UNSIGNED NOT NULL',
+	'fc_oj DECIMAL(10,5) UNSIGNED NOT NULL',
+	'pval_ba DECIMAL(12,10) UNSIGNED NOT NULL',
+	'pval_cd DECIMAL(12,10) UNSIGNED NOT NULL',
+	'pval_oj DECIMAL(12,10) UNSIGNED NOT NULL',
+	'nb_sondes_ba SMALLINT UNSIGNED NOT NULL',
+	'nb_sondes_cd SMALLINT UNSIGNED NOT NULL',
+	'nb_sondes_oj SMALLINT UNSIGNED NOT NULL',
+	'nb_exons_ba SMALLINT UNSIGNED NOT NULL',
+	'nb_exons_cd SMALLINT UNSIGNED NOT NULL',
+	'nb_exons_oj SMALLINT UNSIGNED NOT NULL'
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -161,7 +173,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	next if(@{$ids_probes_ok} < 6);
 
 	# On récupère les valeurs de dabg de chaque sonde
-	my @sondes =();
+	my @sondes_ba = ();
+	my @sondes_dc = ();
+	my @sondes_oj = ();
 
 	# Pour chaque id de sonde
 	foreach my $probe_id (@{$ids_probes_ok}){
@@ -171,8 +185,22 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		my $dabg = $select_dabg_sth->fetchrow_hashref;
 		$select_dabg_sth->finish;
 
-		# Si la sonde est exprimé
-		if(dabg($infos_analyse->{'conditions'}, $seuil_dabg, $dabg)){
+		# On calcule le dabg de ab
+		my $dabg_ba = dabg(
+			$infos_analyse->{'design'}->[0]->{'control'},
+			$seuil_dabg,
+			$dabg
+		);
+
+		# On calcule le dabg de cd
+		my $dabg_dc = dabg(
+			$infos_analyse->{'design'}->[0]->{'test'},
+			$seuil_dabg,
+			$dabg
+		);
+
+		# Si la sonde est exprimée dans ab ou cd on prend
+		if($dabg_ba || $dabg_dc){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -180,37 +208,65 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			$select_intensite_sth->finish;
 
 			# Et on l'ajoute à la liste des sondes
-			push(@sondes, $sonde);
+			push(@sondes_ba, $sonde) if($dabg_ba);
+			push(@sondes_dc, $sonde) if($dabg_dc);
+			push(@sondes_oj, $sonde) if($dabg_ba && $dabg_dc);
 
 		}
 
 	}
 
-	# Si il n'y a pas six sondes on zappe
-	next if(@sondes < 6);
+	# Si il n'y a pas six sondes dans chaque comparaison on zappe
+	next if(@sondes_ba < 6 or @sondes_dc < 6 or @sondes_oj < 6);
 
 	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription
 	# ======================================================================
 
 	# On calcul les fold change des sondes
-	my @fcs = fcs_sondes($infos_analyse->{'design'}, \@sondes);
+	my @fcs_ba = map {
+		median(fcs_sonde($infos_analyse->{'design'}->[0]->{'control'}, $_))
+	} @sondes_ba;
+
+	my @fcs_dc = map {
+		median(fcs_sonde($infos_analyse->{'design'}->[0]->{'test'}, $_))
+	} @sondes_dc;
+
+	my @fcs_oj = map {
+		median(fcs_sonde($infos_analyse->{'design'}, $_))
+	} @sondes_oj;
 
 	# le fc du gène est la médiane des fc des sondes
-	my $fc = median(@fcs);
+	my $fc_ba = median(@fcs_ba);
+	my $fc_dc = median(@fcs_dc);
+	my $fc_oj = median(@fcs_oj);
 
 	# On calcule la p value pour la transcription
-	my $p_value = ttest((log2($fc) >= 0), log2(@fcs));
+	my $p_value_ba = ttest((log2($fc_ba) >= 0), log2(@fcs_ba));
+	my $p_value_dc = ttest((log2($fc_dc) >= 0), log2(@fcs_dc));
+	my $p_value_oj = ttest((log2($fc_oj) >= 0), log2(@fcs_oj));
 
 	# ======================================================================
 	# On calcule le nombre de sondes et d'exons utilisés dans l'analyse
 	# ======================================================================
 
 	# NB sondes utilisées pour la transcription
-	my $nb_sondes = @sondes;
+	my $nb_sondes_ba = @sondes_ba;
+	my $nb_sondes_dc = @sondes_dc;
+	my $nb_sondes_oj = @sondes_oj;
 
 	# NB exons cibles par des sondes lors de la transcription
-	my $nb_exons = scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes));
+	my $nb_exons_ba = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_ba));
+
+	my $nb_exons_dc = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_dc));
+
+	my $nb_exons_oj = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_oj));
 
 	# ======================================================================
 	# On ajoute le gène a la bdd
@@ -218,10 +274,18 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	$insert_gene_sth->execute(
 		$id_gene,
-		$fc,
-		$p_value,
-		$nb_sondes,
-		$nb_exons
+		$fc_ba,
+		$fc_dc,
+		$fc_oj,
+		$p_value_ba,
+		$p_value_dc,
+		$p_value_oj,
+		$nb_sondes_ba,
+		$nb_sondes_dc,
+		$nb_sondes_oj,
+		$nb_exons_ba,
+		$nb_exons_dc,
+		$nb_exons_oj
 	);
 
 }

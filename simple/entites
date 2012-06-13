@@ -50,6 +50,13 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'simple'){
+
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+
+}
+
 # petit raccourcit...
 my $paire = ($infos_analyse->{'paired'});
 
@@ -211,7 +218,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			my $dabg = $select_dabg_sth->fetchrow_hashref;
 			$select_dabg_sth->finish;
 
-			# Si la sonde est exprimé
+			# Si la sonde est exprimée
 			if(dabg($seuil_dabg, $infos_analyse->{'design'}, $dabg)){
 
 				# On va chercher ses intensites

@@ -51,8 +51,12 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
-print Dumper($infos_analyse->{'design'});
-print Dumper($infos_analyse->{'conditions'});
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'simple'){
+
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+
+}
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
@@ -192,7 +196,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		my $dabg = $select_dabg_sth->fetchrow_hashref;
 		$select_dabg_sth->finish;
 
-		# Si la sonde est exprimé
+		# Si la sonde est exprimée
 		if(dabg($infos_analyse->{'design'}, $seuil_dabg, $dabg)){
 
 			# On va chercher ses intensites
@@ -331,7 +335,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my $nb_sondes_trans = @sondes_trans;
 
 	# NB exons cibles par des sondes lors de la transcription
-	my $nb_exons_trans = scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_trans));
+	my $nb_exons_trans = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_trans));
 
 	# NB sondes utilisées pour l'épissage
 	my $nb_sondes_epissage = ($homogene == 1)
@@ -340,7 +346,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	# NB exons cibles par des sondes lors de l'épissage
 	my $nb_exons_epissage = ($homogene == 1)
-		? scalar(uniq(map { $infos_sondes->{$_->{'probe_id'}}->{exon_pos} } @sondes_epissage))
+		? scalar(uniq(map {
+			$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+		} @sondes_epissage))
 		: undef;
 
 	# ======================================================================

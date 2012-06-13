@@ -8,8 +8,8 @@ use Math;
 use Data::Dumper;
 use Exporter qw(import);
 
-our @EXPORT = qw(get_infos_analyse get_design dabg lissage_transcription
-	lissage_epissage expressions fcs_sondes fcs_sonde sis_sonde);
+our @EXPORT = qw(get_infos_analyse dabg lissage_transcription
+	lissage_epissage expressions fcs_sonde sis_sonde);
 
 # ==============================================================================
 # Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
@@ -99,16 +99,56 @@ sub get_design{
 		? @{$infos_analyse->{'conditions'}->{'A'}}
 		: 1;
 
-	# Pour chaque paire de replicat
-	for(my $i = 0; $i < $nb_paires_replicats; $i++){
+	# Selon que l'analyse soit simple ou composée, ça change...
+	if($infos_analyse->{'type'} eq 'simple'){
 
-		$design->[$i] = {
-			'control' => ($infos_analyse->{'paired'})
-				? [@{$infos_analyse->{'conditions'}->{'A'}}[$i]]
-				: $infos_analyse->{'conditions'}->{'A'},
-			'test' => ($infos_analyse->{'paired'})
-				? [@{$infos_analyse->{'conditions'}->{'B'}}[$i]]
-				: $infos_analyse->{'conditions'}->{'B'} 
+		# Pour chaque paire de replicat
+		for(my $i = 0; $i < $nb_paires_replicats; $i++){
+
+			$design->[$i] = {
+				'control' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'A'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'A'},
+				'test' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'B'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'B'} 
+			};
+
+		}
+
+	}else{
+
+		# Analyse de type composée, on récupère les sous comparaisons
+		my $control = [];
+		my $test = [];
+
+		# Pour chaque paire de replicat
+		for(my $i = 0; $i < $nb_paires_replicats; $i++){
+
+			$control->[$i] = {
+				'control' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'A'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'A'},
+				'test' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'B'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'B'} 
+			};
+
+			$test->[$i] = {
+				'control' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'C'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'C'},
+				'test' => ($infos_analyse->{'paired'})
+					? [@{$infos_analyse->{'conditions'}->{'D'}}[$i]]
+					: $infos_analyse->{'conditions'}->{'D'} 
+			};
+
+		}
+
+		# On intègre les sous comparaisons à la comparaison globale
+		$design->[0] = {
+			'control' => new Design($control),
+			'test' => new Design($test)
 		};
 
 	}
@@ -408,32 +448,7 @@ sub expression_replicat{
 }
 
 # ==============================================================================
-# Fonctions pour le fold change (utilitée de cette fonction ??)
-# ==============================================================================
-
-# Retourne la liste des médianes des fold changes d'un groupe de sonde
-sub fcs_sondes{
-
-	my($ref_design, $ref_sondes) = @_;
-
-	my @fcs = ();
-
-	foreach my $sonde (@{$ref_sondes}){
-
-		# On calcule la médiane des fc des replicats (dans le cas d'une
-		# exp impaire, il n'y en a qu'un, donc faire la médiane change
-		# rien)
-		push(@fcs, median(fcs_sonde($ref_design, $sonde)));
-
-	}
-
-	return @fcs;
-
-}
-
-# ==============================================================================
-# Retourne tous les fold change d'une sonde
-# (=> un par paire de replicat)
+# Retourne tous les fold change d'une sonde, un par paire de replicat
 # ==============================================================================
 
 sub fcs_sonde{
@@ -449,12 +464,15 @@ sub fcs_sonde{
 		foreach my $paire (@{$ref_design}){
 
 			# On calcule la valeur de la sonde pour control et test
-			my $valeur_sonde_cont = fcs_sonde($paire->{'control'}, $sonde);
-			my $valeur_sonde_test = fcs_sonde($paire->{'test'}, $sonde);
+			my @fcs_cont = fcs_sonde($paire->{'control'}, $sonde);
+			my @fcs_test = fcs_sonde($paire->{'test'}, $sonde);
 
-			# On ajoute le fc de la sonde pour cette paire de
-			# replicats à la liste des fcs
-			push(@fcs, $valeur_sonde_test/$valeur_sonde_cont);
+			# On fait tout les fcs de cette paire de replicat
+			for(my $i = 0; $i < @fcs_cont; $i++){
+
+				push(@fcs, $fcs_test[$i]/$fcs_cont[$i]);
+
+			}
 
 		}
 
@@ -465,8 +483,7 @@ sub fcs_sonde{
 
 		# On retoure la moyenne des valeurs de la sonde sur les samples
 		# du replicat
-		return mean(map {$sonde->{$_}} @{$ref_design});
-
+		return (mean(map {$sonde->{$_}} @{$ref_design}));
 	}
 
 }
