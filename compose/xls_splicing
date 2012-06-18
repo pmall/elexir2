@@ -1,0 +1,626 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use Switch;
+use DBI;
+use Spreadsheet::WriteExcel;
+use FindBin;
+use lib "$FindBin::Bin/../../lib";
+use Util::ManipulationStruct;
+use Util::Math;
+use Util::Logger;
+use Traitement_resultats::ResumeAnalyse;
+use Analyse::RequetesCourantes;
+use Traitement_resultats::FonctionsXls;
+use Cwd qw[abs_path];
+use File::Basename;
+
+#-------------------------------------------------------------------#
+#                             Paramètres                            #
+#-------------------------------------------------------------------#
+
+# Arguments passés au script
+my ($projet_num, $est_3primeUTR) = @ARGV;
+
+# On crée la config
+my ($name, $path) = fileparse(abs_path($0));
+require $path . '../../../Config.pm';
+my $config = Config->new($path . '../../../config.yml');
+
+# On set le logger
+my $_logger = Logger->new("Xls_trans_script", 0);
+
+#-------------------------------------------------------------------#
+#                            Traitement                             #
+#-------------------------------------------------------------------#
+
+if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Début traitement : ".`date`); }
+
+# Connexion à misea
+my $probes_db = DBI->connect("DBI:mysql:".$config->dbname_misea.":".$config->host_misea, $config->user_misea, $config->pass_misea) || die "Connection à ".$config->dbname_misea." impossible";
+
+# Récupère les infos du projet nécessaire au traitement
+my $project_infos = $config->get_project_infos($probes_db, $projet_num);
+my $projet_dir    = $project_infos->{"dir"};
+my $name_project  = $project_infos->{"name"};
+my $orga          = $project_infos->{"organism"};
+my $est_paire     = $project_infos->{"est_paire"};
+my $nb_repl_cont  = $project_infos->{"nb_rep_cont"};
+my $nb_repl_test  = $project_infos->{"nb_rep_test"};
+
+# On maj le nombre de réplicats par condition
+my $nb_replicats = ($nb_repl_cont/2);
+
+# Connexion à fasterdb
+my $faster_db = DBI->connect("DBI:mysql:".$config->dbname_faster."$orga:".$config->host_faster, $config->user_faster, $config->pass_faster) || die "Connection à ".$config->dbname_faster." impossible";
+
+# -- Paramètres de sélection pour les résulats -- #
+my $seuil_epi_simple       = 1.45;
+my $seuil_epi_j_vs_o       = 1.2;
+my $seuil_pval             = 0.05;
+my $seuil_fiabilite_fcGene = 2;
+
+
+#-------------------------------------------------------------------#
+#                          Fichier de sortie                        #
+#-------------------------------------------------------------------#
+
+my $rep_sortie = $config->dir_xls;
+
+# Création des répertoires de sortie s'ils n'existe pas déjà
+( !(-d "$rep_sortie/$projet_dir") ) ? `mkdir $rep_sortie/$projet_dir` : 0;
+( !(-d "$rep_sortie/$projet_dir/$projet_num") ) ? `mkdir $rep_sortie/$projet_dir/$projet_num` : 0;
+( !(-d "$rep_sortie/log") ) ? `mkdir $rep_sortie/log` : 0;
+( !(-d "$rep_sortie/log/$projet_dir") ) ? `mkdir $rep_sortie/log/$projet_dir` : 0;
+( !(-d "$rep_sortie/log/$projet_dir/$projet_num") ) ? `mkdir $rep_sortie/log/$projet_dir/$projet_num` : 0;
+
+# -- Fichier excel -- #
+my $nom_fichier_sortie = ($est_3primeUTR) ? $name_project."_3primeUTR" : $name_project."_epissage" ;
+my $resultat = Spreadsheet::WriteExcel->new("$rep_sortie/$projet_dir/$projet_num/$nom_fichier_sortie.xls");
+my $f_notice = $resultat->add_worksheet('Resume de l\'analyse');
+my $f_transcription_no_fdr_ba_inclusion = $resultat->add_worksheet('NO FDR - B vs A > 1.5');
+my $f_transcription_no_fdr_ba_exclusion = $resultat->add_worksheet('NO FDR - B vs A < -1.5');
+my $f_transcription_fdr_ba_inclusion = $resultat->add_worksheet('FDR - B vs A > 1.5');
+my $f_transcription_fdr_ba_exclusion = $resultat->add_worksheet('FDR - B vs A < -1.5');
+
+# -- Fichier log -- #
+open (LOG, ">$rep_sortie/log/$projet_dir/$projet_num/$nom_fichier_sortie.txt") || die ("Erreur d'ouverture de LOG $rep_sortie/log/$projet_dir/$projet_num/$nom_fichier_sortie.txt") ;
+print LOG "===================================================\n";
+print LOG `echo "\t\$\(date)"`;
+print LOG "\t$orga : projet $projet_num \n";
+print LOG "\tFichier sortie : $rep_sortie/$projet_dir/$projet_num/$nom_fichier_sortie.xls\n";
+print LOG "===================================================\n\n";
+
+
+#-------------------------------------------------------------------#
+#                           Formats du fichier                      #
+#-------------------------------------------------------------------#
+
+# Couleurs
+my $couleur_entete = $resultat->set_custom_color(39, 189, 189, 189);
+my $couleur_up     = $resultat->set_custom_color(40, 255, 204, 153);
+my $couleur_down   = $resultat->set_custom_color(41, 204, 255, 204);
+
+# Formats
+my $format_resume_titre   = $resultat->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_resume_cell    = $resultat->add_format(color => 'black', bold => 0, center_across => 1);
+my $format_cell_no_center = $resultat->add_format(color => 'black', bold => 0);
+my $format_entete         = $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_merge_entete   = $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_up             = $resultat->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
+my $format_down           = $resultat->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
+my $format_cell_mauv      = $resultat->add_format(color => 'red', border => 0, border_color => 'black', center_across => 1);
+
+
+#-------------------------------------------------------------------#
+#                          Données à afficher                       #
+#-------------------------------------------------------------------#
+
+# On set la largeur des colonnes
+setting_columns($f_transcription_no_fdr_ba_inclusion);
+setting_columns($f_transcription_fdr_ba_inclusion);
+setting_columns($f_transcription_no_fdr_ba_exclusion);
+setting_columns($f_transcription_fdr_ba_exclusion);
+
+# Colonnes d'en-tête mergées
+merging_columns($f_transcription_no_fdr_ba_inclusion);
+merging_columns($f_transcription_fdr_ba_inclusion);
+merging_columns($f_transcription_no_fdr_ba_exclusion);
+merging_columns($f_transcription_fdr_ba_exclusion);
+
+# En-tetes des onglets
+my @entete = ('Fasterdb id', 'Symbol', 'Name', 'Human Ensembl id', 'Mouse Ensembl id', 'Chr Position', 'AS Event Type', 'Exon position', 'Concat geneId_exonPosition', 'AS Event Sequence', 'Link Elexir', 'Regulation', 'SI B/A', 'Pvalue', 'Est fiable', 'Nb probes', 'Link Elexir', 'Regulation', 'SI D/C', 'Pvalue', 'Est fiable', 'Nb probes', 'Regulation', 'SI J/O', 'Pvalue', 'Est fiable', 'Nb probes');
+
+# Ecriture
+&FonctionsXls::ecriture(\@entete, $f_transcription_no_fdr_ba_inclusion, 0, $format_entete);
+&FonctionsXls::ecriture(\@entete, $f_transcription_fdr_ba_inclusion, 0, $format_entete);
+&FonctionsXls::ecriture(\@entete, $f_transcription_no_fdr_ba_exclusion, 0, $format_entete);
+&FonctionsXls::ecriture(\@entete, $f_transcription_fdr_ba_exclusion, 0, $format_entete);
+
+#-------------------------------------------------------------------#
+#                              Traitement                           #
+#-------------------------------------------------------------------#
+
+# ---------------------------- Resume ----------------------------- #
+
+# Date
+my ($string_date, $h_date) = &General::date();
+$f_notice->write(0, 0, $string_date, $format_cell_no_center);
+
+# Paramètres utilisés
+$f_notice->write(2, 0, "Parametres utilises", $format_resume_titre);
+my @parametre_si_ba   = ("Seuil SI B/A", $seuil_epi_simple);
+my @parametre_pval_ba = ("Seuil p-value B/A ", $seuil_pval);
+my @parametre_si_jo   = ("Seuil SI J/O", $seuil_epi_j_vs_o);
+my @parametre_pval_jo = ("Seuil p-value J/O ", $seuil_pval);
+&FonctionsXls::ecriture(\@parametre_si_ba, $f_notice, 3, $format_resume_cell);
+&FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 4, $format_resume_cell);
+&FonctionsXls::ecriture(\@parametre_si_jo, $f_notice, 5, $format_resume_cell);
+&FonctionsXls::ecriture(\@parametre_pval_jo, $f_notice, 6, $format_resume_cell);
+
+# Conditions
+get_conditions();
+
+# On récupère les project_id des analyses simples
+my $requete = "SELECT `id` FROM `projects` WHERE `name` LIKE '".$name_project."_simple_ab' ; ";
+my $select = $probes_db->prepare($requete);
+$select -> execute;
+my $projet_num_simple_ab = $select -> fetchrow_array;
+$select -> finish;
+$requete = "SELECT `id` FROM `projects` WHERE `name` LIKE '".$name_project."_simple_cd' ; ";
+$select = $probes_db->prepare($requete);
+$select -> execute;
+my $projet_num_simple_cd = $select -> fetchrow_array;
+$select -> finish;
+
+
+# Récupération des événements B/A régulés
+my %hash_ba_inclusion_no_fdr = ();
+my %hash_ba_inclusion_fdr    = ();
+my %hash_ba_exclusion_no_fdr = ();
+my %hash_ba_exclusion_fdr    = ();
+my $requete_ba_inclusion = "";
+if ( $est_3primeUTR ) {
+    $requete_ba_inclusion =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num_simple_ab."_splicing` 
+        WHERE `is_robust` = 1
+        AND `entite_type` = 8 ;" ;
+}else{
+    $requete_ba_inclusion =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num_simple_ab."_splicing` 
+        WHERE `is_robust` = 1
+        AND `entite_type` != 8 ;" ;
+}
+
+if( $_logger->isDebugEnabled() ){ $_logger->doDebug($requete_ba_inclusion); }
+$select = $probes_db->prepare($requete_ba_inclusion);
+$select -> execute;
+while( my ($entite_id, $entite_type, $gene_id, $si, $pval, $adjp, $nb_sondes, $est_fiable) = $select -> fetchrow_array){
+
+    my $entite_ID = "$entite_type-$entite_id";
+
+    # B/A <= -1.45 -> Exclusion
+    if ( $si <= - &Math::log2($seuil_epi_simple) ) {
+    
+	    if( $pval <= $seuil_pval ){
+	        $hash_ba_exclusion_no_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	        $hash_ba_exclusion_no_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $pval;
+	        $hash_ba_exclusion_no_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	        $hash_ba_exclusion_no_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+	    }
+        if( $adjp <= $seuil_pval ){
+	        $hash_ba_exclusion_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	        $hash_ba_exclusion_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $adjp;
+	        $hash_ba_exclusion_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	        $hash_ba_exclusion_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+        }
+    
+    # B/A >= 1.45 -> Inclusion
+    }elsif ( $si >= &Math::log2($seuil_epi_simple) ){
+    
+	    if( $pval <= $seuil_pval ){
+	        $hash_ba_inclusion_no_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	        $hash_ba_inclusion_no_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $pval;
+	        $hash_ba_inclusion_no_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	        $hash_ba_inclusion_no_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+	    }
+        if( $adjp <= $seuil_pval ){
+	        $hash_ba_inclusion_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	        $hash_ba_inclusion_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $adjp;
+	        $hash_ba_inclusion_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	        $hash_ba_inclusion_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+        }
+    
+    }
+
+}
+$select -> finish;
+
+
+# Récupération des événements D/C
+my %hash_dc_no_fdr = ();
+my %hash_dc_fdr = ();
+my $requete_dc = "";
+if ( $est_3primeUTR ) {
+    $requete_dc =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num_simple_cd."_splicing` 
+        WHERE `entite_type` = 8;" ;
+}else{
+    $requete_dc =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num_simple_cd."_splicing` 
+        WHERE `entite_type` != 8;" ;
+}
+if( $_logger->isDebugEnabled() ){ $_logger->doDebug($requete_dc); }
+$select = $probes_db->prepare($requete_dc);
+$select -> execute;
+while( my ($entite_id, $entite_type, $gene_id, $si, $pval, $adjp, $nb_sondes, $est_fiable) = $select -> fetchrow_array){
+    
+    my $entite_ID = "$entite_type-$entite_id";
+
+	$hash_dc_no_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	$hash_dc_no_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $pval;
+	$hash_dc_no_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	$hash_dc_no_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+
+	$hash_dc_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	$hash_dc_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $adjp;
+	$hash_dc_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	$hash_dc_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+
+}
+$select -> finish;
+
+# Récupération des événements J/O
+my %hash_jo_no_fdr = ();
+my %hash_jo_fdr = ();
+my $requete_jo = "";
+if ( $est_3primeUTR ) {
+    $requete_jo =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num."_splicing` 
+        WHERE `entite_type` = 8 ;" ;
+}else{
+    $requete_jo =
+        "SELECT `id_entite`, `entite_type`, `gene_id`, `SI`, `SI_pval`, `SI_adjp`, `nb_sondes`, `is_robust`
+        FROM `".$projet_num."_splicing` 
+        WHERE `entite_type` != 8 ;" ;
+}
+if( $_logger->isDebugEnabled() ){ $_logger->doDebug($requete_jo); }
+$select = $probes_db->prepare($requete_jo);
+$select -> execute;
+while( my ($entite_id, $entite_type, $gene_id, $si, $pval, $adjp, $nb_sondes, $est_fiable) = $select -> fetchrow_array){
+    
+    my $entite_ID = "$entite_type-$entite_id";
+
+	$hash_jo_no_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	$hash_jo_no_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $pval;
+	$hash_jo_no_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	$hash_jo_no_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+
+	$hash_jo_fdr{$gene_id}->{$entite_ID}->{"si"}         = $si;
+	$hash_jo_fdr{$gene_id}->{$entite_ID}->{"pval"}       = $adjp;
+	$hash_jo_fdr{$gene_id}->{$entite_ID}->{"nb_sondes"}  = $nb_sondes;
+	$hash_jo_fdr{$gene_id}->{$entite_ID}->{"est_fiable"} = $est_fiable;
+
+}
+$select -> finish;
+
+# ------------------------- Récup infos --------------------------- #
+
+my ($h_genes_ortholgues_humain, $h_genes_ortholgues_souris) = &RequetesCourantes::requete_genes_orthologues($probes_db);
+
+my $h_genes_carac = &RequetesCourantes::requete_genes_caracteristiques($faster_db);
+
+
+# ------------------------- Résultats --------------------------- #
+
+# B/A inclusion NO FDR
+process("inclusion", \%hash_ba_inclusion_no_fdr, \%hash_dc_no_fdr, \%hash_jo_no_fdr, $f_transcription_no_fdr_ba_inclusion);
+
+# B/A inclusion FDR
+process("inclusion", \%hash_ba_inclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_transcription_fdr_ba_inclusion);
+
+# B/A inclusion NO FDR
+process("exclusion", \%hash_ba_exclusion_no_fdr, \%hash_dc_no_fdr, \%hash_jo_no_fdr, $f_transcription_no_fdr_ba_exclusion);
+
+# B/A exclusion FDR
+process("exclusion", \%hash_ba_exclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_transcription_no_fdr_ba_exclusion);
+
+
+if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Fin : ".`date`); }
+
+exit;
+
+# ------------------------------------------------------------------ #
+#                              Subroutines                           #
+# ------------------------------------------------------------------ #
+
+sub get_conditions{
+	
+	my @puces_condA = ();
+	my @puces_condB = ();
+	my @puces_condC = ();
+	my @puces_condD = ();
+	
+    # Récupère le nom des puces
+    my $requete =
+        "SELECT `name`, `type`, `num`
+        FROM `chips`
+        WHERE `id_project` = $projet_num ;" ;
+    $select = $probes_db->prepare($requete);
+    $select -> execute;
+    while( my ($nom_puce, $type_puce, $num_puce) = $select -> fetchrow_array){
+        
+        # Puces des conditions A et B
+        if ( $type_puce eq "control" ){
+        
+            # Puces de la condition A
+            if ( $num_puce > 0 && $num_puce <= $nb_replicats) {
+                push(@puces_condA, $nom_puce);
+            # Puces de la condition B
+            }else{
+                push(@puces_condB, $nom_puce);
+            }
+
+        # Puces des conditions C et D
+        }else{
+
+            # Puces de la condition C
+            if ( $num_puce > 0 && $num_puce <= $nb_replicats) {
+                push(@puces_condC, $nom_puce);
+            # Puces de la condition D
+            }else{
+                push(@puces_condD, $nom_puce);
+            }
+        
+        }
+
+    }
+    $select -> finish;
+
+    $f_notice->set_column(0, 0, 30);
+
+    my $num_ligne = 9;
+    my @entete = ('Condition A');
+    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
+    foreach my $nom_puce (@puces_condA){
+        $num_ligne++;
+        my @array_temp = ($nom_puce);
+        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
+    }
+    $num_ligne++; $num_ligne++;
+    @entete = ('Condition B');
+    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
+    foreach my $nom_puce (@puces_condB){
+        $num_ligne++;
+        my @array_temp = ($nom_puce);
+        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
+    }
+    $num_ligne++; $num_ligne++;
+    @entete = ('Condition C');
+    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
+    foreach my $nom_puce (@puces_condC){
+        $num_ligne++;
+        my @array_temp = ($nom_puce);
+        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
+    }
+    $num_ligne++; $num_ligne++;
+    @entete = ('Condition D');
+    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
+    foreach my $nom_puce (@puces_condD){
+        $num_ligne++;
+        my @array_temp = ($nom_puce);
+        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
+    }
+    
+}
+
+# ------------------------------------------------------------------ #
+sub setting_columns {
+    my($feuille) = @_;
+
+    $feuille->set_column(0, 30, 11);
+    $feuille->set_column(2, 4, 22);
+    $feuille->set_column(5, 5, 24);
+    $feuille->set_column(6, 6, 14);
+    $feuille->set_column(7, 9, 22);
+    $feuille->set_column(8, 8, 25);
+
+}
+# ------------------------------------------------------------------ #
+sub merging_columns{
+    my($feuille) = @_;
+    
+=pud
+    $feuille->merge_range('A1:F1', 'Gene information', $format_merge_entete);
+    $feuille->merge_range('G1:I1', 'Event information', $format_merge_entete);
+    $feuille->merge_range('J1:O1', 'B/A = O', $format_merge_entete);
+    $feuille->merge_range('P1:U1', 'D/C = J', $format_merge_entete);
+    $feuille->merge_range('V1:Z1', 'J/O = P', $format_merge_entete);
+=cut
+	
+}
+#------------------------------------------------------------------#
+sub process {
+
+    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("============= In process ================"); }
+
+    my ($type_event_ba, $hash_reg_ba, $hash_dc, $hash_jo, $feuille) = @_;
+    
+    my $num_ligne = 1;
+
+    # Traitement gène par gène des gènes régulés en B/A
+    while(my ($gene_id, $hash_entites) = each %$hash_reg_ba){
+        
+        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("[GeneCourant]".$gene_id); }
+        
+
+	    # On récupère les infos du gène courant
+	        
+	    my $gene_infos   = $h_genes_carac->{$gene_id};
+	    my $hash_ensembl = &FonctionsXls::get_gene_identifiants_ensembl($gene_infos->{"ensembl"}, $h_genes_ortholgues_humain, $h_genes_ortholgues_souris);
+	    my @data_gene    = ($gene_id, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, $gene_infos->{"chr"}."(".$gene_infos->{"strand"}."):".$gene_infos->{"start"}."-".$gene_infos->{"end"});
+            
+            
+        # Traitement entité par entité
+        while(my ($entite_id, $hash_ba) = each %$hash_entites){
+        
+            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("[EntiteCouranteID]".$entite_id); }
+
+    	    # On récupère les infos de l'entité courante
+    	    my @split          = split(/-/, $entite_id);
+            my $h_carac_entite = &FonctionsXls::requete_entite_caracteristiques_xls($probes_db, $orga, $split[1], $split[0]);
+            my @data_entite    = ($h_carac_entite->{"nom_type"}, $h_carac_entite->{"position"}, $gene_id."_".$h_carac_entite->{"position"}, $h_carac_entite->{"sequence"});
+            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("[DataEntite]".join(', ', @data_entite)); }
+            
+            # On ne traite l'entité que si elle n'est pas égale à l'exon
+            if( $h_carac_entite->{"num_type"} == 1 || ( $h_carac_entite->{"num_type"} != 1 && $h_carac_entite->{"is_exon"} != 1 ) ){
+    	    
+
+                # B/A
+                
+                $hash_ba->{"link"}     = "http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_ab".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+                my ($reg_ba, $si_ba)   = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_ba->{"si"});
+                if ($reg_ba eq "down"){ $si_ba = -$si_ba; }
+                $hash_ba->{"reg"}      = $reg_ba;
+                $hash_ba->{"si"}       = $si_ba;
+                my @data_ba            = ($hash_ba->{"link"}, $hash_ba->{"reg"}, $hash_ba->{"si"}, $hash_ba->{"pval"}, $hash_ba->{"est_fiable"}, $hash_ba->{"nb_sondes"});
+                if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataB/A:[Link]".$hash_ba->{"link"}."[Reg]".$hash_ba->{"reg"}."[SI]".$hash_ba->{"si"}."[Pval]".$hash_ba->{"pval"}."[EstFiable]".$hash_ba->{"est_fiable"}."[NbSondes]".$hash_ba->{"nb_sondes"}); }
+            
+            
+                # D/C
+                
+                my @data_dc = ();
+                if ( $hash_dc->{$gene_id}->{$entite_id}->{"si"} ){
+                    $hash_dc->{$gene_id}->{$entite_id}->{"link"} = "http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_cd".    $orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+                    my ($reg_dc, $si_dc)                         = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_dc->{$gene_id}->{$entite_id}->{"si"});
+                    if ($reg_dc eq "down"){               $si_dc = -$si_dc; }
+                    $hash_dc->{$gene_id}->{$entite_id}->{"si"}   = $si_dc;
+                    $hash_dc->{$gene_id}->{$entite_id}->{"reg"}  = $reg_dc;
+                    @data_dc = ($hash_dc->{$gene_id}->{$entite_id}->{"link"}, $hash_dc->{$gene_id}->{$entite_id}->{"reg"}, $hash_dc->{$gene_id}->{$entite_id}->{"si"}, $hash_dc->{$gene_id}->{$entite_id}->{"pval"}, $hash_dc->{$gene_id}->{$entite_id}->{"est_fiable"}, $hash_dc->{$gene_id}->{$entite_id}->{"nb_sondes"});
+                }else{
+                    @data_dc = ("-", "-", "-", "-", "-", "-");
+                }
+                if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataD/C:[Link]".$hash_dc->{$gene_id}->{$entite_id}->{"link"}."[Reg]".$hash_dc->{$gene_id}->{$entite_id}->{"reg"}."[SI]".$hash_dc->{$gene_id}->{$entite_id}->{"si"}."[Pval]".$hash_dc->{$gene_id}->{$entite_id}->{"pval"}."[EstFiable]".$hash_dc->{$gene_id}->{$entite_id}->{"est_fiable"}."[NbSondes]".$hash_dc->{$gene_id}->{$entite_id}->{"nb_sondes"}); }
+            
+            
+                # J/O
+            
+                my @data_jo = ();
+                if( $hash_jo->{$gene_id}->{$entite_id}->{"si"} ){
+                    
+                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Process J/O"); }
+                    
+                    # On ne peut interpréter J/O que si B/A et D/C ont été calculés
+                    if( $data_dc[0] ne "-" ){
+            
+                        my ($reg_jo, $si_jo) = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_jo->{$gene_id}->{$entite_id}->{"si"});
+                
+                        # On détermine l'effet de la déplétion
+                    
+                        # B/A est une inclusion
+                        if ( $type_event_ba eq "inclusion" ){
+
+                            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Inclusion"); }
+                            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("[SiD/C]".$hash_dc->{$gene_id}->{$entite_id}->{"si"}."[SiB/A]".$hash_ba->{"si"}); }
+
+                            # D/C est une exclusion ou une inclusion moins importante que B/A
+                            if ( $hash_dc->{$gene_id}->{$entite_id}->{"si"} < $hash_ba->{"si"} ){
+                                $hash_jo->{$gene_id}->{$entite_id}->{"effet"}  = "Affaiblit";
+                                $hash_jo->{$gene_id}->{$entite_id}->{"si"}     = -$si_jo;
+
+                            # D/C est une inclusion plus importante
+                            }elsif( $hash_dc->{$gene_id}->{$entite_id}->{"si"} >= $hash_ba->{"si"} ){
+                                $hash_jo->{$gene_id}->{$entite_id}->{"effet"}  = "Renforce";
+                                $hash_jo->{$gene_id}->{$entite_id}->{"si"}     = $si_jo;
+                            }
+
+                        # B/A est une exclusion
+                        }elsif( $type_event_ba eq "exclusion" ){
+
+                            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Inclusion"); }
+                            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("[SiD/C]".$hash_dc->{$gene_id}->{$entite_id}->{"si"}."[SiB/A]".$hash_ba->{"si"}); }
+
+                            # D/C est une exclusion moins importante
+                            if ( $hash_dc->{$gene_id}->{$entite_id}->{"si"} < $hash_ba->{"si"} ){
+                                $hash_jo->{$gene_id}->{$entite_id}->{"effet"}  = "Renforce";
+                                $hash_jo->{$gene_id}->{$entite_id}->{"si"}     = $si_jo;
+
+                            # D/C est une inclusion ou une exlusion moins importante que B/A
+                            }elsif( $hash_dc->{$gene_id}->{$entite_id}->{"si"} >= $hash_ba->{"si"} ){
+                                $hash_jo->{$gene_id}->{$entite_id}->{"effet"}  = "Affaiblit";
+                                $hash_jo->{$gene_id}->{$entite_id}->{"si"}     = -$si_jo;
+                            }
+
+                        }
+                        # On ajoute la catégorie "ça fait rien"
+                        if ( abs($hash_jo->{$gene_id}->{$entite_id}->{"si"}) < $seuil_epi_j_vs_o ) {
+                            $hash_jo->{$gene_id}->{$entite_id}->{"effet"}  = "Peu d'effet";
+                        }
+                
+                        @data_jo = ($hash_jo->{$gene_id}->{$entite_id}->{"effet"}, $hash_jo->{$gene_id}->{$entite_id}->{"si"}, $hash_jo->{$gene_id}->{$entite_id}->{"pval"}, $hash_jo->{$gene_id}->{$entite_id}->{"est_fiable"}, $hash_jo->{$gene_id}->{$entite_id}->{"nb_sondes"});
+                    
+                    # Pas de D/C -> pas d'interprétation de J/O
+                    }else{
+                        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataD/C=NULL => DataJ/O=NULL"); }
+                        @data_jo = ("-", "-", "-", "-", "-");
+                    }
+
+                }else{
+                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataJ/O=NULL"); }
+                    @data_jo = ("-", "-", "-", "-", "-");
+                }
+        
+                if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataJ/O:[Effet]".$hash_jo->{$gene_id}->{$entite_id}->{"effet"}."[SI]".$hash_jo->{$gene_id}->{$entite_id}->{"si"}."[Pval]".$hash_jo->{$gene_id}->{$entite_id}->{"pval"}."[Est_fiable]".$hash_jo->{$gene_id}->{$entite_id}->{"est_fiable"}."[Nb_sondes]".$hash_jo->{$gene_id}->{$entite_id}->{"nb_sondes"}); }
+            
+            
+                # Ecriture
+                my @data = (@data_gene, @data_entite, @data_ba, @data_dc, @data_jo);
+                if ( $data_jo[0] ne "-" ) {
+                    if ( $hash_jo->{$gene_id}->{$entite_id}->{"pval"} > $seuil_pval || $hash_jo->{$gene_id}->{$entite_id}->{"est_fiable"} == 0 || $hash_jo->{$gene_id}->{$entite_id}->{"effet"} eq "Peu d'effet" ) {
+                        &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format_cell_mauv);
+                    }else{
+                        &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format_resume_cell);
+                    }
+                }else{
+                    &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format_cell_mauv);
+                }
+                
+                # On incrémente le nb d'entités traitées
+                $num_ligne++;
+        
+            
+            }
+            
+            
+        }
+
+    }
+    
+    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("============= Out process ================"); }
+    
+}
+# ------------------------------------------------------------------ #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
