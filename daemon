@@ -45,31 +45,34 @@ def do_job(wd, job, sema):
 	id_job = job[0];
 
 	if(job[3] == 'qc'):
-		id_analyse = job[1]
+		id_elem = job[1]
 		algo = 'qc'
 	if(job[3] == 'preprocessing'):
-		id_analyse = job[1]
+		id_elem = job[1]
 		algo = 'correction'
-	if(job[3] == 'simple'):
-		id_analyse = job[2]
-		algo = 'analyse_simple'
-	if(job[3] == 'simple'):
-		id_analyse = job[2]
-		algo = 'analyse_simple'
+	if(job[3] == 'analysis'):
+		id_elem = job[2]
+		if(job[4] == 'simple'):
+			algo = 'analyse_simple'
+		if(job[4] == 'compose'):
+			algo = 'analyse_compose'
 	if(job[3] == 'excels'):
-		id_analyse = job[2]
-		algo = 'create_excels'
+		id_elem = job[2]
+		if(job[4] == 'simple'):
+			algo = 'excels_simple'
+		if(job[4] == 'compose'):
+			algo = 'excels_compose'
 
 	dbh = MySQLdb.connect(host = DBHOST, user = DBUSER, passwd = DBPASS, db = DBNAME)
 	cursor = dbh.cursor()
 	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
 	log_file = open(config['log_file'], 'a')
-	log_file.write(id_analyse + ' ' + algo + ' ' + now())
+	log_file.write(id_elem + ' ' + algo + ' ' + now())
 	log_file.write("\n")
 
 	subprocess.call(
-		[wd + '/' + algo, str(id_analyse)],
+		[wd + '/' + algo, str(id_elem)],
 		stdout=log_file,
 		stderr=subprocess.STDOUT,
 	)
@@ -95,7 +98,7 @@ while(1):
 	while(1):
 
 		cursor = dbh.cursor()
-		cursor.execute('SELECT id, id_project, id_analysis, type FROM jobs WHERE status = %(status)s', {'status':'starting'})
+		cursor.execute('SELECT j.id, j.id_project, j.id_analysis, j.type, a.type FROM jobs AS j LEFT JOIN analyses AS a ON a.id = j.id_analysis WHERE j.status = %(status)s', {'status':'starting'})
 		jobs = cursor.fetchall()
 
 		for job in jobs:
