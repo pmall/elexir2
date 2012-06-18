@@ -98,6 +98,11 @@ simple:
   seuil_nb_sondes_min_robust: 3
   nb_exons_min_homogene: 4
   nb_min_par_exon_homogene: 2
+  excel:
+    seuil_trans: 1.2 # En base 10 !
+    seuil_epissage: 1.45 # En base 10 !
+    seuil_pval: 0.05
+    seuil_fc_gene: 2
 
 compose:
   gc_max: 17
@@ -110,9 +115,9 @@ compose:
   seuil_nb_sondes_min_robust: 3
   nb_exons_min_homogene: 4
   nb_min_par_exon_homogene: 2
-
-excel:
-  seuil_transcription: 1.2 # En base 10 !
-  seuil_epissage: 1.45 # En base 10 !
-  seuil_pval: 0.05
-  seuil_fc_gene: 2
+  excel:
+    seuil_trans_simple: 1.45 # En base 10 !
+    seuil_trans_j_vs_o: 1.2 # En base 10 !
+    seuil_epissage: 1.45 # En base 10 !
+    seuil_pval: 0.05
+    seuil_fc_gene: 2

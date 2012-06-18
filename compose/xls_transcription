@@ -1,96 +1,120 @@
 #!/usr/bin/perl
 use warnings;
 use strict;
-use Switch;
+use YAML::XS qw(LoadFile);
 use DBI;
+use File::Path qw(make_path);
 use Spreadsheet::WriteExcel;
-use FindBin;
-use lib "$FindBin::Bin/../../lib";
-use Util::ManipulationStruct;
-use Util::Math;
-use Util::Logger;
-use Traitement_resultats::ResumeAnalyse;
+use FindBin qw($Bin);
+use lib "$FindBin::Bin/../lib";
+use Format;
+use Math qw(round);
 use Analyse::RequetesCourantes;
 use Traitement_resultats::FonctionsXls;
-use Cwd qw[abs_path];
-use File::Basename;
 
-#-------------------------------------------------------------------#
-#                             Paramètres                            #
-#-------------------------------------------------------------------#
+# ==============================================================================
+# Parametres
+# ==============================================================================
 
-# Arguments passés au script
-my ($projet_num) = @ARGV;
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
 
-# On crée la config
-my ($name, $path) = fileparse(abs_path($0));
-require $path . '../../../Config.pm';
-my $config = Config->new($path . '../../../config.yml');
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
 
-# On set le logger
-my $_logger = Logger->new("Xls_trans_script", 0);
-
-#-------------------------------------------------------------------#
-#                            Traitement                             #
-#-------------------------------------------------------------------#
-
-if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Début traitement : ".`date`); }
-
-# Connexion à misea
-my $probes_db = DBI->connect("DBI:mysql:".$config->dbname_misea.":".$config->host_misea, $config->user_misea, $config->pass_misea) || die "Connection à ".$config->dbname_misea." impossible";
-
-# Récupère les infos du projet nécessaire au traitement
-my $project_infos = $config->get_project_infos($probes_db, $projet_num);
-my $projet_dir    = $project_infos->{"dir"};
-my $name_project  = $project_infos->{"name"};
-my $orga          = $project_infos->{"organism"};
-my $est_paire     = $project_infos->{"est_paire"};
-my $nb_repl_cont  = $project_infos->{"nb_rep_cont"};
-my $nb_repl_test  = $project_infos->{"nb_rep_test"};
-
-# On maj le nombre de réplicats par condition
-my $nb_replicats = ($nb_repl_cont/2);
-
-# Connexion à fasterdb
-my $faster_db = DBI->connect("DBI:mysql:".$config->dbname_faster."$orga:".$config->host_faster, $config->user_faster, $config->pass_faster) || die "Connection à ".$config->dbname_faster." impossible";
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
 
 # -- Paramètres de sélection pour les résulats -- #
-my $seuil_trans_simple     = 0.5360529002;
-my $seuil_trans_j_vs_o     = 1.2;
-my $seuil_pval             = 0.05;
-my $seuil_fiabilite_fcGene = 2;
+my $seuil_trans_simple = $config->{'compose'}{'excel'}{'seuil_trans_simple'};
+my $seuil_trans_j_vs_o = $config->{'compose'}{'excel'}{'seuil_trans_j_vs_o'};
+my $seuil_pval = $config->{'compose'}{'excel'}{'seuil_pval'};
+my $seuil_fiabilite_fcGene = $config->{'compose'}{'excel'}{'seuil_fc_gene'};
 
+# Répertoire de sortie 
+my $dir_xls = $config->{'dir_xls'};
 
-#-------------------------------------------------------------------#
-#                          Fichier de sortie                        #
-#-------------------------------------------------------------------#
+# ==============================================================================
+# Connection à elexir et préparation des requetes
+# ==============================================================================
 
-my $rep_sortie = $config->dir_xls;
+my $probes_db = DBI->connect(
+	"DBI:mysql:" . $db_name . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
 
-# Création des répertoires de sortie s'ils n'existe pas déjà
-( !(-d "$rep_sortie/$projet_dir") ) ? `mkdir $rep_sortie/$projet_dir` : 0;
-( !(-d "$rep_sortie/$projet_dir/$projet_num") ) ? `mkdir $rep_sortie/$projet_dir/$projet_num` : 0;
-( !(-d "$rep_sortie/log") ) ? `mkdir $rep_sortie/log` : 0;
-( !(-d "$rep_sortie/log/$projet_dir") ) ? `mkdir $rep_sortie/log/$projet_dir` : 0;
-( !(-d "$rep_sortie/log/$projet_dir/$projet_num") ) ? `mkdir $rep_sortie/log/$projet_dir/$projet_num` : 0;
+# On selectionne les infos de l'analyse
+my $select_infos_analyse_sth = $probes_db->prepare(
+	"SELECT p.id AS id_project, p.organism, a.name, a.version, a.type,
+	COUNT(DISTINCT ca.name) AS nb_rep_cont, COUNT(DISTINCT cb.name) AS nb_rep_test
+	FROM analyses AS a, projects AS p, groups AS la, groups AS lb, chips AS ca, chips AS cb
+	WHERE a.id_project = p.id
+	AND a.id = la.id_analysis
+	AND a.id = lb.id_analysis
+	AND la.letter = 'A'
+	AND lb.letter = 'B'
+	AND p.id = ca.id_project
+	AND p.id = cb.id_project
+	AND la.`condition` = ca.`condition`
+	AND lb.`condition` = cb.`condition`
+	AND a.id = ?
+	GROUP BY p.id"
+);
 
-# -- Fichier excel -- #
-my $nom_fichier_sortie = $name_project."_transcription" ;
-my $resultat = Spreadsheet::WriteExcel->new("$rep_sortie/$projet_dir/$projet_num/$nom_fichier_sortie.xls");
+# ==============================================================================
+# On récupère les infos de l'analyse
+# ==============================================================================
+
+$select_infos_analyse_sth->execute($id_analyse);
+
+my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
+
+die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+# ==============================================================================
+# On récupère les infos dont on a besoin selon les infos de l'analyse
+# ==============================================================================
+
+my $id_projet = $infos_analyse->{'id_project'};
+my $version = $infos_analyse->{'version'};
+my $orga = $infos_analyse->{'organism'};
+my $nb_repl_cont = $infos_analyse->{'nb_rep_cont'};
+my $nb_repl_test = $infos_analyse->{'nb_rep_test'};
+my $name = $infos_analyse->{'name'};
+
+# on crée les variables du script qui déendent de l'analyse
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$version}{$orga};
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
+my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
+my $fichier_sortie = $dir_sortie . '/' . $name . '_transcription.xls';
+
+# On crée les dossier
+make_path($dir_sortie);
+
+# ==============================================================================
+# On se connecte a fasterdb
+# ==============================================================================
+
+my $faster_db = DBI->connect(
+	"DBI:mysql:" . $base_fasterdb . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# ==============================================================================
+# On initialise le fichier
+# ==============================================================================
+
+my $resultat = Spreadsheet::WriteExcel->new($fichier_sortie);
 my $f_notice = $resultat->add_worksheet('Resume de l\'analyse');
 my $f_transcription_no_fdr_ba_inclusion = $resultat->add_worksheet('NO FDR - B vs A > 1.5');
 my $f_transcription_no_fdr_ba_exclusion = $resultat->add_worksheet('NO FDR - B vs A < -1.5');
 my $f_transcription_fdr_ba_inclusion = $resultat->add_worksheet('FDR - B vs A > 1.5');
 my $f_transcription_fdr_ba_exclusion = $resultat->add_worksheet('FDR - B vs A < -1.5');
-
-# -- Fichier log -- #
-open (LOG, ">$rep_sortie/log/$projet_dir/$projet_num/$nom_fichier_sortie.txt") || die ("Erreur d'ouverture de LOG $rep_sortie/log/$projet_dir/$projet_num/$nom_fichier_sortie.txt") ;
-print LOG "===================================================\n";
-print LOG `echo "\t\$\(date)"`;
-print LOG "\t$orga : projet $projet_num \n";
-print LOG "\tFichier sortie : $rep_sortie/$projet_dir/$projet_num/$nom_fichier_sortie.xls\n";
-print LOG "===================================================\n\n";
-
 
 #-------------------------------------------------------------------#
 #                           Formats du fichier                      #
@@ -145,12 +169,11 @@ my @entete_gene_trans = ('Fasterdb id', 'Symbol', 'Name', 'Human Ensembl id', 'M
 # ---------------------------- Resume ----------------------------- #
 
 # Date
-my ($string_date, $h_date) = &General::date();
-$f_notice->write(0, 0, $string_date, $format_cell_no_center);
+$f_notice->write(0, 0, date(), $format_cell_no_center);
 
 # Paramètres utilisés
 $f_notice->write(2, 0, "Parametres utilises", $format_resume_titre);
-my @parametre_fc_ba   = ("Seuil fold B/A", &Math::arrondi(&Math::base10($seuil_trans_simple), 2));
+my @parametre_fc_ba   = ("Seuil fold B/A", round($seuil_trans_simple, 2));
 my @parametre_pval_ba = ("Seuil p-value B/A ", $seuil_pval);
 my @parametre_fc_jo   = ("Seuil fold J/O", $seuil_trans_j_vs_o);
 my @parametre_pval_jo = ("Seuil p-value J/O ", $seuil_pval);
@@ -160,20 +183,9 @@ my @parametre_pval_jo = ("Seuil p-value J/O ", $seuil_pval);
 &FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 6, $format_resume_cell);
 
 # Conditions
-get_conditions();
+#get_conditions();
 
-# On récupère les project_id des analyses simples
-my $requete = "SELECT `id` FROM `projects` WHERE `name` LIKE '".$name_project."_simple_ab' ; ";
-my $select = $probes_db->prepare($requete);
-$select -> execute;
-my $projet_num_simple_ab = $select -> fetchrow_array;
-$select -> finish;
-$requete = "SELECT `id` FROM `projects` WHERE `name` LIKE '".$name_project."_simple_cd' ; ";
-$select = $probes_db->prepare($requete);
-$select -> execute;
-my $projet_num_simple_cd = $select -> fetchrow_array;
-$select -> finish;
-
+my $select;
 
 # Récupération des événements B/A régulés
 my %hash_ba_inclusion_no_fdr = ();
@@ -181,14 +193,16 @@ my %hash_ba_inclusion_fdr    = ();
 my %hash_ba_exclusion_no_fdr = ();
 my %hash_ba_exclusion_fdr    = ();
 my $requete_ba_inclusion =
-    "SELECT `gene_id`, `trans_fc`, `trans_pval`, `trans_adjp`, `trans_nb_sondes`, `trans_nb_exons`
-    FROM `".$projet_num_simple_ab."_transcription` ;" ;
+    "SELECT gene_id, fc_ba, pval_ba, pval_ba, nb_sondes_ba, nb_exons_ba
+    FROM $table_trans"; #faut récupérer les pvalue ajustées 
 $select = $probes_db->prepare($requete_ba_inclusion);
 $select -> execute;
 while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
 
+    my $fc_a_tester = ($fc >= 1) ? $fc : -1/$fc;
+
     # B/A <= -1.45 -> Exclusion
-    if ( $fc <= -$seuil_trans_simple ) {
+    if ( $fc_a_tester <= -$seuil_trans_simple ) {
     
 	    if( $pval <= $seuil_pval ){
 	        $hash_ba_exclusion_no_fdr{$gene_id}->{"fc"}        = $fc;
@@ -204,7 +218,7 @@ while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetc
         }
     
     # B/A >= 1.45 -> Inclusion
-    }elsif ( $fc >= $seuil_trans_simple ){
+    }elsif ( $fc_a_tester >= $seuil_trans_simple ){
     
 	    if( $pval <= $seuil_pval ){
 	        $hash_ba_inclusion_no_fdr{$gene_id}->{"fc"}        = $fc;
@@ -229,8 +243,8 @@ $select -> finish;
 my %hash_dc_no_fdr = ();
 my %hash_dc_fdr = ();
 my $requete_dc =
-    "SELECT `gene_id`, `trans_fc`, `trans_pval`, `trans_adjp`, `trans_nb_sondes`, `trans_nb_exons`
-    FROM `".$projet_num_simple_cd."_transcription` ;" ;
+    "SELECT gene_id, fc_dc, pval_dc, pval_dc, nb_sondes_dc, nb_exons_dc
+    FROM $table_trans"; #faut récupérer les pvalue ajustées 
 $select = $probes_db->prepare($requete_dc);
 $select -> execute;
 while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
@@ -252,8 +266,8 @@ $select -> finish;
 my %hash_jo_no_fdr = ();
 my %hash_jo_fdr = ();
 my $requete_jo =
-    "SELECT `gene_id`, `fc`, `pval`, `adjp`, `nb_sondes`, `nb_exons`
-    FROM `".$projet_num."_transcription` ;" ;
+    "SELECT gene_id, fc_oj, pval_oj, pval_oj, nb_sondes_oj, nb_exons_oj
+    FROM $table_trans"; #faut récupérer les pvalue ajustées 
 $select = $probes_db->prepare($requete_jo);
 $select -> execute;
 while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
@@ -273,7 +287,7 @@ $select -> finish;
 
 # ------------------------- Récup infos --------------------------- #
 
-my ($h_genes_ortholgues_humain, $h_genes_ortholgues_souris) = &RequetesCourantes::requete_genes_orthologues($probes_db);
+my ($h_genes_ortholgues_humain, $h_genes_ortholgues_souris) = &RequetesCourantes::requete_genes_orthologues($faster_db);
 
 my $h_genes_carac = &RequetesCourantes::requete_genes_caracteristiques($faster_db);
 
@@ -292,16 +306,16 @@ process("exclusion", \%hash_ba_exclusion_no_fdr, \%hash_dc_no_fdr, \%hash_jo_no_
 # B/A exclusion FDR
 process("exclusion", \%hash_ba_exclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_transcription_fdr_ba_exclusion);
 
-
-if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Fin : ".`date`); }
-
-exit;
-
 # ------------------------------------------------------------------ #
 #                              Subroutines                           #
 # ------------------------------------------------------------------ #
 sub get_conditions{
 	
+	# On se sert pas de cette fonction
+	
+	my $projet_num = ''; # pour que ça marche lol
+	my $nb_replicats = 0; # idem
+
 	my @puces_condA = ();
 	my @puces_condB = ();
 	my @puces_condC = ();
@@ -403,16 +417,12 @@ sub merging_columns{
 #------------------------------------------------------------------#
 sub process {
 
-    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("============= In process ================"); }
-
     my ($type_event_ba, $hash_reg_ba, $hash_dc, $hash_jo, $feuille) = @_;
     
     my $num_ligne = 1;
 
     # Traitement gène par gène des gènes régulés en B/A
     while(my ($gene_id, $hash_ba) = each %$hash_reg_ba){
-        
-        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("GENE $gene_id"); }
         
 	    # On récupère les infos du gène courant
 	    
@@ -423,20 +433,19 @@ sub process {
         
         # B/A
         
-        $hash_ba->{"link"}             = "http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_ab".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+        $hash_ba->{"link"}             = ''; #"http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_ab".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
         my ($reg_ba, $fc_ba)           = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_ba->{"fc"});
         if ($reg_ba eq "down"){ $fc_ba = -$fc_ba; }
         $hash_ba->{"reg"}              = $reg_ba;
         $hash_ba->{"fc"}               = $fc_ba;
         my @data_ba = ($hash_ba->{"link"}, $hash_ba->{"reg"}, $hash_ba->{"fc"}, $hash_ba->{"pval"}, $hash_ba->{"nb_sondes"}, $hash_ba->{"nb_exons"});
-        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Regulation B/A : ".$hash_ba->{"link"}.", ".$hash_ba->{"reg"}.", ".$hash_ba->{"fc"}.", ".$hash_ba->{"pval"}.", ".$hash_ba->{"nb_sondes"}.", ".$hash_ba->{"nb_exons"}); }
         
         
         # D/C
         
         my @data_dc = ();
         if ( $hash_dc->{$gene_id}->{"fc"} ){
-            $hash_dc->{$gene_id}->{"link"} = "http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_cd".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
+            $hash_dc->{$gene_id}->{"link"} = ''; #"http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_cd".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
             my ($reg_dc, $fc_dc)           = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_dc->{$gene_id}->{"fc"});
             if ($reg_dc eq "down"){ $fc_dc = -$fc_dc; }
             $hash_dc->{$gene_id}->{"fc"}   = $fc_dc;
@@ -445,7 +454,6 @@ sub process {
         }else{
             @data_dc = ("-", "-", "-", "-", "-", "-");
         }
-        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Regulation D/C : ".$hash_dc->{$gene_id}->{"link"}.", ".$hash_dc->{$gene_id}->{"reg"}.", ".$hash_dc->{$gene_id}->{"fc"}.", ".$hash_dc->{$gene_id}->{"pval"}.", ".$hash_dc->{$gene_id}->{"nb_sondes"}.", ".$hash_dc->{$gene_id}->{"nb_exons"}); }
         
         
         
@@ -453,8 +461,6 @@ sub process {
         
         my @data_jo = ();
         if( $hash_jo->{$gene_id}->{"fc"} ){
-        
-            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Process J/O"); }
 
             # On ne peut interpréter J/O que si B/A et D/C ont été calculés
             if( $data_dc[0] ne "-" ){
@@ -465,9 +471,6 @@ sub process {
             
                 # B/A est une inclusion
                 if ( $type_event_ba eq "inclusion" ){
-
-                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Inclusion"); }
-                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DC:".$hash_dc->{$gene_id}->{"fc"}.", BA:".$hash_ba->{"fc"}); }
 
                     # D/C est une exclusion ou une inclusion moins importante que B/A
                     if ( $hash_dc->{$gene_id}->{"fc"} < $hash_ba->{"fc"} ){
@@ -482,9 +485,6 @@ sub process {
 
                 # B/A est une exclusion
                 }elsif( $type_event_ba eq "exclusion" ){
-
-                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Inclusion"); }
-                    if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DC:".$hash_dc->{$gene_id}->{"fc"}.", BA:".$hash_ba->{"fc"}); }
 
                     # D/C est une exclusion moins importante
                     if ( $hash_dc->{$gene_id}->{"fc"} < $hash_ba->{"fc"} ){
@@ -507,16 +507,12 @@ sub process {
 
             # Pas de D/C -> pas d'interprétation de J/O
             }else{
-                if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataD/C=NULL => DataJ/O=NULL"); }
                 @data_jo = ("-", "-", "-", "-", "-");
             }
 
         }else{
-            if( $_logger->isDebugEnabled() ){ $_logger->doDebug("DataJ/O=NULL"); }
             @data_jo = ("-", "-", "-", "-", "-");
         }
-        
-        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("Regulation J/O : ".$hash_jo->{$gene_id}->{"effet"}.", ".$hash_jo->{$gene_id}->{"fc"}.", ".$hash_jo->{$gene_id}->{"pval"}.", ".$hash_jo->{$gene_id}->{"nb_sondes"}.", ".$hash_jo->{$gene_id}->{"nb_exons"}); }
 
 
         # Ecriture
@@ -529,9 +525,6 @@ sub process {
         
         # On incrémente le nb de gènes traités
         $num_ligne++;
-
-
-        if( $_logger->isDebugEnabled() ){ $_logger->doDebug("============= Out process ================"); }
 
     }
     

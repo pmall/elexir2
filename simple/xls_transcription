@@ -29,9 +29,9 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Paramètres de sélection pour les résulats
-my $seuil_trans = $config->{'excel'}{'seuil_transcription'};
-my $seuil_pval = $config->{'excel'}{'seuil_pval'};
-my $seuil_fiabilite_fcGene = $config->{'excel'}{'seuil_fc_gene'};
+my $seuil_trans = $config->{'simple'}{'excel'}{'seuil_trans'};
+my $seuil_pval = $config->{'simple'}{'excel'}{'seuil_pval'};
+my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
