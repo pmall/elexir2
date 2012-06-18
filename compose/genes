@@ -10,7 +10,6 @@ use Format;
 use Math;
 use Analyse;
 use Stats;
-use Data::Dumper;
 
 # ==============================================================================
 # Parametres
@@ -30,9 +29,12 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Parametres pour l'analyse
-my $gc_max = $config->{'simple'}{'gc_max'};
-my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
-my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
+my $gc_max = $config->{'compose'}{'gc_max'};
+my $nb_occ_max = $config->{'compose'}{'nb_occ_max'};
+my $seuil_dabg = $config->{'compose'}{'seuil_dabg'};
+my $nb_sondes_min_gene = $config->{'compose'}{'nb_sondes_min_gene'};
+my $nb_exon_min_homogene = $config->{'compose'}{'nb_exons_min_homogene'};
+my $nb_min_par_exon_homogene = $config->{'compose'}{'nb_min_par_exon_homogene'}; 
 
 # ==============================================================================
 # On récupère les infos de l'exp
@@ -165,7 +167,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	$select_infos_sondes_sth->finish;
 
 	# Si le gène a moins de six sondes on zappe ça sert a rien
-	next if(scalar(keys %{$infos_sondes}) < 6);
+	next if(scalar(keys %{$infos_sondes}) < $nb_sondes_min_gene);
 
 	# On vire les sondes qui ont pas les bonnes caractéristiques
 	my $ids_probes_ok = [grep {
@@ -175,7 +177,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	} keys %{$infos_sondes}];
 
 	# Si le gène a moins de six sondes avec de bon critères on zappe
-	next if(@{$ids_probes_ok} < 6);
+	next if(@{$ids_probes_ok} < $nb_sondes_min_gene);
 
 	# On récupère les valeurs de dabg de chaque sonde
 	my @sondes_ba = ();
@@ -193,15 +195,15 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		# On calcule le dabg de ab
 		my $dabg_ba = dabg(
 			$infos_analyse->{'design'}->[0]->{'control'},
-			$seuil_dabg,
-			$dabg
+			$dabg,
+			$seuil_dabg
 		);
 
 		# On calcule le dabg de cd
 		my $dabg_dc = dabg(
 			$infos_analyse->{'design'}->[0]->{'test'},
-			$seuil_dabg,
-			$dabg
+			$dabg,
+			$seuil_dabg
 		);
 
 		# Si la sonde est exprimée dans ab ou cd on prend
@@ -222,7 +224,11 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	}
 
 	# Si il n'y a pas six sondes dans chaque comparaison on zappe
-	next if(@sondes_ba < 6 or @sondes_dc < 6 or @sondes_oj < 6);
+	my $ba_not_ok = (@sondes_ba < $nb_sondes_min_gene);
+	my $dc_not_ok = (@sondes_dc < $nb_sondes_min_gene);
+	my $oj_not_ok = (@sondes_oj < $nb_sondes_min_gene);
+
+	next if($ba_not_ok or $dc_not_ok or $oj_not_ok);
 
 	# ======================================================================
 	# Si le gène n'est pas homogène ça sert a rien de continuer
@@ -233,7 +239,13 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
 	$select_nb_exons_gene_sth->finish;
 
-	next if(!homogene($infos_sondes, \@sondes_oj, $nb_exons));
+	next if(!homogene(
+		$infos_sondes,
+		\@sondes_oj,
+		$nb_exons,
+		$nb_exon_min_homogene,
+		$nb_min_par_exon_homogene
+	));
 
 	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription

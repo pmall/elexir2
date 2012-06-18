@@ -3,13 +3,12 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
-use Design;
 use Math;
 use Data::Dumper;
 use Exporter qw(import);
 
 our @EXPORT = qw(get_infos_analyse dabg lissage_transcription
-	lissage_epissage expressions homogene fcs_sonde sis_sonde);
+	lissage_epissage expressions homogene fcs_sonde sis_sonde is_robust);
 
 # ==============================================================================
 # Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
@@ -49,6 +48,7 @@ sub get_infos_analyse{
 	);
 
 	# On défini les conditions de l'analyse
+	my $nb_paires_rep = 0;
 	my $conditions = {};
 
 	# On selectionne les puces
@@ -56,6 +56,9 @@ sub get_infos_analyse{
 
 	# Pour chaque puces
 	while(my($letter, $condition, $num) = $select_chips_sth->fetchrow_array){
+
+		# On compte le nombre de paires de replicats
+		$nb_paires_rep++ if($num > $nb_paires_rep);
 
 		# On défini le nom du sample
 		my $sample = $condition . '_' . $num;
@@ -75,35 +78,19 @@ sub get_infos_analyse{
 
 	$infos_analyse->{'conditions'} = $conditions;
 
-	# On récupère le design de l'analyse
-	$infos_analyse->{'design'} = get_design($infos_analyse);
-
-	# On retourne les infos
-	return $infos_analyse;
-
-}
-
-# ==============================================================================
-# Retourne le design d'une analyse
-# ==============================================================================
-
-sub get_design{
-
-	my($infos_analyse) = @_;
+	# On calcule le nombre de paires de replicats
+	$infos_analyse->{'nb_paires_rep'} = ($infos_analyse->{'paired'})
+		? @{$infos_analyse->{'conditions'}->{'A'}}
+		: 1;
 
 	# On défini le design de l'expérience
 	my $design = [];
-
-	# On calcule le nombre de paires de replicats
-	my $nb_paires_replicats = ($infos_analyse->{'paired'})
-		? @{$infos_analyse->{'conditions'}->{'A'}}
-		: 1;
 
 	# Selon que l'analyse soit simple ou composée, ça change...
 	if($infos_analyse->{'type'} eq 'simple'){
 
 		# Pour chaque paire de replicat
-		for(my $i = 0; $i < $nb_paires_replicats; $i++){
+		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
 			$design->[$i] = {
 				'control' => ($infos_analyse->{'paired'})
@@ -123,7 +110,7 @@ sub get_design{
 		my $test = [];
 
 		# Pour chaque paire de replicat
-		for(my $i = 0; $i < $nb_paires_replicats; $i++){
+		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
 			$control->[$i] = {
 				'control' => ($infos_analyse->{'paired'})
@@ -147,13 +134,16 @@ sub get_design{
 
 		# On intègre les sous comparaisons à la comparaison globale
 		$design->[0] = {
-			'control' => new Design($control),
-			'test' => new Design($test)
+			'control' => bless($control, 'Design'),
+			'test' => bless($test, 'Design')
 		};
 
 	}
 
-	return new Design($design);
+	$infos_analyse->{'design'} = bless($design, 'Design');
+
+	# On retourne les infos
+	return $infos_analyse;
 
 }
 
@@ -218,7 +208,7 @@ sub inter{
 
 sub dabg{
 
-	my($ref_design, $seuil, $sonde) = @_;
+	my($ref_design, $sonde, $seuil) = @_;
 
 	# On reçoit soit un design, soit une liste de samples
 	if(ref($ref_design) eq 'Design'){
@@ -246,7 +236,7 @@ sub dabg{
 	}else{
 
 		# On retourne l'expression de la sonde dans ce réplicat
-		return dabg_replicat($ref_design, $seuil, $sonde);
+		return dabg_replicat($ref_design, $sonde, $seuil);
 
 	}
 
@@ -455,10 +445,6 @@ sub homogene{
 
 	my($infos_sondes, $ref_sondes, $nb_exons, $nb_exons_min,$nb_min_par_exon) = @_;
 
-	# Valeurs par défaut
-	$nb_exons_min //= 4; # /
-	$nb_min_par_exon //= 2; # /
-
 	# Si il y a moin de $nb_exons_min exons, on retourne true
 	return 1 if($nb_exons < $nb_exons_min);
 
@@ -529,14 +515,14 @@ sub fcs_sonde{
 
 sub sis_sonde{
 
-	my($ref_exp, $fc_groupe, $sonde) = @_;
+	my($ref_design, $fc_groupe, $sonde) = @_;
 
 	# On initialise la liste de SIs
 	my @SIs = ();
 
 	# On calcule les SIs
 	# pour ça il faut récupérer les folds déjà
-	my @fcs = fcs_sonde($ref_exp, $sonde);
+	my @fcs = fcs_sonde($ref_design, $sonde);
 
 	# Si de la sonde (cad, fc de la sonde sur fc du groupe)
 	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
@@ -547,14 +533,35 @@ sub sis_sonde{
 }
 
 # ==============================================================================
-# Retourne vrai si les sondes du groupe sont cohérentes
+# Retourne vrai si la liste de SIs est cohérente
 # ==============================================================================
 
 sub is_robust{
 
-	my($ref_sondes, $seuil) = @_;
+	my($ref_SIs, $seuil_si, $seuil_percent, $seuil_nb_sondes_min) = @_;
 
-	return 'kikou';
+	my $nb_SIs = @{$ref_SIs};
+	my $nb_ups = 0;
+	my $nb_downs = 0;
+
+	# Pour chaque si
+	foreach my $SI (@{$ref_SIs}){
+
+		# On compte les SIs up et les SIs down
+		if($SI >= $seuil_si){ $nb_ups++; }
+		if((1/$SI) >= $seuil_si){ $nb_downs++; }
+
+	}
+
+	# On récupère la limite
+	my $limit = int($nb_SIs*$seuil_percent);
+
+	# On regarde si l'entité est globalement up ou down
+	my $is_up = ($nb_ups >= $limit and $nb_ups >= $seuil_nb_sondes_min);
+	my $is_down = ($nb_downs >= $limit and $nb_downs >= $seuil_nb_sondes_min);
+
+	# Si l'entité est up ou down, elle est robuste
+	return ($is_up or $is_down);
 
 }
 

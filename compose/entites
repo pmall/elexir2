@@ -28,10 +28,13 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Parametres pour l'analyse
-my $gc_max = $config->{'simple'}{'gc_max'};
-my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
-my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
-my $seuil_si = $config->{'simple'}{'seuil_si'};
+my $gc_max = $config->{'compose'}{'gc_max'};
+my $nb_occ_max = $config->{'compose'}{'nb_occ_max'};
+my $seuil_dabg = $config->{'compose'}{'seuil_dabg'};
+my $nb_sondes_min_entite = $config->{'compose'}{'nb_sondes_min_entite'};
+my $seuil_si_robust = $config->{'compose'}{'seuil_si_robust'};
+my $seuil_percent_robust = $config->{'simple'}{'seuil_percent_robust'};
+my $seuil_nb_sondes_min_robust = $config->{'simple'}{'seuil_nb_sondes_min_robust'};
 
 # ==============================================================================
 # Préparation des requètes pour les infos du projet
@@ -51,7 +54,7 @@ my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
 # petit raccourcit...
-my $paire = ($infos_analyse->{'paired'});
+my $paire = $infos_analyse->{'paired'};
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
@@ -104,7 +107,7 @@ my $select_intensite_sth = $dbh->prepare(
 
 my @fields_SIs = ();
 
-for(my $i = 0; $i < @{$infos_analyse->{'design'}}; $i++){
+for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
 	push(@fields_SIs, 'SI' . ($i + 1));
 
@@ -165,7 +168,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		$select_infos_sondes_sth->finish;
 
 		# Si on a pas 3 sondes on zappe
-		next if(scalar(keys %{$infos_sondes}) < 3);
+		next if(scalar(keys %{$infos_sondes}) < $nb_sondes_min_entite);
 
 		# On vire les sondes qui ont pas les bonnes caractéristiques
 		my $ids_sondes_ok = [grep {
@@ -175,7 +178,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		} keys %{$infos_sondes}];
 
 		# Si on a pas 3 sondes on zappe
-		next if(@{$ids_sondes_ok} < 3);
+		next if(@{$ids_sondes_ok} < $nb_sondes_min_entite);
 
 		# On récupère les SIs des sondes exprimés
 		my @SIs_sondes = ();
@@ -190,14 +193,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 			my $dabg_ba = dabg(
 				$infos_analyse->{'design'}->[0]->{'control'},
-				$seuil_dabg,
-				$dabg
+				$dabg,
+				$seuil_dabg
 			);
 
 			my $dabg_dc = dabg(
 				$infos_analyse->{'design'}->[0]->{'test'},
-				$seuil_dabg,
-				$dabg
+				$dabg,
+				$seuil_dabg
 			);
 
 			# Si la sonde est exprimé
@@ -209,7 +212,11 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 				$select_intensite_sth->finish;
 
 				# On calcule les SIs de la sonde
-				my @SIs_sonde = sis_sonde($infos_analyse->{'design'}, $gene->{'fc_oj'}, $sonde);
+				my @SIs_sonde = sis_sonde(
+					$infos_analyse->{'design'},
+					$gene->{'fc_oj'},
+					$sonde
+				);
 
 				# Et on les ajoute à la liste des SIs
 				push(@SIs_sondes, \@SIs_sonde);
@@ -219,7 +226,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# Si il n'y a pas trois sondes exprimées on zappe
-		next if(@SIs_sondes < 3);
+		next if(@SIs_sondes < $nb_sondes_min_entite);
 
 		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
@@ -230,8 +237,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @SIs_a_tester = ();
 		my $p_value;
 
-		# => On pourra condenser quand on fera base 10 partout
-
 		# La seule diff c'est que pour np on test avec tout les
 		# si des sondes, avec p on test avec les si des paires
 		# de replicats
@@ -239,26 +244,26 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		# Pour chaque paires de replicat on récupère son SI et les SIs
 		# à tester
-		for(my $i = 0; $i < @{$infos_analyse->{'design'}}; $i++){
+		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
 			# On récupère les SIs du réplicat 
-			my @SIs_paire_replicat = map { @{$_}[$i + 1] } @SIs_sondes;
+			my @SIs_paire_rep = map { @{$_}[$i] } @SIs_sondes;
 
 			# On calcule le SI du réplicat
-			my $SI_paire_replicat = median(@SIs_paire_replicat);
+			my $SI_paire_rep = median(@SIs_paire_rep);
 
 			# On l'ajoute a la liste des SIs de l'entité
-			push(@SIs, $SI_paire_replicat);
+			push(@SIs, $SI_paire_rep);
 
 			# Selon que l'experience est paire ou non on met pas
 			# les mêmes valeurs dans la liste des SIs a tester
 			if($paire){
 
-				push(@SIs_a_tester, $SI_paire_replicat);
+				push(@SIs_a_tester, $SI_paire_rep);
 
 			}else{
 
-				push(@SIs_a_tester, @SIs_paire_replicat);
+				push(@SIs_a_tester, @SIs_paire_rep);
 
 			}
 
@@ -274,35 +279,12 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On calcule si l'entité est "cohérente"
 		# ==============================================================
 
-		# On récupère le nombre de sondes de l'entité
-		my $nb_sondes = @SIs_sondes;
-
-		# Pour chaque sonde on calcule la médiane de ses si
-		# et on compte le nombre de sondes up et de sondes down
-		my $nb_ups = 0;
-		my $nb_downs = 0;
-
-		# Pour chaque sondes
-		foreach my $SIs_sonde (@SIs_sondes){
-
-			# On calcule le SI de la sonde
-			my $si_sonde = median(@{$SIs_sonde});
-
-			# Si la sonde est up ou down on la compte
-			if($si_sonde >= $seuil_si){ $nb_ups++; }
-			if((1/$si_sonde) >= $seuil_si){ $nb_downs++; }
-
-		}
-
-		# On récupère la limite
-		my $limit = int($nb_sondes*3/4);
-
-		# On regarde si l'entité est globalement up ou down
-		my $is_up = ($nb_ups >= $limit);
-		my $is_down = ($nb_downs >= $limit);
-
-		# Si l'entité est up ou down, elle est robuste
-		my $is_robust = ($is_up or $is_down);
+		my $is_robust = is_robust(
+			[map { median(@{$_}) } @SIs_sondes],
+			$seuil_si_robust,
+			$seuil_percent_robust,
+			$seuil_nb_sondes_min_robust
+		);
 
 		# ==============================================================
 		# On ajoute l'entité à la liste des entites
@@ -311,13 +293,13 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @values = ();
 
 		push(@values, $entite->{'id'});
-		push(@values, $gene->{'id_gene'});
+		push(@values, $gene->{'gene_id'});
 		push(@values, $entite->{'type'});
 		push(@values, $entite->{'exon_pos'});
 		push(@values, @SIs) if($paire);
 		push(@values, $SI);
 		push(@values, $p_value);
-		push(@values, $nb_sondes);
+		push(@values, scalar(@SIs_sondes));
 		push(@values, $is_robust);
 
 		$insert_entite_sth->execute(@values);

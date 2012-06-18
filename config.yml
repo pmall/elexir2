@@ -61,16 +61,16 @@ table_entites:
 table_sondes:
   exon:
     fdb1:
-      human: humain_probes_status_fdb1_exon
-      mouse: souris_probes_status_fdb1_exon
+      human: humain_huex_fdb1_probes_status
+      mouse: souris_moex_fdb1_probes_status
     fdb2:
-      human: humain_probes_status_fdb2_exon
-      mouse: souris_probes_status_fdb2_exon
+      human: humain_huex_fdb2_probes_status
+      mouse: souris_moex_fdb2_probes_status
   ggh:
     fdb1:
-      human: humain_probes_status_fdb1_ggh
+      human: humain_ggh_fdb1_probes_status
     fdb2:
-      human: humain_probes_status_fdb2_ggh
+      human: humain_ggh_fdb2_probes_status
 
 table_prom:
   human: humain_prom
@@ -91,7 +91,25 @@ simple:
   gc_max: 17
   nb_occ_max: 1
   seuil_dabg: 0.05
-  seuil_si: 1.1 # En base 10 !
+  nb_sondes_min_gene: 6
+  nb_sondes_min_entite: 3
+  seuil_si_robust: 1.1 # En base 10 !
+  seuil_percent_robust: 0.8
+  seuil_nb_sondes_min_robust: 3
+  nb_exons_min_homogene: 4
+  nb_min_par_exon_homogene: 2
+
+compose:
+  gc_max: 17
+  nb_occ_max: 1
+  seuil_dabg: 0.05
+  nb_sondes_min_gene: 6
+  nb_sondes_min_entite: 3
+  seuil_si_robust: 1.1 # En base 10 !
+  seuil_percent_robust: 0.8
+  seuil_nb_sondes_min_robust: 3
+  nb_exons_min_homogene: 4
+  nb_min_par_exon_homogene: 2
 
 excel:
   seuil_transcription: 1.2 # En base 10 !
