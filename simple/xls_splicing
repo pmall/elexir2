@@ -22,9 +22,6 @@ my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en p
 # On récupère un hash de config
 my $config = LoadFile($FindBin::Bin . '/../config.yml');
 
-# passe est 3'_utr aussi en principe
-my $est_3primeUTR = 0;
-
 # On défini les identifiants pour la bdd
 my $db_host = $config->{'db_host'};
 my $db_user = $config->{'db_user'};
@@ -76,6 +73,13 @@ $select_infos_analyse_sth->execute($id_analyse);
 my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
 
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'simple'){
+
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+
+}
 
 # ==============================================================================
 # On récupère les infos dont on a besoin selon les infos de l'analyse
@@ -201,11 +205,7 @@ my @explication_fc_gene = ("Les entites des genes dont le fc est > 2 sont colore
 
 # Annotation des sondes et des gènes analysés
 #&FonctionsXls::resume_annotation_sondes($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center, "splicing");
-if($est_3primeUTR){
-    #&FonctionsXls::resume_annotation_3primeUTR($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
-}else{
-    #&FonctionsXls::resume_annotation_entites($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
-}
+#&FonctionsXls::resume_annotation_entites($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
 
 # ------------------------- Récup infos --------------------------- #
 
@@ -235,30 +235,17 @@ my $requete;
 
 if ( $est_paire ) {
 
-    if ( $est_3primeUTR ){
         $requete =
             "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, ".join(', ', @select_rep_si_sd).", SIsd, SIsd_pval, SIsd_adjp, psi_control, psi_sd_control, psi_test, psi_sd_test, psi_fc, psi_sd_fc, psi_pval, psi_adjp, nb_sondes
             FROM $table_splicing
-            WHERE entite_type = 8 AND is_robust = 1";
-    }else{
-        $requete =
-            "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, ".join(', ', @select_rep_si_sd).", SIsd, SIsd_pval, SIsd_adjp, psi_control, psi_sd_control, psi_test, psi_sd_test, psi_fc, psi_sd_fc, psi_pval, psi_adjp, nb_sondes
-            FROM $table_splicing
-            WHERE entite_type != 8 AND is_robust = 1";
-    }
+            WHERE is_robust = 1";
 
 }else{
 
-    if ( $est_3primeUTR ){
         $requete =
             "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, SIsd, psi_control, psi_test, psi_fc, nb_sondes
             FROM $table_splicing
-            WHERE entite_type = 8 AND is_robust = 1";
-    }else{
-        $requete =
-            "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, SIsd, psi_control, psi_test, psi_fc, nb_sondes
-            FROM $table_splicing
-            WHERE entite_type != 8 AND is_robust = 1";
+            WHERE is_robust = 1";
     }
 
 }

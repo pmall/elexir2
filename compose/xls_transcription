@@ -75,6 +75,13 @@ my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
 
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'compose'){
+
+	die('Le script composé ne fonctionne que sur les analyses composées :o)');
+
+}
+
 # ==============================================================================
 # On récupère les infos dont on a besoin selon les infos de l'analyse
 # ==============================================================================
@@ -181,9 +188,6 @@ my @parametre_pval_jo = ("Seuil p-value J/O ", $seuil_pval);
 &FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 4, $format_resume_cell);
 &FonctionsXls::ecriture(\@parametre_fc_jo, $f_notice, 5, $format_resume_cell);
 &FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 6, $format_resume_cell);
-
-# Conditions
-#get_conditions();
 
 my $select;
 
@@ -309,91 +313,7 @@ process("exclusion", \%hash_ba_exclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_t
 # ------------------------------------------------------------------ #
 #                              Subroutines                           #
 # ------------------------------------------------------------------ #
-sub get_conditions{
-	
-	# On se sert pas de cette fonction
-	
-	my $projet_num = ''; # pour que ça marche lol
-	my $nb_replicats = 0; # idem
 
-	my @puces_condA = ();
-	my @puces_condB = ();
-	my @puces_condC = ();
-	my @puces_condD = ();
-	
-    # Récupère le nom des puces
-    my $requete =
-        "SELECT `name`, `type`, `num`
-        FROM `chips`
-        WHERE `id_project` = $projet_num ;" ;
-    $select = $probes_db->prepare($requete);
-    $select -> execute;
-    while( my ($nom_puce, $type_puce, $num_puce) = $select -> fetchrow_array){
-        
-        # Puces des conditions A et B
-        if ( $type_puce eq "control" ){
-        
-            # Puces de la condition A
-            if ( $num_puce > 0 && $num_puce <= $nb_replicats) {
-                push(@puces_condA, $nom_puce);
-            # Puces de la condition B
-            }else{
-                push(@puces_condB, $nom_puce);
-            }
-
-        # Puces des conditions C et D
-        }else{
-
-            # Puces de la condition C
-            if ( $num_puce > 0 && $num_puce <= $nb_replicats) {
-                push(@puces_condC, $nom_puce);
-            # Puces de la condition D
-            }else{
-                push(@puces_condD, $nom_puce);
-            }
-        
-        }
-
-    }
-    $select -> finish;
-
-    $f_notice->set_column(0, 0, 30);
-
-    my $num_ligne = 9;
-    my @entete = ('Condition A');
-    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
-    foreach my $nom_puce (@puces_condA){
-        $num_ligne++;
-        my @array_temp = ($nom_puce);
-        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
-    }
-    $num_ligne++; $num_ligne++;
-    @entete = ('Condition B');
-    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
-    foreach my $nom_puce (@puces_condB){
-        $num_ligne++;
-        my @array_temp = ($nom_puce);
-        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
-    }
-    $num_ligne++; $num_ligne++;
-    @entete = ('Condition C');
-    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
-    foreach my $nom_puce (@puces_condC){
-        $num_ligne++;
-        my @array_temp = ($nom_puce);
-        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
-    }
-    $num_ligne++; $num_ligne++;
-    @entete = ('Condition D');
-    &FonctionsXls::ecriture(\@entete, $f_notice, $num_ligne, $format_resume_titre);
-    foreach my $nom_puce (@puces_condD){
-        $num_ligne++;
-        my @array_temp = ($nom_puce);
-        &FonctionsXls::ecriture(\@array_temp, $f_notice, $num_ligne, $format_resume_cell);
-    }
-    
-}
-# ------------------------------------------------------------------ #
 sub setting_columns {
     my($feuille) = @_;
 

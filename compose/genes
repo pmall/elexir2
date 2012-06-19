@@ -10,6 +10,7 @@ use Format;
 use Math;
 use Analyse;
 use Stats;
+use Data::Dumper;
 
 # ==============================================================================
 # Parametres
@@ -122,13 +123,16 @@ my @fields_trans = (
 	'fc_dc DECIMAL(10,5) UNSIGNED NOT NULL',
 	'fc_oj DECIMAL(10,5) UNSIGNED NOT NULL',
 	'pval_ba DECIMAL(12,10) UNSIGNED NOT NULL',
-	'pval_cd DECIMAL(12,10) UNSIGNED NOT NULL',
+	'pval_dc DECIMAL(12,10) UNSIGNED NOT NULL',
 	'pval_oj DECIMAL(12,10) UNSIGNED NOT NULL',
+	'adjp_ba DECIMAL(12,10) UNSIGNED NOT NULL',
+	'adjp_dc DECIMAL(12,10) UNSIGNED NOT NULL',
+	'adjp_oj DECIMAL(12,10) UNSIGNED NOT NULL',
 	'nb_sondes_ba SMALLINT UNSIGNED NOT NULL',
-	'nb_sondes_cd SMALLINT UNSIGNED NOT NULL',
+	'nb_sondes_dc SMALLINT UNSIGNED NOT NULL',
 	'nb_sondes_oj SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_ba SMALLINT UNSIGNED NOT NULL',
-	'nb_exons_cd SMALLINT UNSIGNED NOT NULL',
+	'nb_exons_dc SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_oj SMALLINT UNSIGNED NOT NULL'
 );
 
@@ -228,11 +232,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	}
 
 	# Si il n'y a pas six sondes dans chaque comparaison on zappe
-	my $ba_not_ok = (@sondes_ba < $nb_sondes_min_gene);
-	my $dc_not_ok = (@sondes_dc < $nb_sondes_min_gene);
-	my $oj_not_ok = (@sondes_oj < $nb_sondes_min_gene);
-
-	next if($ba_not_ok or $dc_not_ok or $oj_not_ok);
+	next if(@sondes_ba < $nb_sondes_min_gene);
+	next if(@sondes_dc < $nb_sondes_min_gene);
+	next if(@sondes_oj < $nb_sondes_min_gene);
 
 	# ======================================================================
 	# Si le gène n'est pas homogène ça sert a rien de continuer
@@ -252,72 +254,100 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	));
 
 	# ======================================================================
-	# Calcul des fold change et de la pvalue pour la transcription
+	# Analyse pour les trois comparaisons
 	# ======================================================================
 
-	# On calcul les fold change des sondes
-	my @fcs_ba = map {
-		median(fcs_sonde($infos_analyse->{'design'}->[0]->{'control'}, $_))
-	} @sondes_ba;
+	# Fonction abstraite
+	sub process{
 
-	my @fcs_dc = map {
-		median(fcs_sonde($infos_analyse->{'design'}->[0]->{'test'}, $_))
-	} @sondes_dc;
+		my($infos_analyse, $infos_sondes, $ref_sondes) = @_;
 
-	my @fcs_oj = map {
-		median(fcs_sonde($infos_analyse->{'design'}, $_))
-	} @sondes_oj;
+		my @fcs = map {
+			median(fcs_sonde($infos_analyse, $_))
+		} @{$ref_sondes};
 
-	# le fc du gène est la médiane des fc des sondes
-	my $fc_ba = median(@fcs_ba);
-	my $fc_dc = median(@fcs_dc);
-	my $fc_oj = median(@fcs_oj);
+		my $fc = median(@fcs);
 
-	# On calcule la p value pour la transcription
-	my $p_value_ba = ttest((log2($fc_ba) >= 0), log2(@fcs_ba));
-	my $p_value_dc = ttest((log2($fc_dc) >= 0), log2(@fcs_dc));
-	my $p_value_oj = ttest((log2($fc_oj) >= 0), log2(@fcs_oj));
+		my $p_value = ttest((log2($fc) >= 0), log2(@fcs));
 
-	# ======================================================================
-	# On calcule le nombre de sondes et d'exons utilisés dans l'analyse
-	# ======================================================================
+		my $nb_sondes = @{$ref_sondes};
 
-	# NB sondes utilisées pour la transcription
-	my $nb_sondes_ba = @sondes_ba;
-	my $nb_sondes_dc = @sondes_dc;
-	my $nb_sondes_oj = @sondes_oj;
+		my $nb_exons = scalar(uniq(map {
+			$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+		} @{$ref_sondes}));
 
-	# NB exons cibles par des sondes lors de la transcription
-	my $nb_exons_ba = scalar(uniq(map {
-		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-	} @sondes_ba));
+		return($fc, $p_value, $nb_sondes, $nb_exons);
 
-	my $nb_exons_dc = scalar(uniq(map {
-		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-	} @sondes_dc));
+	}
 
-	my $nb_exons_oj = scalar(uniq(map {
-		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-	} @sondes_oj));
+	# Comparaison B/A
+	my($fc_ba, $p_value_ba, $nb_sondes_ba, $nb_exons_ba) = process(
+		$infos_analyse->{'design'}->[0]->{'control'},
+		$infos_sondes,
+		\@sondes_ba
+	);
+
+	# Comparaison D/C
+	my($fc_dc, $p_value_dc, $nb_sondes_dc, $nb_exons_dc) = process(
+		$infos_analyse->{'design'}->[0]->{'test'},
+		$infos_sondes,
+		\@sondes_dc
+	);
+
+	# Comparaison O/J
+	my($fc_oj, $p_value_oj, $nb_sondes_oj, $nb_exons_oj) = process(
+		$infos_analyse->{'design'},
+		$infos_sondes,
+		\@sondes_oj
+	);
 
 	# ======================================================================
 	# On ajoute le gène a la bdd
 	# ======================================================================
 
+	push(@genes, {
+		'id_gene' => $id_gene,
+		'fc_ba' => $fc_ba,
+		'fc_dc' => $fc_dc,
+		'fc_oj' => $fc_oj,
+		'p_value_ba' => $p_value_ba,
+		'p_value_dc' => $p_value_dc,
+		'p_value_oj' => $p_value_oj,
+		'nb_sondes_ba' => $nb_sondes_ba,
+		'nb_sondes_dc' => $nb_sondes_dc,
+		'nb_sondes_oj' => $nb_sondes_oj,
+		'nb_exons_ba' => $nb_exons_ba,
+		'nb_exons_dc' => $nb_exons_dc,
+		'nb_exons_oj' => $nb_exons_oj
+	});
+
+}
+
+# On calcule les pvalues ajustées
+my @adjp_values_ba = adjust_pvals(map { $_->{'p_value_ba'} } @genes);
+my @adjp_values_dc = adjust_pvals(map { $_->{'p_value_dc'} } @genes);
+my @adjp_values_oj = adjust_pvals(map { $_->{'p_value_oj'} } @genes);
+
+# On ajoute les gènes
+for(my $i = 0; $i < @genes; $i++){
+
 	$insert_gene_sth->execute(
-		$id_gene,
-		$fc_ba,
-		$fc_dc,
-		$fc_oj,
-		$p_value_ba,
-		$p_value_dc,
-		$p_value_oj,
-		$nb_sondes_ba,
-		$nb_sondes_dc,
-		$nb_sondes_oj,
-		$nb_exons_ba,
-		$nb_exons_dc,
-		$nb_exons_oj
+		$genes[$i]->{'id_gene'},
+		$genes[$i]->{'fc_ba'},
+		$genes[$i]->{'fc_dc'},
+		$genes[$i]->{'fc_oj'},
+		$genes[$i]->{'p_value_ba'},
+		$genes[$i]->{'p_value_dc'},
+		$genes[$i]->{'p_value_oj'},
+		$adjp_values_ba[$i],
+		$adjp_values_dc[$i],
+		$adjp_values_oj[$i],
+		$genes[$i]->{'nb_sondes_ba'},
+		$genes[$i]->{'nb_sondes_dc'},
+		$genes[$i]->{'nb_sondes_oj'},
+		$genes[$i]->{'nb_exons_ba'},
+		$genes[$i]->{'nb_exons_dc'},
+		$genes[$i]->{'nb_exons_oj'}
 	);
 
 }

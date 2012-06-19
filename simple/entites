@@ -10,7 +10,6 @@ use Format;
 use Math;
 use Analyse;
 use Stats;
-use Data::Dumper;
 
 # ==============================================================================
 # Parametres
@@ -217,7 +216,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		# On récupère les infos des sondes exprimées
 		my @sondes = ();
-		my @SIs_sondes = ();
 
 		# Pour chaque id de sonde
 		foreach my $id_sonde (@{$ids_sondes_ok}){
@@ -235,16 +233,8 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 				my $sonde = $select_intensite_sth->fetchrow_hashref;
 				$select_intensite_sth->finish;
 
-				# On calcule les SIs des sondes
-				my @SIs_sonde = sis_sonde(
-					$infos_analyse->{'design'},
-					$gene->{'epi_fc'},
-					$sonde
-				);
-
 				# On ajoute la sonde et ses SIs aux listes
 				push(@sondes, $sonde);
-				push(@SIs_sondes, \@SIs_sonde);
 
 			}
 
@@ -259,6 +249,24 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		# On calcule l'expression de l'entité
 		my @expr = expressions($infos_analyse->{'design'}, \@sondes);
+
+		# ==============================================================
+		# On calcule les SIs des sondes
+		# ==============================================================
+
+		my @SIs_sondes = ();
+
+		foreach my $sonde (@sondes){
+
+			my @SIs_sonde = sis_sonde(
+				$infos_analyse->{'design'},
+				$gene->{'epi_fc'},
+				$sonde
+			);
+
+			push(@SIs_sondes, \@SIs_sonde);
+
+		}
 
 		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
