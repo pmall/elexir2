@@ -22,9 +22,6 @@ my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en p
 # On récupère un hash de config
 my $config = LoadFile($FindBin::Bin . '/../config.yml');
 
-# passe est 3'_utr aussi en principe
-my $est_3primeUTR = 0;
-
 # On défini les identifiants pour la bdd
 my $db_host = $config->{'db_host'};
 my $db_user = $config->{'db_user'};
@@ -32,9 +29,9 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Paramètres de sélection pour les résulats
-my $seuil_epissage = $config->{'excel'}{'seuil_epissage'};
-my $seuil_pval = $config->{'excel'}{'seuil_pval'};
-my $seuil_fiabilite_fcGene = $config->{'excel'}{'seuil_fc_gene'};
+my $seuil_epissage = $config->{'simple'}{'excel'}{'seuil_epissage'};
+my $seuil_pval = $config->{'simple'}{'excel'}{'seuil_pval'};
+my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -77,6 +74,13 @@ my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
 
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
 
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'simple'){
+
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+
+}
+
 # ==============================================================================
 # On récupère les infos dont on a besoin selon les infos de l'analyse
 # ==============================================================================
@@ -100,7 +104,7 @@ my $table_entites = $config->{'table_entites'}{$version}{$orga};
 my $table_prom = $config->{'table_prom'}{$orga};
 my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage_psi.xls';
+my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage_SI.xls';
 
 # On crée les dossier
 make_path($dir_sortie);
@@ -119,7 +123,7 @@ my $faster_db = DBI->connect(
 # On initialise le fichier
 # ==============================================================================
 
-# Fichier excel de sortie
+# Fichier
 my $resultat			= Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # Feuilles
@@ -173,7 +177,7 @@ if( $est_paire ) {
 }
 
 # En-tetes des onglets
-my @entete_epissage = ('Gene', 'Fasterdb id', 'Link Misea', 'Symbol', 'Name', 'Human Ensembl id', 'Mouse Ensembl id', 'Chr Position', 'Regulation', 'FC', 'Pvalue', 'AS Event Type', 'Exon position', 'Nb probes analysed', '% CB probes in entity', 'AS Event Sequence', @regulation_psi, @regulation_si, @regulation_si_sd, 'SI', 'SIsd');
+my @entete_epissage = ('Gene', 'Fasterdb id', 'Link Misea', 'Symbol', 'Name', 'Human Ensembl id', 'Mouse Ensembl id', 'Chr Position', 'Regulation', 'FC', 'Pvalue', 'AS Event Type', 'Exon position', 'Nb probes analysed', '% CB probes in entity', 'AS Event Sequence', @regulation_si, @regulation_si_sd, @regulation_psi, 'SIsd', 'Psi');
 
 # Ecriture
 &FonctionsXls::ecriture(\@entete_epissage, $f_epissage_no_fdr, 1, $format_entete);
@@ -202,11 +206,7 @@ my @explication_fc_gene = ("Les entites des genes dont le fc est > 2 sont colore
 
 # Annotation des sondes et des gènes analysés
 #&FonctionsXls::resume_annotation_sondes($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center, "splicing");
-if($est_3primeUTR){
-    #&FonctionsXls::resume_annotation_3primeUTR($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
-}else{
-    #&FonctionsXls::resume_annotation_entites($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
-}
+#&FonctionsXls::resume_annotation_entites($probes_db, $orga, $projet_num, $f_resume, $format_resume_titre, $format_resume_cell, $format_cell_no_center);
 
 # ------------------------- Récup infos --------------------------- #
 
@@ -232,73 +232,37 @@ if ( $est_paire ) {
     }
 }
 
-my ($requete_psi, $requete_si_sisd);
+my ($requete_si, $requete_sisd_psi);
 
 if ( $est_paire ) {
 
     # On récupère les entités pour lesquelles le SI est significatif
-    if ( $est_3primeUTR ){
-        $requete_psi =
-            "SELECT id_entite, entite_type, gene_id, psi_control, psi_sd_control, psi_test, psi_sd_test, psi_fc, psi_sd_fc, psi_pval, psi_adjp, nb_sondes
+        $requete_si =
+            "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, nb_sondes
             FROM $table_splicing
-            WHERE entite_type = 8
-            AND is_robust = 1 
-            AND (psi_fc >= $seuil_epissage OR psi_fc <= ".(1/$seuil_epissage).")";
-    }else{
-        $requete_psi =
-            "SELECT id_entite, entite_type, gene_id, psi_control, psi_sd_control, psi_test, psi_sd_test, psi_fc, psi_sd_fc, psi_pval, psi_adjp, nb_sondes
-            FROM $table_splicing
-            WHERE entite_type != 8
-            AND is_robust = 1 
-            AND (psi_fc >= $seuil_epissage OR psi_fc <= ".(1/$seuil_epissage).")";
-    }
+            WHERE is_robust = 1 
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
 
     # On récupère toutes les valeurs de SIsd et psi (is_robust=1 simplement pour pas bouffer de mémoire vive)
-    if ( $est_3primeUTR ){
-        $requete_si_sisd =
-            "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, ".join(', ', @select_rep_si_sd).", SIsd, SIsd_pval, SIsd_adjp
+        $requete_sisd_psi =
+            "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si_sd).", SIsd, SIsd_pval, SIsd_adjp, psi_control, psi_sd_control, psi_test, psi_sd_test, psi_fc, psi_sd_fc, psi_pval, psi_adjp
             FROM $table_splicing
-            WHERE entite_type = 8 AND is_robust = 1";
-    }else{
-        $requete_si_sisd =
-            "SELECT id_entite, entite_type, gene_id, ".join(', ', @select_rep_si).", SI, SI_pval, SI_adjp, ".join(', ', @select_rep_si_sd).", SIsd, SIsd_pval, SIsd_adjp
-            FROM $table_splicing
-            WHERE entite_type != 8 AND is_robust = 1";
-    }
+            WHERE is_robust = 1";
 
 }else{
 
     # On récupère les entités pour lesquelles le SI est significatif
-    if ( $est_3primeUTR ){
-        $requete_psi =
-            "SELECT id_entite, entite_type, gene_id, psi_control, psi_test, psi_fc, nb_sondes
+        $requete_si =
+            "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, nb_sondes
             FROM $table_splicing
-            WHERE entite_type = 8
-            AND is_robust = 1 
-            AND (psi_fc >= $seuil_epissage OR psi_fc <= ".(1/$seuil_epissage).")";
-    }else{
-        $requete_psi =
-            "SELECT id_entite, entite_type, gene_id, psi_control, psi_test, psi_fc, nb_sondes
-            FROM $table_splicing
-            WHERE entite_type != 8
-            AND is_robust = 1 
-            AND (psi_fc >= $seuil_epissage OR psi_fc <= ".(1/$seuil_epissage).")";
-    }
+            WHERE is_robust = 1 
+            AND ABS(LOG2(SI)) >= LOG2($seuil_epissage)";
 
     # On récupère toutes les valeurs de SIsd et psi (is_robust=1 simplement pour pas bouffer de mémoire vive)
-    if ( $est_3primeUTR ){
-        $requete_si_sisd =
-            "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, SIsd
+        $requete_sisd_psi =
+            "SELECT id_entite, entite_type, gene_id, SIsd, psi_control, psi_test, psi_fc
             FROM $table_splicing
-            WHERE entite_type = 8
-            AND is_robust = 1";
-    }else{
-        $requete_si_sisd =
-            "SELECT id_entite, entite_type, gene_id, SI, SI_pval, SI_adjp, SIsd
-            FROM $table_splicing
-            WHERE entite_type != 8
-            AND is_robust = 1";
-    }
+            WHERE is_robust = 1";
 
 }
 
@@ -324,14 +288,14 @@ my $select_polya_gene = $probes_db->prepare(
 my %hash_corres_entiteId_geneId             = (); # [clé]Entite_id [value]Gene_id
 my %hash_corres_geneId_entites_to_use_noFdr = (); # [clé]Gene_id [value]Tab de d'entite_id quand pval significative sans correction
 my %hash_corres_geneId_entites_to_use_Fdr   = (); # [clé]Gene_id [value]Tab de d'entite_id quand pval significative avec correction
-my ($h_psi_no_fdr, $h_psi_fdr) = requetage_psi($h_genes_regulation_no_fdr);
-my ($h_si, $h_si_sd)           = requetage_si_sisd($h_genes_regulation_no_fdr);
+my ($h_si_no_fdr, $h_si_fdr) = requetage_si($h_genes_regulation_no_fdr);
+my ($h_si_sd, $h_psi)        = requetage_sisd_psi($h_genes_regulation_no_fdr);
 
 
 # ------------------- Traitement des résultats --------------------- #
 
-my $hash_resultats_sans_correction = traitement($h_psi_no_fdr, 0);
-my $hash_resultats_avec_correction = traitement($h_psi_fdr, 1);
+my $hash_resultats_sans_correction = traitement($h_si_no_fdr, 0);
+my $hash_resultats_avec_correction = traitement($h_si_fdr, 1);
 
 
 # -------------------------- Résultats --------------------------- #
@@ -349,9 +313,8 @@ sub setting_columns {
     $feuille->set_column(4, 7, 22);   # Info gene : de Name à Chr Position
     $feuille->set_column(11, 15, 19); # Info entite : de AS Event Type à Sequence
     if( $est_paire ){
-        $feuille->set_column(17, 22, 18); # Info psi : de med control à sd fold
-    }else{
-        $feuille->set_column(17, 19, 18); # Info psi : de med control à sd fold
+        my $deb_psi = ($nb_repl_cont*2+27);
+        $feuille->set_column($deb_psi, ($deb_psi+5), 18); # Info psi : de med control à sd fold
     }
 
 }
@@ -364,28 +327,17 @@ sub merging_columns {
     # Carac entite
     $feuille->merge_range('B1:K1', 'Gene information', $format_merge_entete);
     $feuille->merge_range('L1:P1', 'AS Event information', $format_merge_entete);
-    # Psi
-    my $cell_deb = "Q";
-    my $cell_fin = "Q";
-    if( $est_paire ){
-        for ( my $i=1 ; $i < 10 ; $i++ ){
-            $cell_fin++;
-        } 
-    }else{
-        $cell_fin = "V";
-    }
-    $feuille->merge_range($cell_deb.'1:'.$cell_fin.'1', 'Psi Algorithm', $format_merge_entete);
     # SI
-    $cell_fin++;
-    $cell_deb = $cell_fin;
+    my $cell_deb = "Q1";
+    my $cell_fin = "Q";
     if ($est_paire){
         for ( my $i=1 ; $i <($nb_repl_cont+5) ; $i++ ){
             $cell_fin++;
         } 
     }else{
-        $cell_fin = "Z";
+        $cell_fin = "U";
     }
-    $feuille->merge_range($cell_deb.'1:'.$cell_fin.'1', 'SI Algorithm', $format_merge_entete);
+    $feuille->merge_range($cell_deb.':'.$cell_fin.'1', 'SI Algorithm', $format_merge_entete);
     # SIsd
     $cell_fin++;
     $cell_deb = $cell_fin;
@@ -394,9 +346,20 @@ sub merging_columns {
             $cell_fin++;
         } 
     }else{
-        $cell_fin = "AE";
+        $cell_fin = "Y";
     }
     $feuille->merge_range($cell_deb.'1:'.$cell_fin.'1', 'SIsd Algorithm', $format_merge_entete);
+    # Psi
+    $cell_fin++;
+    $cell_deb = $cell_fin;
+    if( $est_paire ){
+        for ( my $i=1 ; $i < 10 ; $i++ ){
+            $cell_fin++;
+        } 
+    }else{
+        $cell_fin = "AE";
+    }
+    $feuille->merge_range($cell_deb.'1:'.$cell_fin.'1', 'Psi Algorithm', $format_merge_entete);
     # Entité trouvée avec les algo
     $cell_fin++;
     $cell_deb = $cell_fin;
@@ -407,7 +370,7 @@ sub merging_columns {
 
 # ------------------------------------------------------------------ #
 
-sub requetage_psi {
+sub requetage_si {
 
     my ($h_gene_reg) = @_;
 
@@ -427,7 +390,7 @@ sub requetage_psi {
     my %h_fdr_bon_fc_gene     = ();
     my %h_fdr_mauv_fc_gene    = ();
 
-    my $select_splicing = $probes_db -> prepare ( $requete_psi );
+    my $select_splicing = $probes_db -> prepare ( $requete_si );
     
     $select_splicing -> execute;
     
@@ -449,112 +412,84 @@ sub requetage_psi {
         if( $est_paire ){
         
             # Sortie requete
-            my $psi_control    = $data[0];
-            my $sd_psi_control = $data[1];
-            my $psi_test       = $data[2];
-            my $sd_psi_test    = $data[3];
-            my $psi_fold       = $data[4];
-            my $sd_psi_fc      = $data[5];
-            my $psi_pval       = $data[6];
-            my $psi_adjp       = $data[7];
-
+            my @SIs     = @data[0..($nb_repl_cont-1)];
+            my $si      = $data[$nb_repl_cont];
+            my $si_pval = $data[$nb_repl_cont+1];
+            my $si_adjp = $data[$nb_repl_cont+2];
+            
             # Valeurs pour xls
-            my ($reg_psi, $psi_fc) = &FonctionsXls::get_regulation_fold_from_base10_to_base10($psi_fold);
+            my ($reg_si, $SI, $SIs) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si, \@SIs);
 
             # REL et FE
-            my ($RELpsi, $FEpsi) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_psi, $psi_fc);
-                
+            my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
+            
             # On sélectionne les événements avec une bonne pval
-            if( $psi_pval <= $seuil_pval ){ # Avant correction pour tests multiples
+            if( $si_pval <= $seuil_pval ){ # Avant correction pour tests multiples
             
                 # On crée la correspondance gene_id <-> tab entite_ids
                 push (@{$hash_corres_geneId_entites_to_use_noFdr{$gene_id}}, $entite_id);
 
                 if( $is_good_gene ){
                 
-                    # Hash résultat
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_control"} = $sd_psi_control;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_test"}    = $sd_psi_test;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_fc"}      = $sd_psi_fc;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $psi_pval;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"adjp"}       = $psi_adjp;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                    $h_no_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"SIs"}        = $SIs;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $si_pval;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FE;
                     $h_no_fdr_bon_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
-
+                    
                 }else{
                 
-                    # Hash résultat
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_control"} = $sd_psi_control;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_test"}    = $sd_psi_test;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_fc"}      = $sd_psi_fc;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $psi_pval;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"adjp"}       = $psi_adjp;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"SIs"}        = $SIs;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $si_pval;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FE;
                     $h_no_fdr_mauv_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
 
                 }
             
             }
             
-            if( $psi_adjp <= $seuil_pval ){ # Après correction pour tests multiples
+            if( $si_adjp <= $seuil_pval ){ # Après correction pour tests multiples
             
                 # On crée la correspondance gene_id <-> tab entite_ids
                 push (@{$hash_corres_geneId_entites_to_use_Fdr{$gene_id}}, $entite_id);
 
                 if( $is_good_gene ){
                 
-                    # Hash résultat
                     $h_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
                     $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"sd_control"} = $sd_psi_control;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"sd_test"}    = $sd_psi_test;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"sd_fc"}      = $sd_psi_fc;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $psi_pval;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"adjp"}       = $psi_adjp;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                    $h_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"SIs"}        = $SIs;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $si_adjp;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FE;
                     $h_fdr_bon_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
-
+                    
                 }else{
                 
-                    # Hash résultat
                     $h_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
                     $h_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"sd_control"} = $sd_psi_control;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"sd_test"}    = $sd_psi_test;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"sd_fc"}      = $sd_psi_fc;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $psi_pval;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"adjp"}       = $psi_adjp;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                    $h_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"SIs"}        = $SIs;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $si_adjp;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FE;
                     $h_fdr_mauv_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
-                    
+
                 }
             
             }
@@ -563,61 +498,89 @@ sub requetage_psi {
         }else{
         
             # Sortie requete
-            my $psi_control = $data[0];
-            my $psi_test    = $data[1];
-            my $psi_fold    = $data[2];
+            my $si      = $data[0];
+            my $si_pval = $data[1];
+            my $si_adjp = $data[2];
 
             # Valeurs pour xls
-            my ($reg_psi, $psi_fc) = &FonctionsXls::get_regulation_fold_from_base10_to_base10($psi_fold);
+            my ($reg_si, $SI) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si);
 
             # REL et FE
-            my ($RELpsi, $FEpsi) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_psi, $psi_fc);
+            my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
 
-            # On crée la correspondance gene_id <-> tab entite_ids
-            push (@{$hash_corres_geneId_entites_to_use_noFdr{$gene_id}}, $entite_id);
+            # On sélectionne les événements avec une bonne pval
+            if( $si_pval <= $seuil_pval ){ # Avant correction pour tests multiples
+            
+                # On crée la correspondance gene_id <-> tab entite_ids
+                push (@{$hash_corres_geneId_entites_to_use_noFdr{$gene_id}}, $entite_id);
 
-            if( $is_good_gene ){
+                if( $is_good_gene ){
                 
-                # Hash résultat
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_control"} = -1;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_test"}    = -1;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"sd_fc"}      = -1;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"pval"}       = 10;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"adjp"}       = 10;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
-                $h_no_fdr_bon_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"SIs"}        = -1;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $si_pval;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FE;
+                    $h_no_fdr_bon_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
                     
-            }else{
+                }else{
                 
-                # Hash résultat
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_psi;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"control"}    = $psi_control;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_control"} = -1;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"test"}       = $psi_test;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_test"}    = -1;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"fc"}         = $psi_fc;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"sd_fc"}      = -1;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = 10;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"adjp"}       = 10;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $RELpsi;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FEpsi;
-                $h_no_fdr_mauv_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
-                    
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"SIs"}        = -1;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $si_pval;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FE;
+                    $h_no_fdr_mauv_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
+
+                }
+            
             }
             
-        }
+            if( $si_adjp <= $seuil_pval ){ # Après correction pour tests multiples
             
+                # On crée la correspondance gene_id <-> tab entite_ids
+                push (@{$hash_corres_geneId_entites_to_use_Fdr{$gene_id}}, $entite_id);
+
+                if( $is_good_gene ){
+                
+                    $h_fdr_bon_fc_gene{$entite_id}->{"num_id"}     = $id;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                    $h_fdr_bon_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"SIs"}        = -1;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"pval"}       = $si_adjp;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"FE"}         = $FE;
+                    $h_fdr_bon_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
+                    
+                }else{
+                
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_id"}     = $id;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"gene_id"}    = $gene_id;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"regulation"} = $reg_si;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"si"}         = $SI;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"SIs"}        = -1;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"pval"}       = $si_adjp;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"REL"}        = $REL;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"FE"}         = $FE;
+                    $h_fdr_mauv_fc_gene{$entite_id}->{"nb_sondes"}  = $nb_sondes;
+
+                }
+            
+            }
+
+        }
+        
     }
 
     $select_splicing -> finish;
@@ -628,6 +591,7 @@ sub requetage_psi {
                                "mauv_fc" => \%h_no_fdr_mauv_fc_gene );
     my %h_resultats_fdr    = ( "bon_fc"  => \%h_fdr_bon_fc_gene,
                                "mauv_fc" => \%h_fdr_mauv_fc_gene );
+
 
     return (\%h_resultats_no_fdr, \%h_resultats_fdr);
 
@@ -659,7 +623,7 @@ sub calcul_FE_REL {
 
 # ------------------------------------------------------------------ #
 
-sub requetage_si_sisd {
+sub requetage_sisd_psi {
 
     my ($h_gene_reg) = @_;
 
@@ -674,10 +638,10 @@ sub requetage_si_sisd {
         'deletion' => 7
     );
 
-    my %h_si    = ();
     my %h_si_sd = ();
+    my %h_psi   = ();
 
-    my $select_splicing = $probes_db -> prepare ( $requete_si_sisd );
+    my $select_splicing = $probes_db -> prepare ( $requete_sisd_psi );
     
     $select_splicing -> execute;
     
@@ -691,54 +655,22 @@ sub requetage_si_sisd {
         
         # Le fold du gène est ok ou pas
         my $is_good_gene = ( $h_gene_reg->{$gene_id}->{"fold"} < $seuil_fiabilite_fcGene ) ? 1 : 0;
-        
+
         if( $est_paire ){
         
-            # ---------------- Data SI ---------------- #
+            # ---------------- Data SIsd ---------------- #
             
             if( $data[0] ) {
 
                 # Sortie requete
-                my @SIs     = @data[0..($nb_repl_cont-1)];
-                my $si      = $data[$nb_repl_cont];
-                my $si_pval = $data[$nb_repl_cont+1];
-                my $si_adjp = $data[$nb_repl_cont+2];
+                my @SIsds     = @data[0..($nb_repl_cont-1)];
+                my $sisd      = $data[$nb_repl_cont];
+                my $sisd_pval = $data[$nb_repl_cont+1];
+                my $sisd_adjp = $data[$nb_repl_cont+2];
                 
-                # Valeurs pour xls
-                my ($reg_si, $SI, $SIs) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si, \@SIs);
-                
-                # REL et FE
-                my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
-                
-                # Hash résultat                
-                $h_si{$entite_id}->{"num_id"}     = $id;
-                $h_si{$entite_id}->{"num_type"}   = $name2num{$entite_type};
-                $h_si{$entite_id}->{"gene_id"}    = $gene_id;
-                $h_si{$entite_id}->{"regulation"} = $reg_si;
-                $h_si{$entite_id}->{"si"}         = $SI;
-                $h_si{$entite_id}->{"SIs"}        = $SIs;
-                $h_si{$entite_id}->{"pval"}       = $si_pval;
-                $h_si{$entite_id}->{"adjp"}       = $si_adjp;
-                $h_si{$entite_id}->{"REL"}        = $REL;
-                $h_si{$entite_id}->{"FE"}         = $FE;
-            
-            }                    
-            
-            
-            # ---------------- Data SIsd ----------------- #
-            
-            my $index_deb = ($nb_repl_cont+3);
-            if( $data[$index_deb] ) {
-            
-                # Sortie requete
-                my @SIsds     = @data[$index_deb..($index_deb+$nb_repl_cont-1)];
-                my $sisd      = $data[$index_deb+$nb_repl_cont];
-                my $sisd_pval = $data[$index_deb+$nb_repl_cont+1];
-                my $sisd_adjp = $data[$index_deb+$nb_repl_cont+2];
-
                 # Valeurs pour xls
                 my ($reg_sisd, $SIsd, $SIsds) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($sisd, \@SIsds);
-
+                
                 # REL et FE
                 my ($RELsd, $FEsd) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_sisd, $SIsd);
                 
@@ -753,54 +685,64 @@ sub requetage_si_sisd {
                 $h_si_sd{$entite_id}->{"adjp"}       = $sisd_adjp;
                 $h_si_sd{$entite_id}->{"REL"}        = $RELsd;
                 $h_si_sd{$entite_id}->{"FE"}         = $FEsd;
+            
+            }                    
+            
+            
+            # ---------------- Data psi ----------------- #
+            
+            my $index_deb = ($nb_repl_cont+3);
+            if( $data[$index_deb] ) {
+            
+                # Sortie requete
+                my $psi_control    = $data[$index_deb];
+                my $sd_psi_control = $data[$index_deb+1];
+                my $psi_test       = $data[$index_deb+2];
+                my $sd_psi_test    = $data[$index_deb+3];
+                my $psi_fold       = $data[$index_deb+4];
+                my $sd_psi_fc      = $data[$index_deb+5];
+                my $psi_pval       = $data[$index_deb+6];
+                my $psi_adjp       = $data[$index_deb+7];
+
+                # Valeurs pour xls
+                my ($reg_psi, $psi_fc) = &FonctionsXls::get_regulation_fold_from_base10_to_base10($psi_fold);
+
+                # REL et FE
+                my ($RELpsi, $FEpsi) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_psi, $psi_fc);
+                
+                # Hash résultat
+                $h_psi{$entite_id}->{"num_id"}     = $id;
+                $h_psi{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                $h_psi{$entite_id}->{"gene_id"}    = $gene_id;
+                $h_psi{$entite_id}->{"regulation"} = $reg_psi;
+                $h_psi{$entite_id}->{"control"}    = $psi_control;
+                $h_psi{$entite_id}->{"sd_control"} = $sd_psi_control;
+                $h_psi{$entite_id}->{"test"}       = $psi_test;
+                $h_psi{$entite_id}->{"sd_test"}    = $sd_psi_test;
+                $h_psi{$entite_id}->{"fc"}         = $psi_fc;
+                $h_psi{$entite_id}->{"sd_fc"}      = $sd_psi_fc;
+                $h_psi{$entite_id}->{"pval"}       = $psi_pval;
+                $h_psi{$entite_id}->{"adjp"}       = $psi_adjp;
+                $h_psi{$entite_id}->{"REL"}        = $RELpsi;
+                $h_psi{$entite_id}->{"FE"}         = $FEpsi;
 
             }
 
         }else{
         
-            # ---------------- Data SI ---------------- #
+            # ---------------- Data SIsd ---------------- #
             
             if( $data[0] ) {
             
                 # Sortie requete
-                my $si      = $data[0];
-                my $si_pval = $data[1];
-                my $si_adjp = $data[2];
+                my $sisd = $data[0];
 
                 # Valeurs pour xls
-                my ($reg_si, $SI) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si);
+                my ($reg_sisd, $SIsd) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($sisd);
 
                 # REL et FE
-                my ($REL, $FE) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_si, $SI);
+                my ($RELsd, $FEsd) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_sisd, $SIsd);
 
-                # Hash résultat
-                $h_si{$entite_id}->{"num_id"}     = $id;
-                $h_si{$entite_id}->{"num_type"}   = $name2num{$entite_type};
-                $h_si{$entite_id}->{"gene_id"}    = $gene_id;
-                $h_si{$entite_id}->{"regulation"} = $reg_si;
-                $h_si{$entite_id}->{"si"}         = $SI;
-                $h_si{$entite_id}->{"SIs"}        = -1;
-                $h_si{$entite_id}->{"pval"}       = $si_pval;
-                $h_si{$entite_id}->{"adjp"}       = $si_adjp;
-                $h_si{$entite_id}->{"REL"}        = $REL;
-                $h_si{$entite_id}->{"FE"}         = $FE;
-
-            }
-
-
-            # ---------------- Data SIsd ----------------- #
-            
-            if( $data[3] ) {
-            
-                # Sortie requete
-                my $si_sd = $data[3];
-
-                # Valeurs pour xls
-                my ($reg_sisd, $SIsd) = &FonctionsXls::get_regulation_fold_from_log2_to_base10($si_sd);
-
-                # REL et FE
-                my ($RELsisd, $FEsisd) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_sisd, $SIsd);
-                
                 # Hash résultat
                 $h_si_sd{$entite_id}->{"num_id"}     = $id;
                 $h_si_sd{$entite_id}->{"num_type"}   = $name2num{$entite_type};
@@ -810,8 +752,42 @@ sub requetage_si_sisd {
                 $h_si_sd{$entite_id}->{"SIs"}        = -1;
                 $h_si_sd{$entite_id}->{"pval"}       = 10;
                 $h_si_sd{$entite_id}->{"adjp"}       = 10;
-                $h_si_sd{$entite_id}->{"REL"}        = $RELsisd;
-                $h_si_sd{$entite_id}->{"FE"}         = $FEsisd;
+                $h_si_sd{$entite_id}->{"REL"}        = $RELsd;
+                $h_si_sd{$entite_id}->{"FE"}         = $FEsd;
+
+            }
+
+
+            # ---------------- Data psi ----------------- #
+            
+            if( $data[1] ) {
+            
+                # Sortie requete
+                my $psi_control = $data[1];
+                my $psi_test    = $data[2];
+                my $psi_fold    = $data[3];
+
+                # Valeurs pour xls
+                my ($reg_psi, $psi_fc) = &FonctionsXls::get_regulation_fold_from_base10_to_base10($psi_fold);
+
+                # REL et FE
+                my ($RELpsi, $FEpsi) = calcul_FE_REL($h_gene_reg->{$gene_id}, $reg_psi, $psi_fc);
+
+                # Hash résultat
+                $h_psi{$entite_id}->{"num_id"}     = $id;
+                $h_psi{$entite_id}->{"num_type"}   = $name2num{$entite_type};
+                $h_psi{$entite_id}->{"gene_id"}    = $gene_id;
+                $h_psi{$entite_id}->{"regulation"} = $reg_psi;
+                $h_psi{$entite_id}->{"control"}    = $psi_control;
+                $h_psi{$entite_id}->{"sd_control"} = -1;
+                $h_psi{$entite_id}->{"test"}       = $psi_test;
+                $h_psi{$entite_id}->{"sd_test"}    = -1;
+                $h_psi{$entite_id}->{"fc"}         = $psi_fc;
+                $h_psi{$entite_id}->{"sd_fc"}      = -1;
+                $h_psi{$entite_id}->{"pval"}       = 10;
+                $h_psi{$entite_id}->{"adjp"}       = 10;
+                $h_psi{$entite_id}->{"REL"}        = $RELpsi;
+                $h_psi{$entite_id}->{"FE"}         = $FEpsi;
 
             }
 
@@ -820,8 +796,9 @@ sub requetage_si_sisd {
     }
 
     $select_splicing -> finish;
+    
 
-    return (\%h_si, \%h_si_sd);
+    return (\%h_si_sd, \%h_psi);
 
 }
 
@@ -875,8 +852,8 @@ sub process {
     # Variable pour suivre le nb de gènes (et pas le nombre d'entités) différents traités en cours de traitement
     my %hash_genes_traites = ();
     
-    # On traite les événements par ordre décroissant de FC
-    foreach my $entite_id (sort { $h_evenements_a_traiter->{$b}->{"fc"} <=> $h_evenements_a_traiter->{$a}->{"fc"} } (keys %$h_evenements_a_traiter) ) {
+    # On traite les événements par ordre décroissant de SI
+    foreach my $entite_id (sort { $h_evenements_a_traiter->{$b}->{"si"} <=> $h_evenements_a_traiter->{$a}->{"si"} } (keys %$h_evenements_a_traiter) ) {
     
         # On récupère le gène correspondant
         my $gene_courant = $hash_corres_entiteId_geneId{$entite_id};
@@ -888,12 +865,12 @@ sub process {
         foreach my $ent_id (@{$h_genes_entites_to_use->{$gene_courant}}){ $hash_entites_gene{$ent_id} = $h_evenements_a_traiter->{$ent_id}; }
         
         # On traite les entité du gène courant par SI décroissant
-        foreach my $entite_id (sort { $hash_entites_gene{$b}->{"fc"} <=> $hash_entites_gene{$a}->{"fc"} } (keys %hash_entites_gene) ) {
+        foreach my $entite_id (sort { $hash_entites_gene{$b}->{"si"} <=> $hash_entites_gene{$a}->{"si"} } (keys %hash_entites_gene) ) {
         
             my $entite_courante = $hash_entites_gene{$entite_id};
             
             # ---------------- Info gène ----------------- #
-            my $link_elexir = '';
+            my $link_elexir ='';
             #my $link_elexir  = "http://172.21.100.5/elexir/main.pl?id=$gene_courant&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
     #        my $link_elexir = "http://fasterdb.com/elexir/main.pl?id=$gene_courant&experiment=".$projet_num.$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
             my $gene_infos   = $h_genes_carac->{$gene_courant};
@@ -930,35 +907,13 @@ sub process {
             # Si l'entité traitée n'est pas un exon : on ne la traite que si elle n'est pas égale à l'exon
             if( $h_carac_entite->{"num_type"} == 1 || ( $h_carac_entite->{"num_type"} != 1 && $h_carac_entite->{"is_exon"} != 1 ) ){
             
-                # Infos Psi
-                my @data_psi  = ();
-                if($est_paire){
-                    @data_psi = ($entite_courante->{"regulation"}, round($entite_courante->{"control"}, 2), round($entite_courante->{"sd_control"}, 2), round($entite_courante->{"test"}, 2), round($entite_courante->{"sd_test"}, 2), round($entite_courante->{"fc"}, 2), round($entite_courante->{"sd_fc"}, 2), round($entite_courante->{$pval_to_use}, 5), round($entite_courante->{"REL"}, 2), round($entite_courante->{"FE"}, 2));
-                }else{
-                    @data_psi = ($entite_courante->{"regulation"}, round($entite_courante->{"control"}, 2), round($entite_courante->{"test"}, 2), round($entite_courante->{"fc"}, 2), round($entite_courante->{"REL"}, 2), round($entite_courante->{"FE"}, 2));
-                }
-                
                 # Infos SI
-                my @data_si = ();
-                my $h_si_courant = $h_si->{$entite_id};
-                my $str_found_si;
-                if ( $h_si_courant->{"regulation"} ) {
-                    if($est_paire){
-                        @{$h_si_courant->{"SIs"}} = map { round($_, 2); } @{$h_si_courant->{"SIs"}};
-                        @data_si = ($h_si_courant->{"regulation"}, @{$h_si_courant->{"SIs"}}, round($h_si_courant->{"si"}, 2), round($h_si_courant->{$pval_to_use}, 5), round($h_si_courant->{"REL"}, 2), round($h_si_courant->{"FE"}, 2));
-                        $str_found_si = ( $h_si_courant->{"si"} >= $seuil_epissage && $h_si_courant->{$pval_to_use} <= $seuil_pval ) ? "x" : " ";
-                    }else{
-                        @data_si = ($h_si_courant->{"regulation"}, round($h_si_courant->{"si"}, 2), round($h_si_courant->{$pval_to_use}, 5), round($h_si_courant->{"REL"}, 2), round($h_si_courant->{"FE"}, 2));
-                        $str_found_si = ( $h_si_courant->{"si"} >= $seuil_epissage && $h_si_courant->{$pval_to_use} <= $seuil_pval ) ? "x" : " ";
-                    }
+                my @data_si  = ();
+                if($est_paire){
+                    @{$entite_courante->{"SIs"}} = map { round($_, 2); } @{$entite_courante->{"SIs"}};
+                	@data_si = ($entite_courante->{"regulation"}, @{$entite_courante->{"SIs"}}, round($entite_courante->{"si"}, 2), round($entite_courante->{"pval"}, 5), round($entite_courante->{"REL"}, 2), round($entite_courante->{"FE"}, 2));
                 }else{
-                    if($est_paire){
-                        for( my $i=0 ; $i < $nb_repl_cont ; $i++){ push (@data_si, "-"); }
-                        push(@data_si, "-", "-", "-", "-", "-");
-                    }else{
-                        @data_si = ("-", "-", "-", "-");
-                    }
-                    $str_found_si = " ";
+                    @data_si = ($entite_courante->{"regulation"}, round($entite_courante->{"si"}, 2), round($entite_courante->{"pval"}, 5), round($entite_courante->{"REL"}, 2), round($entite_courante->{"FE"}, 2));
                 }
                 
                 # Infos SIsd
@@ -984,8 +939,29 @@ sub process {
                     $str_found_sisd = " ";
                 }
                 
+                # Infos psi
+                my @data_psi = ();
+                my $h_psi_courant = $h_psi->{$entite_id};
+                my $str_found_psi;
+                if ( $h_psi_courant->{"regulation"} ) {
+                    if($est_paire){
+                        @data_psi = ($h_psi_courant->{"regulation"}, round($h_psi_courant->{"control"}, 2), round($h_psi_courant->{"sd_control"}, 2), round($h_psi_courant->{"test"}, 2), round($h_psi_courant->{"sd_test"}, 2), round($h_psi_courant->{"fc"}, 2), round($h_psi_courant->{"sd_fc"}, 2), round($h_psi_courant->{$pval_to_use}, 5), round($h_psi_courant->{"REL"}, 2), round($h_psi_courant->{"FE"}, 2));
+                        $str_found_psi = ( $h_psi_courant->{"fc"} >= $seuil_epissage && $h_psi_courant->{$pval_to_use} <= $seuil_pval ) ? "x" : " ";
+                    }else{
+                        @data_psi = ($h_psi_courant->{"regulation"}, round($h_psi_courant->{"control"}, 2), round($h_psi_courant->{"test"}, 2), round($h_psi_courant->{"fc"}, 2), round($h_psi_courant->{"REL"}, 2), round($h_psi_courant->{"FE"}, 2));
+                        $str_found_psi = " ";
+                    }
+                }else{
+                    if($est_paire){
+                        @data_psi = ("-", "-", "-", "-", "-", "-", "-", "-", "-", "-");
+                    }else{
+                        @data_psi = ("-", "-", "-", "-", "-", "-");
+                    }
+                    $str_found_psi = " ";
+                }
+                
                 # Ecriture dans le fichier excel
-                my @data = (($num_gene+scalar(keys %hash_genes_traites)), @data_gene, @data_entite, @data_psi, @data_si, @data_si_sd, $str_found_si, $str_found_sisd);
+                my @data = (($num_gene+scalar(keys %hash_genes_traites)), @data_gene, @data_entite, @data_si, @data_si_sd, @data_psi, $str_found_sisd, $str_found_psi);
 
                 &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format);
             

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+dir=$(dirname $0)
+
+$dir/compose/genes $1 $2
+$dir/compose/entites $1
+$dir/excels_compose $1

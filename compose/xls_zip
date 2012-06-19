@@ -35,7 +35,7 @@ my $dbh = DBI->connect(
 );
 
 my $select_project_id_sth = $dbh->prepare(
-	"SELECT id_project, name FROM analyses WHERE id = ?"
+	"SELECT id_project, name, type FROM analyses WHERE id = ?"
 );
 
 # ==============================================================================
@@ -43,22 +43,28 @@ my $select_project_id_sth = $dbh->prepare(
 # ==============================================================================
 
 $select_project_id_sth->execute($id_analyse);
-my($id_projet, $name) = $select_project_id_sth->fetchrow_array;
-$select_project_id_sth->finish;
+
+my $infos_analyse = $select_project_id_sth->fetchrow_hashref;
+
+die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'compose'){
+
+	die('Le script composé ne fonctionne que sur les analyses composées :o)');
+
+}
 
 # ==============================================================================
 # On zippe les fichiers
 # ==============================================================================
 
-my $dir_project = $dir_xls . '/' . $id_projet;
+my $dir_project = $dir_xls . '/' . $infos_analyse->{'id_project'};
 my $dir_analyse = $dir_project . '/' . $id_analyse;
 
-my $files = join(' ', (map { $name . '_' . $_ } (
+my $files = join(' ', (map { $infos_analyse->{'name'} . '_' . $_ } (
 	'transcription.xls',
-	'epissage.xls',
-	'epissage_SI.xls',
-	'epissage_SIsd.xls',
-	'epissage_psi.xls'
+	'epissage.xls'
 )));
 
 `cd $dir_analyse && zip files.zip $files && chmod -R 777 $dir_project`;

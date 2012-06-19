@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use YAML::XS qw(LoadFile);
+use DBI;
+use FindBin qw($Bin);
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
+
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Répertoire de sortie 
+my $dir_xls = $config->{'dir_xls'};
+
+# ==============================================================================
+# Connection à elexir et préparation des requetes
+# ==============================================================================
+
+my $dbh = DBI->connect(
+	"DBI:mysql:" . $db_name . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+my $select_project_id_sth = $dbh->prepare(
+	"SELECT id_project, name, type FROM analyses WHERE id = ?"
+);
+
+# ==============================================================================
+# On récupère l'identifiant du projet
+# ==============================================================================
+
+$select_project_id_sth->execute($id_analyse);
+
+my $infos_analyse = $select_project_id_sth->fetchrow_hashref;
+
+die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($infos_analyse->{'type'} ne 'simple'){
+
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+
+}
+
+# ==============================================================================
+# On zippe les fichiers
+# ==============================================================================
+
+my $dir_project = $dir_xls . '/' . $infos_analyse->{'id_project'};
+my $dir_analyse = $dir_project . '/' . $id_analyse;
+
+my $files = join(' ', (map { $infos_analyse->{'name'} . '_' . $_ } (
+	'transcription.xls',
+	'epissage.xls',
+	'epissage_SI.xls',
+	'epissage_SIsd.xls',
+	'epissage_psi.xls'
+)));
+
+`cd $dir_analyse && zip files.zip $files && chmod -R 777 $dir_project`;
