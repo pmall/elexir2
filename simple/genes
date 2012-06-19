@@ -179,6 +179,10 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	# On vire les sondes qui ont pas les bonnes caractéristiques
 	my $ids_probes_ok = [grep {
+		# ON VIRE LES SONDES AVEC UN GC <= 2 PARCE QU'ON A PAS PU
+		# CALCULER LEUR DABG AVEC APT :((
+		$infos_sondes->{$_}->{'gc_content'} > 2
+		and
 		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
 		and
 		$infos_sondes->{$_}->{'gc_content'} <= $gc_max
@@ -188,7 +192,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	next if(@{$ids_probes_ok} < $nb_sondes_min_gene);
 
 	# On récupère les valeurs de dabg de chaque sonde
-	my @sondes =();
+	my @sondes = ();
 
 	# Pour chaque id de sonde
 	foreach my $probe_id (@{$ids_probes_ok}){

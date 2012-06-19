@@ -172,6 +172,10 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		# On vire les sondes qui ont pas les bonnes caractéristiques
 		my $ids_sondes_ok = [grep {
+			# ON VIRE LES SONDES AVEC UN GC <= 2 PARCE QU'ON A PAS PU
+			# CALCULER LEUR DABG AVEC APT :((
+			$infos_sondes->{$_}->{'gc_content'} > 2
+			and
 			$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
 			and
 			$infos_sondes->{$_}->{'gc_content'} <= $gc_max
