@@ -381,7 +381,8 @@ sub process {
 	        
 	    my $gene_infos   = $h_genes_carac->{$gene_id};
 	    my $hash_ensembl = &FonctionsXls::get_gene_identifiants_ensembl($gene_infos->{"ensembl"}, $h_genes_ortholgues_humain, $h_genes_ortholgues_souris);
-	    my @data_gene    = ($gene_id, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, $gene_infos->{"chr"}."(".$gene_infos->{"strand"}."):".$gene_infos->{"start"}."-".$gene_infos->{"end"});
+            my $strand = ($gene_infos->{"strand"} eq '1') ? '+' : '-';
+	    my @data_gene    = ($gene_id, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, "chr" . $gene_infos->{"chr"}.":".$gene_infos->{"start"}."-".$gene_infos->{"end"}.":".$strand);
             
             
         # Traitement entité par entité
