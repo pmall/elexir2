@@ -276,38 +276,38 @@ sub lissage{
 
 	if(ref($ref_design) eq 'Design'){
 
-		my $ref_sondes_lisses_cont = [@{$ref_sondes}];
-		my $ref_sondes_lisses_test = [@{$ref_sondes}];
+		my @sondes_lisses_cont = @{$ref_sondes};
+		my @sondes_lisses_test = @{$ref_sondes};
 
 		foreach my $paire (@{$ref_design}){
 
-			my $sondes_lisses_cont_rep = lissage(
+			my @sondes_lisses_cont_rep = lissage(
 				$paire->{'control'},
 				$ref_sondes,
 				$ref_func_aggr
 			);
 
-			my $sondes_lisses_test_rep = lissage(
+			my @sondes_lisses_test_rep = lissage(
 				$paire->{'test'},
 				$ref_sondes,
 				$ref_func_aggr
 			);
 
-			$ref_sondes_lisses_cont = inter(
-				$ref_sondes_lisses_cont,
-				$ref_sondes_lisses_cont_rep
+			@sondes_lisses_cont = inter(
+				\@sondes_lisses_cont,
+				\@sondes_lisses_cont_rep
 			);
 
-			$ref_sondes_lisses_test = inter(
-				$ref_sondes_lisses_test,
-				$ref_sondes_lisses_test_rep
+			@sondes_lisses_test = inter(
+				\@sondes_lisses_test,
+				\@sondes_lisses_test_rep
 			);
 
 		}
 
 		return $ref_func_aggr->(
-			$ref_sondes_lisses_cont,
-			$ref_sondes_lisses_test
+			\@sondes_lisses_cont,
+			\@sondes_lisses_test
 		);
 
 	}else{
@@ -327,7 +327,7 @@ sub lissage_replicat{
 	my($ref_samples, $ref_sondes) = @_;
 
 	# On lisse les sondes d'un réplicat
-	my $ref_sondes_lisses = [@{$ref_sondes}];
+	my @sondes_lisses = @{$ref_sondes};
 
 	# Pour chaque sample
 	foreach my $sample (@{$ref_samples}){
@@ -342,20 +342,20 @@ sub lissage_replicat{
 		my $sd = sd(@valeurs_sample);
 
 		# On lisse les sondes du sample
-		my $ref_sondes_lisses_sample = [grep {
+		my @sondes_lisses_sample = [grep {
 			abs($_->{$sample} - $mean) <= $sd
 		} @{$ref_sondes}];
 
 		# On garde l'intersection avec les autres samples
 		my $ref_sondes_lisses = inter(
-			$ref_sondes_lisses_sample,
-			$ref_sondes_lisses
+			\@sondes_lisses_sample,
+			\@sondes_lisses
 		);
 
 	}
 
 	# On retourne les sondes lisses du réplicat
-	return $ref_sondes_lisses;
+	return @sondes_lisses;
 
 }
 
@@ -455,26 +455,26 @@ sub fcs_sonde{
 		foreach my $paire (@{$ref_design}){
 
 			# On calcule la valeur de la sonde pour control et test
-			my $fcs_cont = fcs_sonde($paire->{'control'}, $sonde);
-			my $fcs_test = fcs_sonde($paire->{'test'}, $sonde);
+			my @fcs_cont = fcs_sonde($paire->{'control'}, $sonde);
+			my @fcs_test = fcs_sonde($paire->{'test'}, $sonde);
 
 			# On fait tout les fcs de cette paire de replicat
-			for(my $i = 0; $i < @{$fcs_cont}; $i++){
+			for(my $i = 0; $i < @fcs_cont; $i++){
 
-				push(@fcs, $fcs_test->[$i]/$fcs_cont->[$i]);
+				push(@fcs, $fcs_test[$i]/$fcs_cont[$i]);
 
 			}
 
 		}
 
 		# On retourne les fcs de la sonde dans chaque paire de replicats
-		return \@fcs;
+		return @fcs;
 
 	}else{
 
 		# On retoure la moyenne des valeurs de la sonde sur les samples
 		# du replicat
-		return [mean(map {$sonde->{$_}} @{$ref_design})];
+		return (mean(map {$sonde->{$_}} @{$ref_design}));
 	}
 
 }
@@ -497,7 +497,7 @@ sub fcs_sondes{
 
 	}
 
-	return \@fcs_sondes;
+	return @fcs_sondes;
 
 }
 
@@ -539,7 +539,7 @@ sub sis_sonde{
 
 	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
 
-	return \@SIs;
+	return @SIs;
 
 }
 
@@ -561,7 +561,7 @@ sub sis_sondes{
 
 	}
 
-	return \@SIs_sondes;
+	return @SIs_sondes;
 
 }
 
@@ -604,7 +604,7 @@ sub si_entite{
 
 	my $p_value = ttest((log2($SI) >= 0), log2(@SIs_a_tester));
 
-	return($SI, $p_value, \@SIs);
+	return($SI, $p_value, @SIs);
 
 }
 
