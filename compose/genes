@@ -247,6 +247,8 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
 	$select_nb_exons_gene_sth->finish;
 
+	# On zappe si oj n'est pas homogène (si il est homogène, les deux autres
+	# le sont aussi, ses sondes sont l'intersection des sondes de ba et dc)
 	next if(!homogene(
 		$infos_sondes,
 		\@sondes_oj,
@@ -259,49 +261,41 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Analyse pour les trois comparaisons
 	# ======================================================================
 
-	# Fonction abstraite
-	sub process{
-
-		my($infos_analyse, $infos_sondes, $ref_sondes) = @_;
-
-		my @fcs = map {
-			median(fcs_sonde($infos_analyse, $_))
-		} @{$ref_sondes};
-
-		my $fc = median(@fcs);
-
-		my $p_value = ttest((log2($fc) >= 0), log2(@fcs));
-
-		my $nb_sondes = @{$ref_sondes};
-
-		my $nb_exons = scalar(uniq(map {
-			$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-		} @{$ref_sondes}));
-
-		return($fc, $p_value, $nb_sondes, $nb_exons);
-
-	}
-
 	# Comparaison B/A
-	my($fc_ba, $p_value_ba, $nb_sondes_ba, $nb_exons_ba) = process(
+	my($fc_ba, $p_value_ba, $nb_sondes_ba, $nb_exons_ba) = fc_gene(
 		$infos_analyse->{'design'}->[0]->{'control'},
-		$infos_sondes,
 		\@sondes_ba
 	);
 
 	# Comparaison D/C
-	my($fc_dc, $p_value_dc, $nb_sondes_dc, $nb_exons_dc) = process(
+	my($fc_dc, $p_value_dc, $nb_sondes_dc, $nb_exons_dc) = fc_gene(
 		$infos_analyse->{'design'}->[0]->{'test'},
-		$infos_sondes,
 		\@sondes_dc
 	);
 
 	# Comparaison O/J
-	my($fc_oj, $p_value_oj, $nb_sondes_oj, $nb_exons_oj) = process(
+	my($fc_oj, $p_value_oj, $nb_sondes_oj, $nb_exons_oj) = fc_gene(
 		$infos_analyse->{'design'},
-		$infos_sondes,
 		\@sondes_oj
 	);
+
+	# Nombre de sondes concernées
+	my $nb_sondes_ba = @sondes_ba;
+	my $nb_sondes_dc = @sondes_dc;
+	my $nb_sondes_oj = @sondes_oj;
+
+	# Nombre d'exons concernés
+	my $nb_exons_ba = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_ba));
+
+	my $nb_exons_dc = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_dc));
+
+	my $nb_exons_oj = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @sondes_oj));
 
 	# ======================================================================
 	# On ajoute le gène a la bdd

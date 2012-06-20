@@ -4,11 +4,12 @@ use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Math;
-use Data::Dumper;
+use Stats;
 use Exporter qw(import);
 
-our @EXPORT = qw(get_infos_analyse dabg lissage_transcription
-	lissage_epissage expressions homogene fcs_sonde sis_sonde is_robust);
+our @EXPORT = qw(get_infos_analyse dabg lissage_transcription lissage_epissage
+	expressions fcs_sonde fcs_sondes fc_gene sis_sonde sis_sondes si_entite
+	homogene is_robust);
 
 # ==============================================================================
 # Retourne un hash avec toutes les infos sur l'analyse correspondant à l'id
@@ -170,7 +171,7 @@ sub union{
 
 	}
 
-	return @union;
+	return \@union;
 
 }
 
@@ -197,7 +198,7 @@ sub inter{
 
 	}
 
-	return @inter;
+	return \@inter;
 
 }
 
@@ -275,38 +276,38 @@ sub lissage{
 
 	if(ref($ref_design) eq 'Design'){
 
-		my @sondes_lisses_cont = @{$ref_sondes};
-		my @sondes_lisses_test = @{$ref_sondes};
+		my $ref_sondes_lisses_cont = [@{$ref_sondes}];
+		my $ref_sondes_lisses_test = [@{$ref_sondes}];
 
 		foreach my $paire (@{$ref_design}){
 
-			my @sondes_lisses_cont_rep = lissage(
+			my $sondes_lisses_cont_rep = lissage(
 				$paire->{'control'},
 				$ref_sondes,
 				$ref_func_aggr
 			);
 
-			my @sondes_lisses_test_rep = lissage(
+			my $sondes_lisses_test_rep = lissage(
 				$paire->{'test'},
 				$ref_sondes,
 				$ref_func_aggr
 			);
 
-			@sondes_lisses_cont = inter(
-				\@sondes_lisses_cont,
-				\@sondes_lisses_cont_rep
+			$ref_sondes_lisses_cont = inter(
+				$ref_sondes_lisses_cont,
+				$ref_sondes_lisses_cont_rep
 			);
 
-			@sondes_lisses_test = inter(
-				\@sondes_lisses_test,
-				\@sondes_lisses_test_rep
+			$ref_sondes_lisses_test = inter(
+				$ref_sondes_lisses_test,
+				$ref_sondes_lisses_test_rep
 			);
 
 		}
 
 		return $ref_func_aggr->(
-			\@sondes_lisses_cont,
-			\@sondes_lisses_test
+			$ref_sondes_lisses_cont,
+			$ref_sondes_lisses_test
 		);
 
 	}else{
@@ -326,7 +327,7 @@ sub lissage_replicat{
 	my($ref_samples, $ref_sondes) = @_;
 
 	# On lisse les sondes d'un réplicat
-	my @sondes_lisses = @{$ref_sondes};
+	my $ref_sondes_lisses = [@{$ref_sondes}];
 
 	# Pour chaque sample
 	foreach my $sample (@{$ref_samples}){
@@ -341,20 +342,20 @@ sub lissage_replicat{
 		my $sd = sd(@valeurs_sample);
 
 		# On lisse les sondes du sample
-		my @sondes_lisses_sample = grep {
+		my $ref_sondes_lisses_sample = [grep {
 			abs($_->{$sample} - $mean) <= $sd
-		} @{$ref_sondes};
+		} @{$ref_sondes}];
 
 		# On garde l'intersection avec les autres samples
-		@sondes_lisses = inter(
-			\@sondes_lisses_sample,
-			\@sondes_lisses
+		my $ref_sondes_lisses = inter(
+			$ref_sondes_lisses_sample,
+			$ref_sondes_lisses
 		);
 
 	}
 
 	# On retourne les sondes lisses du réplicat
-	return @sondes_lisses;
+	return $ref_sondes_lisses;
 
 }
 
@@ -438,6 +439,176 @@ sub expression_replicat{
 }
 
 # ==============================================================================
+# Retourne tous les fcs d'une sonde, un par paire de replicat
+# ==============================================================================
+
+sub fcs_sonde{
+
+	my($ref_design, $sonde) = @_;
+
+	if(ref($ref_design) eq 'Design'){
+
+		# On initialise la liste des fcs de la sonde
+		my @fcs = ();
+
+		# Pour chaque paire de replicats
+		foreach my $paire (@{$ref_design}){
+
+			# On calcule la valeur de la sonde pour control et test
+			my $fcs_cont = fcs_sonde($paire->{'control'}, $sonde);
+			my $fcs_test = fcs_sonde($paire->{'test'}, $sonde);
+
+			# On fait tout les fcs de cette paire de replicat
+			for(my $i = 0; $i < @{$fcs_cont}; $i++){
+
+				push(@fcs, $fcs_test->[$i]/$fcs_cont->[$i]);
+
+			}
+
+		}
+
+		# On retourne les fcs de la sonde dans chaque paire de replicats
+		return \@fcs;
+
+	}else{
+
+		# On retoure la moyenne des valeurs de la sonde sur les samples
+		# du replicat
+		return [mean(map {$sonde->{$_}} @{$ref_design})];
+	}
+
+}
+
+# ==============================================================================
+# Retourne la liste des FCs de chaque sonde (liste de liste)
+# ==============================================================================
+
+sub fcs_sondes{
+
+	my($ref_design, $fc_groupe, $ref_sondes) = @_;
+
+	my @fcs_sondes = ();
+
+	foreach my $sonde (@{$ref_sondes}){
+
+		my @fcs_sonde = fcs_sonde($ref_design, $fc_groupe, $sonde);
+
+		push(@fcs_sondes, \@fcs_sonde);
+
+	}
+
+	return \@fcs_sondes;
+
+}
+
+# ==============================================================================
+# Retourne le FC du groupe de sonde et sa p_value
+# ==============================================================================
+
+sub fc_gene{
+
+	my($ref_design, $ref_sondes) = @_;
+
+	# Pour chaque sonde on récupère la médiane de ses fcs
+	my @fcs_sondes = map {
+		median(fcs_sonde($ref_design, $_))
+	} @{$ref_sondes};
+
+	# On calcule le fc du groupe (médiane de ces médianes de fc)
+	my $fc = median(@fcs_sondes);
+
+	# On fait le test stat
+	my $p_value = ttest((log2($fc) >= 0), log2(@fcs_sondes));
+
+	# On retourne le fc et le test stat
+	return($fc, $p_value);
+
+}
+
+# ==============================================================================
+# Retourne la liste des SIs d'une sonde (une par paire de replicat)
+# ==============================================================================
+
+sub sis_sonde{
+
+	my($ref_design, $fc_groupe, $sonde) = @_;
+
+	my @SIs = ();
+
+	my @fcs = fcs_sonde($ref_design, $sonde);
+
+	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
+
+	return \@SIs;
+
+}
+
+# ==============================================================================
+# Retourne la liste des SIs de chaque sonde (liste de liste)
+# ==============================================================================
+
+sub sis_sondes{
+
+	my($ref_design, $fc_groupe, $ref_sondes) = @_;
+
+	my @SIs_sondes = ();
+
+	foreach my $sonde (@{$ref_sondes}){
+
+		my @SIs_sonde = sis_sonde($ref_design, $fc_groupe, $sonde);
+
+		push(@SIs_sondes, \@SIs_sonde);
+
+	}
+
+	return \@SIs_sondes;
+
+}
+
+# ==============================================================================
+# Retourne le SI du groupe de sonde et sa p_value
+# ==============================================================================
+
+sub si_entite{
+
+	my($ref_design, $ref_SIs_sondes, $paired) = @_;
+
+	my @SIs = ();
+	my @SIs_a_tester = ();
+
+	# On récupère à l'arrach le nombre de paires de replicats
+	my $nb_replicats = @{$ref_SIs_sondes->[0]};
+
+	# Pour chaque paire de replicat
+	for(my $i = 0; $i < $nb_replicats; $i++){
+
+		my @SIs_paire_rep = map { $_->[$i] } @{$ref_SIs_sondes};
+
+		my $SI_paire_rep = median(@SIs_paire_rep);
+
+		push(@SIs, $SI_paire_rep);
+
+		if($paired){
+
+			push(@SIs_a_tester, $SI_paire_rep);
+
+		}else{
+
+			push(@SIs_a_tester, @SIs_paire_rep);
+
+		}
+
+	}
+
+	my $SI = median(@SIs);
+
+	my $p_value = ttest((log2($SI) >= 0), log2(@SIs_a_tester));
+
+	return($SI, $p_value, \@SIs);
+
+}
+
+# ==============================================================================
 # Retourne si un groupe de sondes est homogene ou non
 # ==============================================================================
 
@@ -465,70 +636,6 @@ sub homogene{
 
 	# On met a jour le booleen homogene
 	return ($nb_exons_2_sondes >= int($nb_exons/2));
-
-}
-
-# ==============================================================================
-# Retourne tous les fold change d'une sonde, un par paire de replicat
-# ==============================================================================
-
-sub fcs_sonde{
-
-	my($ref_design, $sonde) = @_;
-
-	if(ref($ref_design) eq 'Design'){
-
-		# On initialise la liste des fcs de la sonde
-		my @fcs = ();
-
-		# Pour chaque paire de replicats
-		foreach my $paire (@{$ref_design}){
-
-			# On calcule la valeur de la sonde pour control et test
-			my @fcs_cont = fcs_sonde($paire->{'control'}, $sonde);
-			my @fcs_test = fcs_sonde($paire->{'test'}, $sonde);
-
-			# On fait tout les fcs de cette paire de replicat
-			for(my $i = 0; $i < @fcs_cont; $i++){
-
-				push(@fcs, $fcs_test[$i]/$fcs_cont[$i]);
-
-			}
-
-		}
-
-		# On retourne les fcs de la sonde dans chaque paire de replicats
-		return @fcs;
-
-	}else{
-
-		# On retoure la moyenne des valeurs de la sonde sur les samples
-		# du replicat
-		return (mean(map {$sonde->{$_}} @{$ref_design}));
-	}
-
-}
-
-# ==============================================================================
-# Retourne la liste des SIs d'une sonde (une par paire de replicat)
-# ==============================================================================
-
-sub sis_sonde{
-
-	my($ref_design, $fc_groupe, $sonde) = @_;
-
-	# On initialise la liste de SIs
-	my @SIs = ();
-
-	# On calcule les SIs
-	# pour ça il faut récupérer les folds déjà
-	my @fcs = fcs_sonde($ref_design, $sonde);
-
-	# Si de la sonde (cad, fc de la sonde sur fc du groupe)
-	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
-
-	# On retourne la liste de SIs de la sonde
-	return @SIs;
 
 }
 

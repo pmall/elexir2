@@ -254,66 +254,21 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On calcule les SIs des sondes
 		# ==============================================================
 
-		my @SIs_sondes = ();
-
-		foreach my $sonde (@sondes){
-
-			my @SIs_sonde = sis_sonde(
-				$infos_analyse->{'design'},
-				$gene->{'epi_fc'},
-				$sonde
-			);
-
-			push(@SIs_sondes, \@SIs_sonde);
-
-		}
+		my @SIs_sondes = sis_sondes(
+			$infos_analyse->{'design'},
+			$gene->{'epi_fc'},
+			$sonde
+		);
 
 		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
 		# ==============================================================
 
-		my $SI;
-		my @SIs = ();
-		my @SIs_a_tester = ();
-		my $p_value;
-
-		# La seule diff c'est que pour np on test avec tout les
-		# si des sondes, avec p on test avec les si des paires
-		# de replicats
-		# Le reste pourrais être un seul algo
-
-		# Pour chaque paires de replicat on récupère son SI et les SIs
-		# à tester
-		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
-
-			# On récupère les SIs du réplicat 
-			my @SIs_paire_rep = map { @{$_}[$i] } @SIs_sondes;
-
-			# On calcule le SI du réplicat
-			my $SI_paire_rep = median(@SIs_paire_rep);
-
-			# On l'ajoute a la liste des SIs de l'entité
-			push(@SIs, $SI_paire_rep);
-
-			# Selon que l'experience est paire ou non on met pas
-			# les mêmes valeurs dans la liste des SIs a tester
-			if($paire){
-
-				push(@SIs_a_tester, $SI_paire_rep);
-
-			}else{
-
-				push(@SIs_a_tester, @SIs_paire_rep);
-
-			}
-
-		}
-
-		# On calcule le si de l'entité
-		$SI = median(@SIs);
-
-		# On calcule la pvalue
-		$p_value = ttest((log2($SI) >= 0), log2(@SIs_a_tester));
+		my($SI, $p_value, @SIs) = si_entite(
+			$infos_analyse->{'design'},
+			\@SIs_sondes,
+			$paire
+		);
 
 		# ==============================================================
 		# On calcule le PSI de l'entité

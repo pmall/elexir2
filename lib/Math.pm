@@ -20,7 +20,7 @@ sub round{
 
 sub mean{
 
-	return sum(@_)/@_
+	return sum(@_)/@_;
 
 }
 
@@ -64,15 +64,23 @@ sub median{
 
 sub log2{
 
-	my($test_undef) = @_;
+	my($ref_values) = @_;
 
-	return undef if !defined $test_undef;
+	my $v = [];
 
-	my @logs = ();
+	if(ref($ref_values) eq 'ARRAY'){
 
-	foreach(@_){ push(@logs, log($_)/log(2)); }
+		$v = $ref_values;
 
-	return (wantarray) ? @logs : $logs[0];
+	}else{
+
+		push(@{$v}, $ref_values);
+
+	}
+
+	for(my $i; $i < @{$v}; $i++){ $v->[$i] = log($v->[$i])/log(2); }
+
+	return $v;
 
 }
 

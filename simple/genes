@@ -242,16 +242,11 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Calcul des fold change et de la pvalue pour la transcription
 	# ======================================================================
 
-	# On récupère la liste des médianes des fold change des sondes trans
-	my @fcs_trans = map {
-		median(fcs_sonde($infos_analyse->{'design'}, $_))
-	} @sondes_trans;
-
-	# le fc du gène est la médiane des médianes des fcs des sondes
-	my $fc_gene_trans = median(@fcs_trans);
-
-	# On calcule la p value pour la transcription
-	my $p_value_trans = ttest((log2($fc_gene_trans) >= 0), log2(@fcs_trans));
+	# Calcul du fc du gène et de sa p_value
+	my($fc_gene_trans, $p_value_trans) = fc_gene(
+		$infos_analyse->{'design'},
+		\@sondes_trans
+	);
 
 	# NB sondes utilisées pour la transcription
 	my $nb_sondes_trans = @sondes_trans;
@@ -306,20 +301,10 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			# Calcul des fold change et de la pvalue pour l'épissage
 			# ======================================================
 
-			# On récupère la liste des médianes des fold change des
-			# sondes epissage
-			my @fcs_epissage = map {
-				median(fcs_sonde($infos_analyse->{'design'}, $_))
-			} @sondes_epissage;
-
-			# le fc du gène est la médiane des medianes des fcs des
-			# sondes
-			$fc_gene_epissage = median(@fcs_epissage);
-
-			# On calcule la p value pour l'épissage
-			$p_value_epissage = ttest(
-				(log2($fc_gene_epissage) >= 0),
-				log2(@fcs_epissage)
+			# Calcul du fc du gène et de sa p_value
+			my($fc_gene_epissage, $p_value_epissage) = fc_gene(
+				$infos_analyse->{'design'},
+				\@sondes_epissage
 			);
 
 			# NB sondes utilisées pour l'épissage

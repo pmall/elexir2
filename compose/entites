@@ -245,119 +245,51 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On calcule les SIs des sondes
 		# ==============================================================
 
-		# Fonction abstraite
-		sub calcul_SIs{
-
-			my($ref_design, $fc, $ref_sondes) = @_;
-
-			my @SIs_sondes = ();
-
-			foreach my $sonde (@{$ref_sondes}){
-
-				my @SIs_sonde = sis_sonde(
-					$ref_design,
-					$fc,
-					$sonde
-				);
-
-				push(@SIs_sondes, \@SIs_sonde);
-
-			}
-
-			return @SIs_sondes;
-
-		}
-
 		# Comparaison B/A
-		my @SIs_sondes_ba = calcul_SIs(
+		my @SIs_sondes_ba = sis_sondes(
 			$infos_analyse->{'design'}->[0]->{'control'},
 			$gene->{'fc_ba'},
 			\@sondes_ba
 		);
 
 		# Comparaison D/C
-		my @SIs_sondes_dc = calcul_SIs(
+		my @SIs_sondes_dc = sis_sondes(
 			$infos_analyse->{'design'}->[0]->{'test'},
 			$gene->{'fc_dc'},
 			\@sondes_dc
 		);
 
 		# Comparaison O/J
-		my @SIs_sondes_oj = calcul_SIs(
+		my @SIs_sondes_oj = sis_sondes(
 			$infos_analyse->{'design'},
 			$gene->{'fc_oj'},
 			\@sondes_oj
 		);
 
 		# ==============================================================
-		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
+		# On calcule le SI de l'entité
 		# ==============================================================
 
-		# Fonction abstraite
-		sub SI{
-
-			my($nb_paires_rep, $paired, $ref_SIs_sondes) = @_;
-
-			my @SIs = ();
-			my @SIs_a_tester = ();
-
-			foreach(my $i = 0; $i < $nb_paires_rep; $i++){
-
-				# On récupère les SIs du réplicat 
-				my @SIs_paire_rep = map {
-					@{$_}[$i]
-				} @{$ref_SIs_sondes};
-
-				# On calcule le SI du réplicat
-				my $SI_paire_rep = median(@SIs_paire_rep);
-
-				# On l'ajoute a la liste des SIs de l'entité
-				push(@SIs, $SI_paire_rep);
-
-				# Selon que l'experience est paire ou non on met pas
-				# les mêmes valeurs dans la liste des SIs a tester
-				if($paired){
-
-					push(@SIs_a_tester, $SI_paire_rep);
-
-				}else{
-
-					push(@SIs_a_tester, @SIs_paire_rep);
-
-				}
-
-			}
-
-			# On calcule le si de l'entité
-			my $SI = median(@SIs);
-
-			# On calcule la pvalue
-			my $p_value = ttest((log2($SI) >= 0), log2(@SIs_a_tester));
-
-			return(\@SIs, $SI, $p_value);
-
-		}
-
 		# Comparaison B/A
-		my($ref_SIs_ba, $SI_ba, $p_value_ba) = SI(
-			$infos_analyse->{'nb_paires_rep'},
-			$paire,
-			\@SIs_sondes_ba
+		my($ref_SIs_ba, $SI_ba, $p_value_ba) = si_entite(
+			$infos_analyse->{'design'}->[0]->{'control'},
+			\@SIs_sondes_ba,
+			$paire
 		);
 
-		# Comparaison B/A
-		my($ref_SIs_dc, $SI_dc, $p_value_dc) = SI(
-			$infos_analyse->{'nb_paires_rep'},
-			$paire,
-			\@SIs_sondes_dc
+		# Comparaison D/C
+		my($ref_SIs_dc, $SI_dc, $p_value_dc) = si_entite(
+			$infos_analyse->{'design'}->[0]->{'test'},
+			\@SIs_sondes_dc,
+			$paire
 		);
 
 
-		# Comparaison B/A
-		my($ref_SIs_oj, $SI_oj, $p_value_oj) = SI(
-			$infos_analyse->{'nb_paires_rep'},
-			$paire,
-			\@SIs_sondes_oj
+		# Comparaison O/J
+		my($ref_SIs_oj, $SI_oj, $p_value_oj) = si_entite(
+			$infos_analyse->{'design'},
+			\@SIs_sondes_oj,
+			$paire
 		);
 
 		# ==============================================================
