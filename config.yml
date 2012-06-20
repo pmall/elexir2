@@ -72,14 +72,6 @@ table_sondes:
     fdb2:
       human: humain_ggh_fdb2_probes_status
 
-table_prom:
-  human: humain_prom
-  mouse: souris_prom
-
-table_polya:
-  human: humain_polya
-  mouse: souris_polya
-
 # Paramètres pour les algos
 qc:
   algo: rma

@@ -101,8 +101,6 @@ my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
 my $table_entites = $config->{'table_entites'}{$version}{$orga};
-my $table_prom = $config->{'table_prom'}{$orga};
-my $table_polya = $config->{'table_polya'}{$orga};
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage_SI.xls';
 
@@ -268,16 +266,16 @@ if ( $est_paire ) {
 
 # Sélection des promoteurs d'un gène compris dans un intervalle
 my $select_prom_gene = $probes_db->prepare(
-    "SELECT start_sur_gene
-    FROM $table_prom
+    "SELECT id
+    FROM $table_entites
     WHERE id_gene = ?
     AND start_sur_gene >= ?
     AND start_sur_gene <= ?");
 
 # Sélection des polyas d'un gène compris dans un intervalle
 my $select_polya_gene = $probes_db->prepare(
-    "SELECT end_sur_gene
-    FROM $table_polya
+    "SELECT id
+    FROM $table_entites
     WHERE id_gene = ?
     AND end_sur_gene >= ?
     AND end_sur_gene <= ?");
