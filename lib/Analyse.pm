@@ -7,8 +7,10 @@ use Math;
 use Stats;
 use Exporter qw(import);
 
-our @EXPORT = qw(get_infos_analyse dabg lissage_transcription lissage_epissage
-	expressions fcs_sonde fcs_sondes fc_gene sis_sonde sis_sondes si_entite
+our @EXPORT = qw(get_infos_analyse
+	dabg lissage_transcription lissage_epissage expressions
+	fcs_sonde fcs_sondes fc_gene fc_gene_with_fcs
+	sis_sonde sis_sondes si_entite si_entite_with_sis
 	homogene is_robust);
 
 # ==============================================================================
@@ -171,7 +173,7 @@ sub union{
 
 	}
 
-	return \@union;
+	return @union;
 
 }
 
@@ -198,7 +200,7 @@ sub inter{
 
 	}
 
-	return \@inter;
+	return @inter;
 
 }
 
@@ -342,12 +344,12 @@ sub lissage_replicat{
 		my $sd = sd(@valeurs_sample);
 
 		# On lisse les sondes du sample
-		my @sondes_lisses_sample = [grep {
+		my @sondes_lisses_sample = grep {
 			abs($_->{$sample} - $mean) <= $sd
-		} @{$ref_sondes}];
+		} @{$ref_sondes};
 
 		# On garde l'intersection avec les autres samples
-		my $ref_sondes_lisses = inter(
+		my @sondes_lisses = inter(
 			\@sondes_lisses_sample,
 			\@sondes_lisses
 		);
@@ -485,13 +487,13 @@ sub fcs_sonde{
 
 sub fcs_sondes{
 
-	my($ref_design, $fc_groupe, $ref_sondes) = @_;
+	my($ref_design, $ref_sondes) = @_;
 
 	my @fcs_sondes = ();
 
 	foreach my $sonde (@{$ref_sondes}){
 
-		my @fcs_sonde = fcs_sonde($ref_design, $fc_groupe, $sonde);
+		my @fcs_sonde = fcs_sonde($ref_design, $sonde);
 
 		push(@fcs_sondes, \@fcs_sonde);
 
@@ -502,23 +504,35 @@ sub fcs_sondes{
 }
 
 # ==============================================================================
-# Retourne le FC du groupe de sonde et sa p_value
+# Retourne le FC du groupe de sonde et sa p_value à partir des sondes
 # ==============================================================================
 
 sub fc_gene{
 
 	my($ref_design, $ref_sondes) = @_;
 
+	my @fcs_sondes = fcs_sondes($ref_design, $ref_sondes);
+
+	return fc_gene_with_fcs(\@fcs_sondes);
+
+}
+
+# ==============================================================================
+# Retourne le FC du groupe de sonde et sa p_value à partir des fcs des sondes
+# ==============================================================================
+
+sub fc_gene_with_fcs{
+
+	my($ref_fcs_sondes) = @_;
+
 	# Pour chaque sonde on récupère la médiane de ses fcs
-	my @fcs_sondes = map {
-		median(fcs_sonde($ref_design, $_))
-	} @{$ref_sondes};
+	my @fcs_sondes = map { median(@{$_}) } @{$ref_fcs_sondes};
 
 	# On calcule le fc du groupe (médiane de ces médianes de fc)
 	my $fc = median(@fcs_sondes);
 
 	# On fait le test stat
-	my $p_value = ttest((log2($fc) >= 0), log2(@fcs_sondes));
+	my $p_value = ttest([log2(@fcs_sondes)], (log2($fc) >= 0));
 
 	# On retourne le fc et le test stat
 	return($fc, $p_value);
@@ -566,12 +580,26 @@ sub sis_sondes{
 }
 
 # ==============================================================================
-# Retourne le SI du groupe de sonde et sa p_value
+# Retourne le SI du groupe de sonde et sa p_value à partir des sondes
 # ==============================================================================
 
 sub si_entite{
 
-	my($ref_design, $ref_SIs_sondes, $paired) = @_;
+	my($ref_design, $fc_groupe, $ref_sondes, $paired) = @_;
+
+	my @SIs_sondes = sis_sondes($ref_design, $fc_groupe, $ref_sondes);
+
+	return si_entite_with_sis(\@SIs_sondes, $paired);
+
+}
+
+# ==============================================================================
+# Retourne le SI du groupe de sonde et sa p_value à partir des sis des sondes
+# ==============================================================================
+
+sub si_entite_with_sis{
+
+	my($ref_SIs_sondes, $paired) = @_;
 
 	my @SIs = ();
 	my @SIs_a_tester = ();
@@ -602,7 +630,7 @@ sub si_entite{
 
 	my $SI = median(@SIs);
 
-	my $p_value = ttest((log2($SI) >= 0), log2(@SIs_a_tester));
+	my $p_value = ttest([log2(@SIs_a_tester)], (log2($SI) >= 0));
 
 	return($SI, $p_value, @SIs);
 

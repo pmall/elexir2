@@ -64,10 +64,6 @@ sub median{
 
 sub log2{
 
-	my($test_undef) = @_;
-
-	return undef if !defined $test_undef;
-
 	my @logs = ();
 
 	foreach(@_){ push(@logs, log($_)/log(2)); }

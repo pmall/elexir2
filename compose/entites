@@ -271,23 +271,20 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my($ref_SIs_ba, $SI_ba, $p_value_ba) = si_entite(
-			$infos_analyse->{'design'}->[0]->{'control'},
+		my($SI_ba, $p_value_ba) = si_entite_with_sis(
 			\@SIs_sondes_ba,
 			$paire
 		);
 
 		# Comparaison D/C
-		my($ref_SIs_dc, $SI_dc, $p_value_dc) = si_entite(
-			$infos_analyse->{'design'}->[0]->{'test'},
+		my($SI_dc, $p_value_dc) = si_entite_with_sis(
 			\@SIs_sondes_dc,
 			$paire
 		);
 
 
 		# Comparaison O/J
-		my($ref_SIs_oj, $SI_oj, $p_value_oj) = si_entite(
-			$infos_analyse->{'design'},
+		my($SI_oj, $p_value_oj) = si_entite_with_sis(
 			\@SIs_sondes_oj,
 			$paire
 		);

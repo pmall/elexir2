@@ -302,7 +302,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			my($fc_gene_epissage, $p_value_epissage) = fc_gene(
+			($fc_gene_epissage, $p_value_epissage) = fc_gene(
 				$infos_analyse->{'design'},
 				\@sondes_epissage
 			);

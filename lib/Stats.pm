@@ -49,7 +49,7 @@ sub ttest{
 # liste des échantillons qui a permi de calculer cette valeur
 sub ttest{
 
-	my($alternative, @samples) = @_;
+	my($ref_samples, $alternative) = @_;
 
 	# On formatte et valide l'alternative
 	if($alternative == 0){
@@ -66,14 +66,14 @@ sub ttest{
 
 	# Si tout les fc sont identiques on bouge le premier de 0.01
 	# sinon sd(@samples) = 0 et erreur
-	if(uniq(@samples) == 1){ $samples[0]+= 0.01; }
+	if(uniq(@{$ref_samples}) == 1){ $ref_samples->[0]+= 0.01; }
 
 	# On calcule t valeur de notre sample
-	my $t = mean(@samples)/(sd_est(@samples)/(@samples**0.5));
+	my $t = mean(@{$ref_samples})/(sd_est(@{$ref_samples})/(@{$ref_samples}**0.5));
 
 	# On recherche la proba d'avoir une valeur t plus élevée pour
 	# ce degré de liberté == alternative greater
-	my $t_prob = Statistics::Distributions::tprob(@samples - 1, $t);
+	my $t_prob = Statistics::Distributions::tprob(@{$ref_samples} - 1, $t);
 
 	# Selon l'alternative demandé on calcule la pvalue
 	# greater on laisse tel quel

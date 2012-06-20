@@ -251,21 +251,20 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @expr = expressions($infos_analyse->{'design'}, \@sondes);
 
 		# ==============================================================
-		# On calcule les SIs des sondes
+		# On calcule le SI des sondes
 		# ==============================================================
 
 		my @SIs_sondes = sis_sondes(
 			$infos_analyse->{'design'},
 			$gene->{'epi_fc'},
-			$sonde
+			\@sondes
 		);
 
 		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
 		# ==============================================================
 
-		my($SI, $p_value, @SIs) = si_entite(
-			$infos_analyse->{'design'},
+		my($SI, $p_value, @SIs) = si_entite_with_sis(
 			\@SIs_sondes,
 			$paire
 		);
@@ -320,7 +319,10 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			$psi_sd_fc = sd(@psis_fcs);
 
 			# test stat
-			$p_value_psi = ttest((log2($psi_fc) >= 0), log2(@psis_fcs));
+			$p_value_psi = ttest(
+				[log2(@psis_fcs)],
+				(log2($psi_fc) >= 0)
+			);
 
 		}
 
@@ -409,7 +411,10 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# On fait un test seulement si l'analyse est paire
 			if($paire){
 
-				$entite_gene->{'p_value_sd'} = ttest((log2($entite_gene->{'SIsd'}) >= 0), log2(@{$entite_gene->{'SIsds'}}));
+				$entite_gene->{'p_value_sd'} = ttest(
+					[log2(@{$entite_gene->{'SIsds'}})],
+					(log2($entite_gene->{'SIsd'}) >= 0)
+				);
 
 			}
 

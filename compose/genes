@@ -261,22 +261,22 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Analyse pour les trois comparaisons
 	# ======================================================================
 
-	# Comparaison B/A
+	# FC gene B/A
 	my($fc_ba, $p_value_ba, $nb_sondes_ba, $nb_exons_ba) = fc_gene(
 		$infos_analyse->{'design'}->[0]->{'control'},
-		\@sondes_ba
+		\@fcs_sondes_ba
 	);
 
-	# Comparaison D/C
+	# FC gene D/C
 	my($fc_dc, $p_value_dc, $nb_sondes_dc, $nb_exons_dc) = fc_gene(
 		$infos_analyse->{'design'}->[0]->{'test'},
-		\@sondes_dc
+		\@fcs_sondes_dc
 	);
 
-	# Comparaison O/J
+	# FC gene O/J
 	my($fc_oj, $p_value_oj, $nb_sondes_oj, $nb_exons_oj) = fc_gene(
 		$infos_analyse->{'design'},
-		\@sondes_oj
+		\@fcs_sondes_oj
 	);
 
 	# Nombre de sondes concernées
