@@ -50,6 +50,14 @@ db_name_fasterdb:
     mouse: fasterdb2_souris
 
 # Tables selon le type de puces, la version de fasterdb et l'organisme
+table_genes:
+  fdb1: genes
+  fdb2: genes
+
+table_exons:
+  fdb1: exons_genomiques
+  fdb2: exons
+
 table_entites:
   fdb1:
     human: humain_fdb1_entites
