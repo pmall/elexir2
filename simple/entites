@@ -214,30 +214,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		next if(@{$ids_sondes_ok} < $nb_sondes_min_entite);
 
 		# On récupère les infos des sondes exprimées
-		my @sondes = ();
-
-		# Pour chaque id de sonde
-		foreach my $id_sonde (@{$ids_sondes_ok}){
-
-			# On récupère les valeurs de dabg de la sonde
-			$select_dabg_sth->execute($id_sonde);
-			my $dabg = $select_dabg_sth->fetchrow_hashref;
-			$select_dabg_sth->finish;
-
-			# Si la sonde est exprimée
-			if($analyse->dabg($dabg, $seuil_dabg)){
-
-				# On va chercher ses intensites
-				$select_intensite_sth->execute($id_sonde);
-				my $sonde = $select_intensite_sth->fetchrow_hashref;
-				$select_intensite_sth->finish;
-
-				# On ajoute la sonde et ses SIs aux listes
-				push(@sondes, $sonde);
-
-			}
-
-		}
+		my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_probes_ok, $seuil_dabg);
 
 		# Si il n'y a pas trois sondes exprimées on zappe
 		next if(@sondes < $nb_sondes_min_entite);

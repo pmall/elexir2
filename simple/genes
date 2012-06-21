@@ -193,31 +193,8 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# Si le gène a moins de six sondes avec de bon critères on zappe
 	next if(@{$ids_probes_ok} < $nb_sondes_min_gene);
 
-	# On récupère les valeurs de dabg de chaque sonde
-	my @sondes = ();
-
-	# Pour chaque id de sonde
-	foreach my $probe_id (@{$ids_probes_ok}){
-
-		# On récupère les valeurs de dabg de la sonde
-		$select_dabg_sth->execute($probe_id);
-		my $dabg = $select_dabg_sth->fetchrow_hashref;
-		$select_dabg_sth->finish;
-
-		# Si la sonde est exprimée
-		if($analyse->dabg($dabg, $seuil_dabg)){
-
-			# On va chercher ses intensites
-			$select_intensite_sth->execute($probe_id);
-			my $sonde = $select_intensite_sth->fetchrow_hashref;
-			$select_intensite_sth->finish;
-
-			# Et on l'ajoute à la liste des sondes
-			push(@sondes, $sonde);
-
-		}
-
-	}
+	# On récupère les sondes exprimées
+	my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_probes_ok, $seuil_dabg);
 
 	# Si il n'y a pas six sondes on zappe
 	next if(@sondes < $nb_sondes_min_gene);

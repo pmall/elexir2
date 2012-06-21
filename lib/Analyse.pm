@@ -3,9 +3,10 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
-use Replicat;
+use Format;
 use Math;
 use Utils;
+use Replicat;
 
 # ==============================================================================
 # Retourne les infos de l'analyse
@@ -156,9 +157,88 @@ sub new{
 
 	my($class, $infos_analyse) = @_;
 
+	$infos_analyse->{'select_dabg_sth'} = undef;
+	$infos_analyse->{'select_intensites_sth'} = undef;
+
 	bless($infos_analyse, $class);
 
 	return $infos_analyse;
+
+}
+
+# ==============================================================================
+# Retourne la requete préparée pour selectionner les valeurs de dabg d'une sonde
+# ==============================================================================
+
+sub prepare_select_dabg{
+
+	my($this, $dbh) = @_;
+
+	return $dbh->prepare(
+		"SELECT *
+		FROM " . get_table_dabg($this->{'id_project'}) . "
+		WHERE probe_id = ?"
+	);
+
+}
+
+# ==============================================================================
+# Retourne la requete préparée pour selectionner les intensités d'une sonde
+# ==============================================================================
+
+sub prepare_select_intensites{
+
+	my($this, $dbh) = @_;
+
+	return $dbh->prepare(
+		"SELECT *
+		FROM " . get_table_intensites($this->{'id_project'}) . "
+		WHERE probe_id = ?"
+	);
+
+}
+
+# ==============================================================================
+# Retourne la liste des sondes exprimées à partir d'une liste d'infos de sondes
+# ==============================================================================
+
+sub get_sondes_exprimees{
+
+	my($this, $dbh, $ref_ids_sondes, $seuil_dabg) = @_;
+
+	# On récupère les requetes préparées si elles le sont pas déjà
+	$this->{'select_dabg_sth'} //= $this->prepare_select_dabg($dbh); # /
+	$this->{'select_intensites_sth'} //= $this->prepare_select_intensites($dbh); # /
+
+	my $select_dabg_sth = $this->{'select_dabg_sth'};
+	my $select_intensites_sth = $this->{'select_intensites_sth'};
+
+	# On initialise la liste des sondes exprimées
+	my @sondes = ();
+
+	foreach my $probe_id (@{$ref_ids_sondes}){
+
+		# On récupère les valeurs de dabg de la sonde
+		$select_dabg_sth->execute($probe_id);
+		my $dabg = $select_dabg_sth->fetchrow_hashref;
+		$select_dabg_sth->finish;
+
+		# Si la sonde est exprimée
+		if($this->dabg($dabg, $seuil_dabg)){
+
+			# On va chercher ses intensites
+			$select_intensites_sth->execute($probe_id);
+			my $sonde = $select_intensites_sth->fetchrow_hashref;
+			$select_intensites_sth->finish;
+
+			# Et on l'ajoute à la liste des sondes
+			push(@sondes, $sonde);
+
+		}
+
+	}
+
+	return @sondes;	
 
 }
 
