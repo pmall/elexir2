@@ -8,8 +8,9 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
 use Math;
-use Analyse;
+use Utils;
 use Stats;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -48,7 +49,7 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
+my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
@@ -147,6 +148,9 @@ my $insert_entite_sth = $dbh->prepare(
 
 print 'Analyse des entités' . "\n";
 
+# On récupère l'analyse
+my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
+
 # On défini une liste d'entité
 my @entites = ();
 
@@ -207,17 +211,11 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			my $dabg = $select_dabg_sth->fetchrow_hashref;
 			$select_dabg_sth->finish;
 
-			my $dabg_ba = dabg(
-				$infos_analyse->{'design'}->[0]->{'control'},
-				$dabg,
-				$seuil_dabg
-			);
+			# On calcule le dabg de ab
+			my $dabg_ba = $analyse->[0]->{'cont'}->dabg($dabg, $seuil_dabg);
 
-			my $dabg_dc = dabg(
-				$infos_analyse->{'design'}->[0]->{'test'},
-				$dabg,
-				$seuil_dabg
-			);
+			# On calcule le dabg de cd
+			my $dabg_dc = $analyse->[0]->{'test'}->dabg($dabg, $seuil_dabg);
 
 			# Si la sonde est exprimé
 			if($dabg_ba || $dabg_dc){
@@ -246,22 +244,19 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my @SIs_sondes_ba = sis_sondes(
-			$infos_analyse->{'design'}->[0]->{'control'},
+		my @SIs_sondes_ba = $analyse->[0]->{'cont'}->sis_sondes(
 			$gene->{'fc_ba'},
 			\@sondes_ba
 		);
 
 		# Comparaison D/C
-		my @SIs_sondes_dc = sis_sondes(
-			$infos_analyse->{'design'}->[0]->{'test'},
+		my @SIs_sondes_dc = $analyse->[0]->{'test'}->sis_sondes(
 			$gene->{'fc_dc'},
 			\@sondes_dc
 		);
 
 		# Comparaison O/J
-		my @SIs_sondes_oj = sis_sondes(
-			$infos_analyse->{'design'},
+		my @SIs_sondes_oj = $analyse->sis_sondes(
 			$gene->{'fc_oj'},
 			\@sondes_oj
 		);
@@ -271,23 +266,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my($SI_ba, $p_value_ba) = si_entite_with_sis(
-			\@SIs_sondes_ba,
-			$paire
-		);
+		my($SI_ba, $p_value_ba) = si_matrix(\@SIs_sondes_ba, $paire);
 
 		# Comparaison D/C
-		my($SI_dc, $p_value_dc) = si_entite_with_sis(
-			\@SIs_sondes_dc,
-			$paire
-		);
+		my($SI_dc, $p_value_dc) = si_matrix(\@SIs_sondes_dc, $paire);
 
 
 		# Comparaison O/J
-		my($SI_oj, $p_value_oj) = si_entite_with_sis(
-			\@SIs_sondes_oj,
-			$paire
-		);
+		my($SI_oj, $p_value_oj) = si_matrix(\@SIs_sondes_oj, $paire);
 
 		# ==============================================================
 		# On calcule si l'entité est "cohérente"

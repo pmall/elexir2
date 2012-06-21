@@ -8,9 +8,9 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
 use Math;
-use Analyse;
+use Utils;
 use Stats;
-use Data::Dumper;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -49,7 +49,7 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
+my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
@@ -151,6 +151,9 @@ my $insert_gene_sth = $dbh->prepare(
 
 print 'Analyse des gènes' . "\n";
 
+# On récupère l'analyse
+my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
+
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
 my @genes = ();
@@ -203,18 +206,10 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# On calcule le dabg de ab
-		my $dabg_ba = dabg(
-			$infos_analyse->{'design'}->[0]->{'control'},
-			$dabg,
-			$seuil_dabg
-		);
+		my $dabg_ba = $analyse->[0]->{'cont'}->dabg($dabg, $seuil_dabg);
 
 		# On calcule le dabg de cd
-		my $dabg_dc = dabg(
-			$infos_analyse->{'design'}->[0]->{'test'},
-			$dabg,
-			$seuil_dabg
-		);
+		my $dabg_dc = $analyse->[0]->{'test'}->dabg($dabg, $seuil_dabg);
 
 		# Si la sonde est exprimée dans ab ou cd on prend
 		if($dabg_ba || $dabg_dc){
@@ -262,22 +257,13 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# FC gene B/A
-	my($fc_ba, $p_value_ba, $nb_sondes_ba, $nb_exons_ba) = fc_gene(
-		$infos_analyse->{'design'}->[0]->{'control'},
-		\@fcs_sondes_ba
-	);
+	my($fc_ba, $p_value_ba) = $analyse->[0]->{'cont'}->fc_gene(\@sondes_ba);
 
 	# FC gene D/C
-	my($fc_dc, $p_value_dc, $nb_sondes_dc, $nb_exons_dc) = fc_gene(
-		$infos_analyse->{'design'}->[0]->{'test'},
-		\@fcs_sondes_dc
-	);
+	my($fc_dc, $p_value_dc) = $analyse->[0]->{'test'}->fc_gene(\@sondes_dc);
 
 	# FC gene O/J
-	my($fc_oj, $p_value_oj, $nb_sondes_oj, $nb_exons_oj) = fc_gene(
-		$infos_analyse->{'design'},
-		\@fcs_sondes_oj
-	);
+	my($fc_oj, $p_value_oj) = $analyse->fc_gene(\@sondes_oj);
 
 	# Nombre de sondes concernées
 	my $nb_sondes_ba = @sondes_ba;

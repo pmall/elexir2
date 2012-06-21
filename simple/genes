@@ -7,9 +7,9 @@ use List::MoreUtils qw(uniq);
 use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
-use Math;
-use Analyse;
+use Utils;
 use Stats;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -48,7 +48,7 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
+my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
@@ -84,7 +84,9 @@ my $dbh_fdb = DBI->connect(
 );
 
 # On selectionne les gènes
-my $select_genes_sth = $dbh_fdb->prepare("SELECT id FROM $table_genes LIMIT ?");
+my $select_genes_sth = $dbh_fdb->prepare(
+	"SELECT id FROM $table_genes LIMIT ?"
+);
 
 # On selectionne le nombre d'exons d'un gène
 my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
@@ -120,10 +122,10 @@ my $select_intensite_sth = $dbh->prepare(
 
 my @fields_expr = ();
 
-for(my $i = 1; $i <= @{$infos_analyse->{'design'}}; $i++){
+for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
-	push(@fields_expr, 'control' . $i);
-	push(@fields_expr, 'test' . $i);
+	push(@fields_expr, 'control' . ($i + 1));
+	push(@fields_expr, 'test' . ($i + 1));
 
 }
 
@@ -154,6 +156,9 @@ my $insert_gene_sth = $dbh->prepare(
 # ==============================================================================
 
 print 'Analyse des gènes' . "\n";
+
+# On récupère l'analyse
+my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
 
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
@@ -205,7 +210,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimée
-		if(dabg($infos_analyse->{'design'}, $dabg, $seuil_dabg)){
+		if($analyse->dabg($dabg, $seuil_dabg)){
 
 			# On va chercher ses intensites
 			$select_intensite_sth->execute($probe_id);
@@ -223,30 +228,27 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	next if(@sondes < $nb_sondes_min_gene);
 
 	# ======================================================================
-	# Calcul de l'expression de gène
-	# ======================================================================
-
-	my @expr = expressions($infos_analyse->{'design'}, \@sondes);
-
-	# ======================================================================
 	# Etape de lissage pour la transcription
 	# ======================================================================
 
 	# On selectionne les sondes qui passe le lissage transcription
-	my @sondes_trans = lissage_transcription($infos_analyse->{'design'}, \@sondes);
+	my @sondes_trans = $analyse->lissage_transcription(\@sondes);
 
 	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
 	next if(@sondes_trans < $nb_sondes_min_gene);
+
+	# ======================================================================
+	# Calcul de l'expression de gène
+	# ======================================================================
+
+	my @expr = $analyse->expressions(\@sondes);
 
 	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription
 	# ======================================================================
 
 	# Calcul du fc du gène et de sa p_value
-	my($fc_gene_trans, $p_value_trans) = fc_gene(
-		$infos_analyse->{'design'},
-		\@sondes_trans
-	);
+	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(\@sondes_trans);
 
 	# NB sondes utilisées pour la transcription
 	my $nb_sondes_trans = @sondes_trans;
@@ -292,7 +294,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		# ==============================================================
 
 		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = lissage_epissage($infos_analyse->{'design'}, \@sondes);
+		@sondes_epissage = $analyse->lissage_epissage(\@sondes);
 
 		# Seulement si on a plus de 6 sondes épissage
 		if(@sondes_epissage >= $nb_sondes_min_gene){
@@ -302,8 +304,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			($fc_gene_epissage, $p_value_epissage) = fc_gene(
-				$infos_analyse->{'design'},
+			($fc_gene_epissage, $p_value_epissage) = $analyse->fc_gene(
 				\@sondes_epissage
 			);
 

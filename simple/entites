@@ -8,8 +8,9 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
 use Math;
-use Analyse;
+use Utils;
 use Stats;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -48,7 +49,7 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = get_infos_analyse($dbh, $id_analyse);
+my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
 die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
@@ -116,7 +117,7 @@ my @fields_expr = ();
 my @fields_SIs = ();
 my @fields_SIsds = ();
 
-for(my $i = 0; $i < @{$infos_analyse->{'design'}}; $i++){
+for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
@@ -163,6 +164,9 @@ my $insert_entite_sth = $dbh->prepare(
 # ==============================================================================
 
 print 'Analyse des entités' . "\n";
+
+# On récupère l'analyse
+my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
 
 # On défini une liste d'entité (on les garde toutes dans une liste pour calculer
 # les pvals ajustés)
@@ -226,7 +230,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			$select_dabg_sth->finish;
 
 			# Si la sonde est exprimée
-			if(dabg($infos_analyse->{'design'}, $dabg, $seuil_dabg)){
+			if($analyse->dabg($dabg, $seuil_dabg)){
 
 				# On va chercher ses intensites
 				$select_intensite_sth->execute($id_sonde);
@@ -248,26 +252,19 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# On calcule l'expression de l'entité
-		my @expr = expressions($infos_analyse->{'design'}, \@sondes);
+		my @expr = $analyse->expressions(\@sondes);
 
 		# ==============================================================
 		# On calcule le SI des sondes
 		# ==============================================================
 
-		my @SIs_sondes = sis_sondes(
-			$infos_analyse->{'design'},
-			$gene->{'epi_fc'},
-			\@sondes
-		);
+		my @SIs_sondes = $analyse->sis_sondes($gene->{'epi_fc'}, \@sondes);
 
 		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
 		# ==============================================================
 
-		my($SI, $p_value, @SIs) = si_entite_with_sis(
-			\@SIs_sondes,
-			$paire
-		);
+		my($SI, $p_value, @SIs) = si_matrix(\@SIs_sondes, $paire);
 
 		# ==============================================================
 		# On calcule le PSI de l'entité
