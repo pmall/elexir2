@@ -349,7 +349,7 @@ sub lissage_replicat{
 		} @{$ref_sondes};
 
 		# On garde l'intersection avec les autres samples
-		my @sondes_lisses = inter(
+		@sondes_lisses = inter(
 			\@sondes_lisses_sample,
 			\@sondes_lisses
 		);
