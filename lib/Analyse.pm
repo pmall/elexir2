@@ -227,8 +227,8 @@ sub dabg{
 
 			# On calcule si la sonde est exprimée dans controle et
 			# si elle est exprimé dans test
-			$nb_exp_cont++ if(dabg($paire->{'control'}, $seuil, $sonde));
-			$nb_exp_test++ if(dabg($paire->{'test'}, $seuil, $sonde));
+			$nb_exp_cont++ if(dabg($paire->{'control'}, $sonde, $seuil));
+			$nb_exp_test++ if(dabg($paire->{'test'}, $sonde, $seuil));
 
 		}
 
@@ -251,7 +251,7 @@ sub dabg{
 
 sub dabg_replicat{
 
-	my($ref_samples, $seuil, $sonde) = @_;
+	my($ref_samples, $sonde, $seuil) = @_;
 
 	my $nb_exp = 0;
 
