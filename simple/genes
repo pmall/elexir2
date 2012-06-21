@@ -33,8 +33,6 @@ my $gc_max = $config->{'simple'}{'gc_max'};
 my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
 my $nb_sondes_min_gene = $config->{'simple'}{'nb_sondes_min_gene'};
-my $nb_exon_min_homogene = $config->{'simple'}{'nb_exons_min_homogene'};
-my $nb_min_par_exon_homogene = $config->{'simple'}{'nb_min_par_exon_homogene'}; 
 
 # ==============================================================================
 # On récupère les infos de l'exp
@@ -48,13 +46,13 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'simple'){
+if($analyse->{'type'} ne 'simple'){
 
 	die('Le script simple ne fonctionne que sur les analyses simples :o)');
 
@@ -64,13 +62,13 @@ if($infos_analyse->{'type'} ne 'simple'){
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_genes = $config->{'table_genes'}{$infos_analyse->{'version'}};
-my $table_exons = $config->{'table_exons'}{$infos_analyse->{'version'}};
-my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'type_chips'}}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
-my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_genes = $config->{'table_genes'}{$analyse->{'version'}};
+my $table_exons = $config->{'table_exons'}{$analyse->{'version'}};
+my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_dabg = get_table_dabg($analyse->{'id_project'});
+my $table_intensites = get_table_intensites($analyse->{'id_project'});
+my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requetes sur la bonne base fasterdb
@@ -122,7 +120,7 @@ my $select_intensite_sth = $dbh->prepare(
 
 my @fields_expr = ();
 
-for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
@@ -156,9 +154,6 @@ my $insert_gene_sth = $dbh->prepare(
 # ==============================================================================
 
 print 'Analyse des gènes' . "\n";
-
-# On récupère l'analyse
-my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
 
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
@@ -279,13 +274,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	$select_nb_exons_gene_sth->finish;
 
 	# Si le gène est homogène on calcule les valeurs d'épissage
-	my $homogene = homogene(
-		$infos_sondes,
-		\@sondes,
-		$nb_exons,
-		$nb_exon_min_homogene,
-		$nb_min_par_exon_homogene
-	);
+	my $homogene = homogene($infos_sondes, \@sondes, $nb_exons);
 
 	if($homogene){
 

@@ -34,8 +34,6 @@ my $nb_occ_max = $config->{'compose'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'compose'}{'seuil_dabg'};
 my $nb_sondes_min_entite = $config->{'compose'}{'nb_sondes_min_entite'};
 my $seuil_si_robust = $config->{'compose'}{'seuil_si_robust'};
-my $seuil_percent_robust = $config->{'simple'}{'seuil_percent_robust'};
-my $seuil_nb_sondes_min_robust = $config->{'simple'}{'seuil_nb_sondes_min_robust'};
 
 # ==============================================================================
 # Préparation des requètes pour les infos du projet
@@ -49,32 +47,32 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'compose'){
+if($analyse->{'type'} ne 'compose'){
 
 	die('Le script composé ne fonctionne que sur les analyses composées :o)');
 
 }
 
 # petit raccourcit...
-my $paire = $infos_analyse->{'paired'};
+my $paire = $analyse->{'paired'};
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_entites = $config->{'table_entites'}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'type_chips'}}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
-my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
-my $table_si = get_table_si($infos_analyse->{'id_project'}, $id_analyse);
-my $table_splicing = get_table_splicing($infos_analyse->{'id_project'}, $id_analyse);
+my $table_entites = $config->{'table_entites'}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_dabg = get_table_dabg($analyse->{'id_project'});
+my $table_intensites = get_table_intensites($analyse->{'id_project'});
+my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
+my $table_si = get_table_si($analyse->{'id_project'}, $id_analyse);
+my $table_splicing = get_table_splicing($analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requete sur elexir pour l'analyse avec ces infos
@@ -148,8 +146,9 @@ my $insert_entite_sth = $dbh->prepare(
 
 print 'Analyse des entités' . "\n";
 
-# On récupère l'analyse
-my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
+# Deux racourcis
+my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
+my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
 
 # On défini une liste d'entité
 my @entites = ();
@@ -212,10 +211,10 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			$select_dabg_sth->finish;
 
 			# On calcule le dabg de ab
-			my $dabg_ba = $analyse->[0]->{'cont'}->dabg($dabg, $seuil_dabg);
+			my $dabg_ba = $analyse_ba->dabg($dabg, $seuil_dabg);
 
 			# On calcule le dabg de cd
-			my $dabg_dc = $analyse->[0]->{'test'}->dabg($dabg, $seuil_dabg);
+			my $dabg_dc = $analyse_dc->dabg($dabg, $seuil_dabg);
 
 			# Si la sonde est exprimé
 			if($dabg_ba || $dabg_dc){
@@ -244,13 +243,13 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my @SIs_sondes_ba = $analyse->[0]->{'cont'}->sis_sondes(
+		my @SIs_sondes_ba = $analyse_ba->sis_sondes(
 			$gene->{'fc_ba'},
 			\@sondes_ba
 		);
 
 		# Comparaison D/C
-		my @SIs_sondes_dc = $analyse->[0]->{'test'}->sis_sondes(
+		my @SIs_sondes_dc = $analyse_dc->sis_sondes(
 			$gene->{'fc_dc'},
 			\@sondes_dc
 		);
@@ -282,22 +281,19 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my $is_robust_ba = is_robust(
 			[map { median(@{$_}) } @SIs_sondes_ba],
 			$seuil_si_robust,
-			$seuil_percent_robust,
-			$seuil_nb_sondes_min_robust
+			(1/$seuil_si_robust)
 		);
 
 		my $is_robust_dc = is_robust(
 			[map { median(@{$_}) } @SIs_sondes_dc],
 			$seuil_si_robust,
-			$seuil_percent_robust,
-			$seuil_nb_sondes_min_robust
+			(1/$seuil_si_robust)
 		);
 
 		my $is_robust_oj = is_robust(
 			[map { median(@{$_}) } @SIs_sondes_oj],
 			$seuil_si_robust,
-			$seuil_percent_robust,
-			$seuil_nb_sondes_min_robust
+			(1/$seuil_si_robust)
 		);
 
 		# ==============================================================
@@ -309,11 +305,8 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			'gene_id' => $gene->{'gene_id'},
 			'type' => $entite->{'type'},
 			'exon_pos' => $entite->{'exon_pos'},
-			'SIs_ba' => $ref_SIs_ba,
 			'SI_ba' => $SI_ba,
-			'SIs_dc' => $ref_SIs_dc,
 			'SI_dc' => $SI_dc,
-			'SIs_oj' => $ref_SIs_oj,
 			'SI_oj' => $SI_oj,
 			'p_value_ba' => $p_value_ba,
 			'p_value_dc' => $p_value_dc,

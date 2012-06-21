@@ -94,10 +94,6 @@ simple:
   nb_sondes_min_gene: 6
   nb_sondes_min_entite: 3
   seuil_si_robust: 1.1 # En base 10 !
-  seuil_percent_robust: 0.8
-  seuil_nb_sondes_min_robust: 3
-  nb_exons_min_homogene: 4
-  nb_min_par_exon_homogene: 2
   excel:
     seuil_trans: 1.2 # En base 10 !
     seuil_epissage: 1.45 # En base 10 !
@@ -111,10 +107,6 @@ compose:
   nb_sondes_min_gene: 6
   nb_sondes_min_entite: 3
   seuil_si_robust: 1.1 # En base 10 !
-  seuil_percent_robust: 0.8
-  seuil_nb_sondes_min_robust: 3
-  nb_exons_min_homogene: 4
-  nb_min_par_exon_homogene: 2
   excel:
     seuil_trans_simple: 1.45 # En base 10 !
     seuil_trans_j_vs_o: 1.2 # En base 10 !

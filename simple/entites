@@ -34,8 +34,6 @@ my $nb_occ_max = $config->{'simple'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'simple'}{'seuil_dabg'};
 my $nb_sondes_min_entite = $config->{'simple'}{'nb_sondes_min_entite'};
 my $seuil_si_robust = $config->{'simple'}{'seuil_si_robust'};
-my $seuil_percent_robust = $config->{'simple'}{'seuil_percent_robust'};
-my $seuil_nb_sondes_min_robust = $config->{'simple'}{'seuil_nb_sondes_min_robust'};
 
 # ==============================================================================
 # Préparation des requètes pour les infos du projet
@@ -49,32 +47,32 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'simple'){
+if($analyse->{'type'} ne 'simple'){
 
 	die('Le script simple ne fonctionne que sur les analyses simples :o)');
 
 }
 
 # petit raccourcit...
-my $paire = $infos_analyse->{'paired'};
+my $paire = $analyse->{'paired'};
 
 # ==============================================================================
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_entites = $config->{'table_entites'}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'type_chips'}}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
-my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
-my $table_si = get_table_si($infos_analyse->{'id_project'}, $id_analyse);
-my $table_splicing = get_table_splicing($infos_analyse->{'id_project'}, $id_analyse);
+my $table_entites = $config->{'table_entites'}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_dabg = get_table_dabg($analyse->{'id_project'});
+my $table_intensites = get_table_intensites($analyse->{'id_project'});
+my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
+my $table_si = get_table_si($analyse->{'id_project'}, $id_analyse);
+my $table_splicing = get_table_splicing($analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requete sur elexir pour l'analyse avec ces infos
@@ -117,7 +115,7 @@ my @fields_expr = ();
 my @fields_SIs = ();
 my @fields_SIsds = ();
 
-for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
@@ -164,9 +162,6 @@ my $insert_entite_sth = $dbh->prepare(
 # ==============================================================================
 
 print 'Analyse des entités' . "\n";
-
-# On récupère l'analyse
-my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
 
 # On défini une liste d'entité (on les garde toutes dans une liste pour calculer
 # les pvals ajustés)
@@ -284,7 +279,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @psis_fcs = ();
 
 		# Pour chaque paire de replicat
-		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 			# On récupère les indexs des champs expr control et test
 			my $index_cont = $i * 2;
@@ -330,8 +325,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my $is_robust = is_robust(
 			[map { median(@{$_}) } @SIs_sondes],
 			$seuil_si_robust,
-			$seuil_percent_robust,
-			$seuil_nb_sondes_min_robust
+			(1/$seuil_si_robust)
 		);
 
 		# ==============================================================
@@ -382,7 +376,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @SIs_gene = ();
 
 		# Il y en a une par paire...
-		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 			push(@SIs_gene, median(map { @{$_->{'SIs'}}[$i] } @entites_exoniques));
 
@@ -392,7 +386,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		foreach my $entite_gene (@entites_gene){
 
 			# Il y en a un par paire...
-			for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+			for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 				@{$entite_gene->{'SIsds'}}[$i] = (@{$entite_gene->{'SIs'}}[$i]/$SIs_gene[$i]);
 

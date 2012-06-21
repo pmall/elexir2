@@ -34,8 +34,6 @@ my $gc_max = $config->{'compose'}{'gc_max'};
 my $nb_occ_max = $config->{'compose'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'compose'}{'seuil_dabg'};
 my $nb_sondes_min_gene = $config->{'compose'}{'nb_sondes_min_gene'};
-my $nb_exon_min_homogene = $config->{'compose'}{'nb_exons_min_homogene'};
-my $nb_min_par_exon_homogene = $config->{'compose'}{'nb_min_par_exon_homogene'}; 
 
 # ==============================================================================
 # On récupère les infos de l'exp
@@ -49,13 +47,13 @@ my $dbh = DBI->connect(
 );
 
 # On récupère les infos de l'analyse
-my $infos_analyse = Analyse->get_infos_analyse($dbh, $id_analyse);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
 # Message d'erreur si l'analyse n'existe pas
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'compose'){
+if($analyse->{'type'} ne 'compose'){
 
 	die('Le script composé ne fonctionne que sur les analyses composées :o)');
 
@@ -65,13 +63,13 @@ if($infos_analyse->{'type'} ne 'compose'){
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_genes = $config->{'table_genes'}{$infos_analyse->{'version'}};
-my $table_exons = $config->{'table_exons'}{$infos_analyse->{'version'}};
-my $table_sondes = $config->{'table_sondes'}{$infos_analyse->{'type_chips'}}{$infos_analyse->{'version'}}{$infos_analyse->{'organism'}};
-my $table_dabg = get_table_dabg($infos_analyse->{'id_project'});
-my $table_intensites = get_table_intensites($infos_analyse->{'id_project'});
-my $table_trans = get_table_transcription($infos_analyse->{'id_project'}, $id_analyse);
+my $base_fasterdb = $config->{'db_name_fasterdb'}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_genes = $config->{'table_genes'}{$analyse->{'version'}};
+my $table_exons = $config->{'table_exons'}{$analyse->{'version'}};
+my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
+my $table_dabg = get_table_dabg($analyse->{'id_project'});
+my $table_intensites = get_table_intensites($analyse->{'id_project'});
+my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
 
 # ==============================================================================
 # On prépare les requetes sur la bonne base fasterdb
@@ -151,8 +149,9 @@ my $insert_gene_sth = $dbh->prepare(
 
 print 'Analyse des gènes' . "\n";
 
-# On récupère l'analyse
-my $analyse = Analyse->get_analyse($dbh, $infos_analyse);
+# Deux racourcis
+my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
+my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
 
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
@@ -206,10 +205,10 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		$select_dabg_sth->finish;
 
 		# On calcule le dabg de ab
-		my $dabg_ba = $analyse->[0]->{'cont'}->dabg($dabg, $seuil_dabg);
+		my $dabg_ba = $analyse_ba->dabg($dabg, $seuil_dabg);
 
 		# On calcule le dabg de cd
-		my $dabg_dc = $analyse->[0]->{'test'}->dabg($dabg, $seuil_dabg);
+		my $dabg_dc = $analyse_dc->dabg($dabg, $seuil_dabg);
 
 		# Si la sonde est exprimée dans ab ou cd on prend
 		if($dabg_ba || $dabg_dc){
@@ -244,23 +243,17 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	# On zappe si oj n'est pas homogène (si il est homogène, les deux autres
 	# le sont aussi, ses sondes sont l'intersection des sondes de ba et dc)
-	next if(!homogene(
-		$infos_sondes,
-		\@sondes_oj,
-		$nb_exons,
-		$nb_exon_min_homogene,
-		$nb_min_par_exon_homogene
-	));
+	next if(!homogene($infos_sondes, \@sondes_oj, $nb_exons));
 
 	# ======================================================================
 	# Analyse pour les trois comparaisons
 	# ======================================================================
 
 	# FC gene B/A
-	my($fc_ba, $p_value_ba) = $analyse->[0]->{'cont'}->fc_gene(\@sondes_ba);
+	my($fc_ba, $p_value_ba) = $analyse_ba->fc_gene(\@sondes_ba);
 
 	# FC gene D/C
-	my($fc_dc, $p_value_dc) = $analyse->[0]->{'test'}->fc_gene(\@sondes_dc);
+	my($fc_dc, $p_value_dc) = $analyse_dc->fc_gene(\@sondes_dc);
 
 	# FC gene O/J
 	my($fc_oj, $p_value_oj) = $analyse->fc_gene(\@sondes_oj);

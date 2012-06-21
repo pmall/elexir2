@@ -11,7 +11,9 @@ use Utils;
 # Retourne les infos de l'analyse
 # ==============================================================================
 
-sub get_infos_analyse{
+# => Factory : Tout le reste découle de la liste 'design'
+
+sub get_analyse{
 
 	my($class, $dbh, $id_analyse) = @_;
 
@@ -72,25 +74,10 @@ sub get_infos_analyse{
 
 	}
 
-	$infos_analyse->{'conditions'} = $conditions;
+	# On calcule le nombre de paires de replicats
 	$infos_analyse->{'nb_paires_rep'} = ($infos_analyse->{'paired'})
 		? $nb_max
 		: 1;
-
-	# On retourne les infos de l'analyse
-	return $infos_analyse;
-
-}
-
-# ==============================================================================
-# Retourne la description de l'analyse
-# ==============================================================================
-
-sub get_analyse{
-
-	my($class, $dbh, $infos_analyse) = @_;
-
-	my $conditions = $infos_analyse->{'conditions'};
 
 	# On défini le design de l'expérience
 	my $paires = [];
@@ -115,13 +102,13 @@ sub get_analyse{
 	}else{
 
 		# Analyse de type composée, on récupère les sous comparaisons
-		my $control = [];
-		my $test = [];
+		my $paires_cont = [];
+		my $paires_test = [];
 
 		# Pour chaque paire de replicat
 		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
 
-			$control->[$i] = {
+			$paires_cont->[$i] = {
 				'cont' => ($infos_analyse->{'paired'})
 					? new Replicat([$conditions->{'A'}->[$i]])
 					: new Replicat($conditions->{'A'}),
@@ -130,7 +117,7 @@ sub get_analyse{
 					: new Replicat($conditions->{'B'})
 			};
 
-			$test->[$i] = {
+			$paires_test->[$i] = {
 				'cont' => ($infos_analyse->{'paired'})
 					? new Replicat([$conditions->{'C'}->[$i]])
 					: new Replicat($conditions->{'C'}),
@@ -141,15 +128,23 @@ sub get_analyse{
 
 		}
 
+		# On fait les designs cont et test
+		my $cont = {%{$infos_analyse}, 'design' => $paires_cont};
+		my $test = {%{$infos_analyse}, 'design' => $paires_test};
+
 		# On intègre les sous comparaisons à la comparaison globale
 		$paires->[0] = {
-			'cont' => new Analyse($control),
+			'cont' => new Analyse($cont),
 			'test' => new Analyse($test)
 		};
 
 	}
 
-	return new Analyse($paires);
+	# La liste de paires est le design de l'analyse
+	$infos_analyse->{'design'} = $paires;
+
+	# On retourne un objet analyse
+	return new Analyse($infos_analyse);
 
 }
 
@@ -159,11 +154,11 @@ sub get_analyse{
 
 sub new{
 
-	my($class, $ref_paires) = @_;
+	my($class, $infos_analyse) = @_;
 
-	bless($ref_paires, $class);
+	bless($infos_analyse, $class);
 
-	return $ref_paires;
+	return $infos_analyse;
 
 }
 
@@ -177,12 +172,12 @@ sub dabg{
 	my($this, $sonde, $seuil) = @_;
 
 	# On calcule combien de reps controle et de rep tests sont exprimés
-	my $nb_reps = @{$this};
+	my $nb_paires_rep = @{$this->{'design'}};
 	my $nb_exp_cont = 0;
 	my $nb_exp_test = 0;
 
 	# Pour chaque paire de replicats
-	foreach my $paire (@{$this}){
+	foreach my $paire (@{$this->{'design'}}){
 
 		# On calcule si la sonde est exprimée dans controle et
 		# si elle est exprimé dans test
@@ -193,7 +188,7 @@ sub dabg{
 
 	# Si exprimée dans la moitié des reps controle ou la moitié des
 	# reps test, on retourne true
-	return ($nb_exp_cont > ($nb_reps/2) or $nb_exp_test > ($nb_reps/2));
+	return ($nb_exp_cont > ($nb_paires_rep/2) or $nb_exp_test > ($nb_paires_rep/2));
 
 }
 
@@ -208,7 +203,7 @@ sub lissage{
 	my @sondes_lisses_cont = @{$ref_sondes};
 	my @sondes_lisses_test = @{$ref_sondes};
 
-	foreach my $paire (@{$this}){
+	foreach my $paire (@{$this->{'design'}}){
 
 		my @sondes_lisses_cont_rep = $paire->{'cont'}->lissage(
 			$ref_sondes,
@@ -272,7 +267,7 @@ sub expressions{
 
 	my @expressions = ();
 
-	foreach my $paire (@{$this}){
+	foreach my $paire (@{$this->{'design'}}){
 
 		push(@expressions, $paire->{'cont'}->expressions($ref_sondes));
 		push(@expressions, $paire->{'test'}->expressions($ref_sondes));
@@ -295,7 +290,7 @@ sub fcs_sonde{
 	my @fcs = ();
 
 	# Pour chaque paire de replicats
-	foreach my $paire (@{$this}){
+	foreach my $paire (@{$this->{'design'}}){
 
 		# On calcule la valeur de la sonde pour control et test
 		my @fcs_cont = $paire->{'cont'}->fcs_sonde($sonde);
@@ -397,11 +392,11 @@ sub sis_sondes{
 
 sub si_entite{
 
-	my($this, $fc_groupe, $ref_sondes, $paired) = @_;
+	my($this, $fc_groupe, $ref_sondes) = @_;
 
 	my @SIs_sondes = $this->sis_sondes($fc_groupe, $ref_sondes);
 
-	return si_matrix(\@SIs_sondes, $paired);
+	return si_matrix(\@SIs_sondes, $this->{'paired'});
 
 }
 

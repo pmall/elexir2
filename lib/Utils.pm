@@ -134,7 +134,11 @@ sub si_matrix{
 
 sub homogene{
 
-	my($infos_sondes, $ref_sondes, $nb_exons, $nb_exons_min,$nb_min_par_exon) = @_;
+	my($infos_sondes, $ref_sondes, $nb_exons, $nb_exons_min, $nb_min_par_exon) = @_;
+
+	# Valeurs par défaut
+	$nb_exons_min //= 4; #/
+	$nb_min_par_exon //= 2; #/
 
 	# Si il y a moin de $nb_exons_min exons, on retourne true
 	return 1 if($nb_exons < $nb_exons_min);
@@ -165,23 +169,27 @@ sub homogene{
 
 sub is_robust{
 
-	my($ref_SIs, $seuil_si, $seuil_percent, $seuil_nb_sondes_min) = @_;
+	my($ref_values, $seuil_up, $seuil_down, $seuil_percent, $seuil_nb_sondes_min) = @_;
 
-	my $nb_SIs = @{$ref_SIs};
+	# Valeurs par défaut
+	$seuil_percent //= 0.8; #/
+	$seuil_nb_sondes_min //= 3; #/
+
+	my $nb_values = @{$ref_values};
 	my $nb_ups = 0;
 	my $nb_downs = 0;
 
 	# Pour chaque si
-	foreach my $SI (@{$ref_SIs}){
+	foreach my $value (@{$ref_values}){
 
 		# On compte les SIs up et les SIs down
-		if($SI >= $seuil_si){ $nb_ups++; }
-		if((1/$SI) >= $seuil_si){ $nb_downs++; }
+		if($value >= $seuil_up){ $nb_ups++; }
+		if($value <= $seuil_down){ $nb_downs++; }
 
 	}
 
 	# On récupère la limite
-	my $limit = int($nb_SIs*$seuil_percent);
+	my $limit = int($nb_values*$seuil_percent);
 
 	# On regarde si l'entité est globalement up ou down
 	my $is_up = ($nb_ups >= $limit and $nb_ups >= $seuil_nb_sondes_min);
