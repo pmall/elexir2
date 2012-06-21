@@ -214,7 +214,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		next if(@{$ids_sondes_ok} < $nb_sondes_min_entite);
 
 		# On récupère les infos des sondes exprimées
-		my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_probes_ok, $seuil_dabg);
+		my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_sondes_ok, $seuil_dabg);
 
 		# Si il n'y a pas trois sondes exprimées on zappe
 		next if(@sondes < $nb_sondes_min_entite);
