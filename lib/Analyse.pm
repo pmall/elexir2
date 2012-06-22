@@ -170,15 +170,17 @@ sub new{
 # Retourne la requete préparée pour selectionner les valeurs de dabg d'une sonde
 # ==============================================================================
 
-sub prepare_select_dabg{
+sub get_select_dabg{
 
 	my($this, $dbh) = @_;
 
-	return $dbh->prepare(
+	$this->{'select_dabg_sth'} //= $dbh->prepare( # /
 		"SELECT *
 		FROM " . get_table_dabg($this->{'id_project'}) . "
 		WHERE probe_id = ?"
 	);
+
+	return $this->{'select_dabg_sth'};
 
 }
 
@@ -186,15 +188,17 @@ sub prepare_select_dabg{
 # Retourne la requete préparée pour selectionner les intensités d'une sonde
 # ==============================================================================
 
-sub prepare_select_intensites{
+sub get_select_intensites{
 
 	my($this, $dbh) = @_;
 
-	return $dbh->prepare(
+	$this->{'select_intensites_sth'} //= $dbh->prepare( # /
 		"SELECT *
 		FROM " . get_table_intensites($this->{'id_project'}) . "
 		WHERE probe_id = ?"
 	);
+
+	return $this->{'select_intensites_sth'};
 
 }
 
@@ -206,12 +210,10 @@ sub get_sondes_exprimees{
 
 	my($this, $dbh, $ref_ids_sondes, $seuil_dabg) = @_;
 
-	# On récupère les requetes préparées si elles le sont pas déjà
-	$this->{'select_dabg_sth'} //= $this->prepare_select_dabg($dbh); # /
-	$this->{'select_intensites_sth'} //= $this->prepare_select_intensites($dbh); # /
-
-	my $select_dabg_sth = $this->{'select_dabg_sth'};
-	my $select_intensites_sth = $this->{'select_intensites_sth'};
+	# On récupère les requetes préparées si elles le sont pas déjà dans
+	# le cache
+	my $select_dabg_sth = $this->get_select_dabg($dbh);
+	my $select_intensites_sth = $this->get_select_intensites($dbh);
 
 	# On initialise la liste des sondes exprimées
 	my @sondes = ();
