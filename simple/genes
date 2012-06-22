@@ -128,7 +128,7 @@ for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 }
 
 my @fields_trans = (
-	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
+	'id_gene INT UNSIGNED NOT NULL PRIMARY KEY',
 	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_expr),
 	'trans_fc DECIMAL(10,5) UNSIGNED NOT NULL',
 	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
@@ -292,16 +292,16 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
 	# On ajoute le gène à la liste
 	push(@genes, {
-		'id' => $id_gene,
+		'id_gene' => $id_gene,
 		'expression' => \@expr,
-		'fc_trans' => $fc_gene_trans,
-		'p_value_trans' => $p_value_trans,
-		'nb_sondes_trans' => $nb_sondes_trans,
-		'nb_exons_trans' => $nb_exons_trans,
-		'fc_epi' => $fc_gene_epissage,
-		'p_value_epi' => $p_value_epissage,
-		'nb_sondes_epi' => $nb_sondes_epissage,
-		'nb_exons_epi' => $nb_exons_epissage
+		'trans_fc' => $fc_gene_trans,
+		'trans_pval' => $p_value_trans,
+		'trans_nb_sondes' => $nb_sondes_trans,
+		'trans_nb_exons' => $nb_exons_trans,
+		'epi_fc' => $fc_gene_epissage,
+		'epi_pval' => $p_value_epissage,
+		'epi_nb_sondes' => $nb_sondes_epissage,
+		'epi_nb_exons' => $nb_exons_epissage
 	});
 
 }
@@ -311,8 +311,8 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 # ==============================================================================
 
 # On les corrige
-my @adjp_trans = adjust_pvals(map { $_->{'p_value_trans'} } @genes);
-my @adjp_epi = adjust_pvals(map { $_->{'p_value_epi'} } @genes);
+my @trans_adjp = adjust_pvals(map { $_->{'trans_pval'} } @genes);
+my @epi_adjp = adjust_pvals(map { $_->{'epi_pval'} } @genes);
 
 # Pour chaque gène
 for(my $i = 0; $i < @genes; $i++){
@@ -322,18 +322,18 @@ for(my $i = 0; $i < @genes; $i++){
 
 	# On insert le gène dans la bdd
 	$insert_gene_sth->execute(
-		$gene->{'id'},
+		$gene->{'id_gene'},
 		(map { $_ } (@{$gene->{'expression'}})),
-		$gene->{'fc_trans'},
-		$gene->{'p_value_trans'},
-		$adjp_trans[$i],
-		$gene->{'nb_sondes_trans'},
-		$gene->{'nb_exons_trans'},
-		$gene->{'fc_epi'},
-		$gene->{'p_value_epi'},
-		$adjp_epi[$i],
-		$gene->{'nb_sondes_epi'},
-		$gene->{'nb_exons_epi'}
+		$gene->{'trans_fc'},
+		$gene->{'trans_pval'},
+		$trans_adjp[$i],
+		$gene->{'trans_nb_sondes'},
+		$gene->{'trans_nb_exons'},
+		$gene->{'epi_fc'},
+		$gene->{'epi_pval'},
+		$epi_adjp[$i],
+		$gene->{'epi_nb_sondes'},
+		$gene->{'epi_nb_exons'}
 	);
 
 }

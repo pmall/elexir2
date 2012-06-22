@@ -127,9 +127,9 @@ for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 my @fields_splicing = ();
 
 push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
-push(@fields_splicing, 'gene_id INT UNSIGNED NOT NULL');
-push(@fields_splicing, 'entite_type ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
-push(@fields_splicing, 'entite_pos SMALLINT UNSIGNED NOT NULL');
+push(@fields_splicing, 'id_gene INT UNSIGNED NOT NULL');
+push(@fields_splicing, 'type_entite ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
+push(@fields_splicing, 'exon_pos SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_expr));
 push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs)) if($paire);
 push(@fields_splicing, 'SI DECIMAL(10,5) UNSIGNED NOT NULL');
@@ -180,12 +180,12 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	my @entites_gene = ();
 
 	# On selectionne les entités du gène
-	$select_entites_sth->execute($gene->{'gene_id'});
+	$select_entites_sth->execute($gene->{'id_gene'});
 
 	# Pour chaque entité du gène
 	while(my $entite = $select_entites_sth->fetchrow_hashref){
 
-		print $gene->{'gene_id'} . ' ' . $entite->{'id'} . "\n";
+		print $gene->{'id_gene'} . ' ' . $entite->{'id'} . "\n";
 
 		# ==============================================================
 		# On selectionne les sondes
@@ -310,28 +310,27 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		push(@entites_gene, {
-			'id' => $entite->{'id'},
-			'id_gene' => $gene->{'gene_id'},
-			'type' => $entite->{'type'},
+			'id_entite' => $entite->{'id'},
+			'id_gene' => $gene->{'id_gene'},
+			'type_entite' => $entite->{'type'},
 			'exon_pos' => $entite->{'exon_pos'},
 			'expression' => \@expr,
 			'SIs' => \@SIs,
 			'SI' => $SI,
-			'p_value' => $p_value,
+			'SI_pval' => $p_value,
 			'SIsds' => \@SIs, # par défaut les SIsd sont identiques aux SIs
 			'SIsd' => $SI, # idem
-			'p_value_sd' => $p_value,
+			'SIsd_pval' => $p_value,
 			'psi_control' => $psi_control,
 			'psi_test' => $psi_test,
 			'psi_sd_control' => $psi_sd_control,
 			'psi_sd_test' => $psi_sd_test,
 			'psi_fc' => $psi_fc,
 			'psi_sd_fc' => $psi_sd_fc,
-			'p_value_psi' => $p_value_psi,
+			'psi_pval' => $p_value_psi,
 			'nb_sondes' => scalar(@sondes),
 			'is_robust' => $is_robust
 		});
-
 
 	}
 
@@ -344,7 +343,9 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 	# Pour ça il faut calculer le 'SI' du gène
 	# On selectionne les entités exoniques du gène
-	my @entites_exoniques = grep { $_->{'type'} eq 'exon' } @entites_gene;
+	my @entites_exoniques = grep {
+		$_->{'type_entite'} eq 'exon'
+	} @entites_gene;
 
 	# Si il y a des entités exoniques
 	if(@entites_exoniques > 0){
@@ -355,7 +356,9 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# Il y en a une par paire...
 		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
-			push(@SIs_gene, median(map { @{$_->{'SIs'}}[$i] } @entites_exoniques));
+			push(@SIs_gene, median(map {
+				$_->{'SIs'}->[$i]
+			} @entites_exoniques));
 
 		}
 
@@ -365,7 +368,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# Il y en a un par paire...
 			for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
-				@{$entite_gene->{'SIsds'}}[$i] = (@{$entite_gene->{'SIs'}}[$i]/$SIs_gene[$i]);
+				$entite_gene->{'SIsds'}->[$i] = $entite_gene->{'SIs'}->[$i]/$SIs_gene[$i];
 
 			}
 
@@ -373,7 +376,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# (en cas d'analyse non paire, il y en a qu'une, prendre la
 			# médiane ne change rien)
 
-			# en log2 pour coller a l'algo précédent
 			$entite_gene->{'SIsd'} = median(@{$entite_gene->{'SIsds'}});
 
 			# On fait un test seulement si l'analyse est paire
@@ -400,16 +402,16 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 # ==============================================================================
 
 # On corrige les pvalues des si
-my @adjp_si = adjust_pvals(map { $_->{'p_value'} } @entites);
+my @SI_adjp = adjust_pvals(map { $_->{'SI_pval'} } @entites);
 
 # Si l'analyse est paire on corrige les autres pvalues
-my @adjp_value_sd = ();
-my @adjp_value_psi = ();
+my @SIsd_adjp = ();
+my @psi_adjp = ();
 
 if($paire){
 
-	@adjp_value_sd = adjust_pvals(map { $_->{'p_value_sd'} } @entites);
-	@adjp_value_psi = adjust_pvals(map { $_->{'p_value_psi'} } @entites);
+	@SIsd_adjp = adjust_pvals(map { $_->{'SIsd_pval'} } @entites);
+	@psi_adjp = adjust_pvals(map { $_->{'psi_pval'} } @entites);
 
 }
 
@@ -420,27 +422,27 @@ for(my $i = 0; $i < @entites; $i++){
 
 	my @values = ();
 
-	push(@values, $entite->{'id'});
+	push(@values, $entite->{'id_entite'});
 	push(@values, $entite->{'id_gene'});
-	push(@values, $entite->{'type'});
+	push(@values, $entite->{'type_entite'});
 	push(@values, $entite->{'exon_pos'});
 	push(@values, @{$entite->{'expression'}});
 	push(@values, @{$entite->{'SIs'}}) if($paire);
 	push(@values, $entite->{'SI'});
-	push(@values, $entite->{'p_value'});
-	push(@values, $adjp_si[$i]);
+	push(@values, $entite->{'SI_pval'});
+	push(@values, $SI_adjp[$i]);
 	push(@values, @{$entite->{'SIsds'}}) if($paire);
 	push(@values, $entite->{'SIsd'});
-	push(@values, $entite->{'p_value_sd'}) if($paire);
-	push(@values, $adjp_value_sd[$i]) if($paire);
+	push(@values, $entite->{'SIsd_pval'}) if($paire);
+	push(@values, $SIsd_adjp[$i]) if($paire);
 	push(@values, $entite->{'psi_control'});
 	push(@values, $entite->{'psi_sd_control'}) if($paire);
 	push(@values, $entite->{'psi_test'});
 	push(@values, $entite->{'psi_sd_test'}) if($paire);
 	push(@values, $entite->{'psi_fc'});
 	push(@values, $entite->{'psi_sd_fc'}) if($paire);
-	push(@values, $entite->{'p_value_psi'}) if($paire);
-	push(@values, $adjp_value_psi[$i]) if($paire);
+	push(@values, $entite->{'psi_pval'}) if($paire);
+	push(@values, $psi_adjp[$i]) if($paire);
 	push(@values, $entite->{'nb_sondes'});
 	push(@values, $entite->{'is_robust'});
 

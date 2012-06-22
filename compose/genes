@@ -118,7 +118,7 @@ my $select_intensite_sth = $dbh->prepare(
 # ==============================================================================
 
 my @fields_trans = (
-	'gene_id INT UNSIGNED NOT NULL PRIMARY KEY',
+	'id_gene INT UNSIGNED NOT NULL PRIMARY KEY',
 	'fc_ba DECIMAL(10,5) UNSIGNED NOT NULL',
 	'fc_dc DECIMAL(10,5) UNSIGNED NOT NULL',
 	'fc_oj DECIMAL(10,5) UNSIGNED NOT NULL',
@@ -285,9 +285,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		'fc_ba' => $fc_ba,
 		'fc_dc' => $fc_dc,
 		'fc_oj' => $fc_oj,
-		'p_value_ba' => $p_value_ba,
-		'p_value_dc' => $p_value_dc,
-		'p_value_oj' => $p_value_oj,
+		'pval_ba' => $p_value_ba,
+		'pval_dc' => $p_value_dc,
+		'pval_oj' => $p_value_oj,
 		'nb_sondes_ba' => $nb_sondes_ba,
 		'nb_sondes_dc' => $nb_sondes_dc,
 		'nb_sondes_oj' => $nb_sondes_oj,
@@ -299,9 +299,9 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 }
 
 # On calcule les pvalues ajustées
-my @adjp_values_ba = adjust_pvals(map { $_->{'p_value_ba'} } @genes);
-my @adjp_values_dc = adjust_pvals(map { $_->{'p_value_dc'} } @genes);
-my @adjp_values_oj = adjust_pvals(map { $_->{'p_value_oj'} } @genes);
+my @adjp_ba = adjust_pvals(map { $_->{'pval_ba'} } @genes);
+my @adjp_dc = adjust_pvals(map { $_->{'pval_dc'} } @genes);
+my @adjp_oj = adjust_pvals(map { $_->{'pval_oj'} } @genes);
 
 # On ajoute les gènes
 for(my $i = 0; $i < @genes; $i++){
@@ -311,12 +311,12 @@ for(my $i = 0; $i < @genes; $i++){
 		$genes[$i]->{'fc_ba'},
 		$genes[$i]->{'fc_dc'},
 		$genes[$i]->{'fc_oj'},
-		$genes[$i]->{'p_value_ba'},
-		$genes[$i]->{'p_value_dc'},
-		$genes[$i]->{'p_value_oj'},
-		$adjp_values_ba[$i],
-		$adjp_values_dc[$i],
-		$adjp_values_oj[$i],
+		$genes[$i]->{'pval_ba'},
+		$genes[$i]->{'pval_dc'},
+		$genes[$i]->{'pval_oj'},
+		$adjp_ba[$i],
+		$adjp_dc[$i],
+		$adjp_oj[$i],
 		$genes[$i]->{'nb_sondes_ba'},
 		$genes[$i]->{'nb_sondes_dc'},
 		$genes[$i]->{'nb_sondes_oj'},

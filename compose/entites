@@ -114,9 +114,9 @@ my $select_intensite_sth = $dbh->prepare(
 my @fields_splicing = ();
 
 push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
-push(@fields_splicing, 'gene_id INT UNSIGNED NOT NULL');
-push(@fields_splicing, 'entite_type ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
-push(@fields_splicing, 'entite_pos SMALLINT UNSIGNED NOT NULL');
+push(@fields_splicing, 'id_gene INT UNSIGNED NOT NULL');
+push(@fields_splicing, 'type_entite ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
+push(@fields_splicing, 'exon_pos SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_ba DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_dc DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_oj DECIMAL(10,5) UNSIGNED NOT NULL');
@@ -164,12 +164,12 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	# ======================================================================
 
 	# On selectionne les entités du gène
-	$select_entites_sth->execute($gene->{'gene_id'});
+	$select_entites_sth->execute($gene->{'id_gene'});
 
 	# Pour chaque entité du gène
 	while(my $entite = $select_entites_sth->fetchrow_hashref){
 
-		print $gene->{'gene_id'} . ' ' . $entite->{'id'} . "\n";
+		print $gene->{'id_gene'} . ' ' . $entite->{'id'} . "\n";
 
 		# ==============================================================
 		# On selectionne les sondes
@@ -301,16 +301,16 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		push(@entites, {
-			'entite_id' => $entite->{'id'},
-			'gene_id' => $gene->{'gene_id'},
-			'type' => $entite->{'type'},
+			'id_entite' => $entite->{'id'},
+			'id_gene' => $gene->{'id_gene'},
+			'type_entite' => $entite->{'type'},
 			'exon_pos' => $entite->{'exon_pos'},
 			'SI_ba' => $SI_ba,
 			'SI_dc' => $SI_dc,
 			'SI_oj' => $SI_oj,
-			'p_value_ba' => $p_value_ba,
-			'p_value_dc' => $p_value_dc,
-			'p_value_oj' => $p_value_oj,
+			'SI_pval_ba' => $p_value_ba,
+			'SI_pval_dc' => $p_value_dc,
+			'SI_pval_oj' => $p_value_oj,
 			'nb_sondes_ba' => scalar(@sondes_ba),
 			'nb_sondes_dc' => scalar(@sondes_dc),
 			'nb_sondes_oj' => scalar(@sondes_oj),
@@ -327,28 +327,28 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 }
 
 # On calcule les pvalues ajustées
-my @adjp_values_ba = adjust_pvals(map { $_->{'p_value_ba'} } @entites);
-my @adjp_values_dc = adjust_pvals(map { $_->{'p_value_dc'} } @entites);
-my @adjp_values_oj = adjust_pvals(map { $_->{'p_value_oj'} } @entites);
+my @SI_adjp_ba = adjust_pvals(map { $_->{'SI_pval_ba'} } @entites);
+my @SI_adjp_dc = adjust_pvals(map { $_->{'SI_pval_dc'} } @entites);
+my @SI_adjp_oj = adjust_pvals(map { $_->{'SI_pval_oj'} } @entites);
 
 # On ajoute les entités
 for(my $i = 0; $i < @entites; $i++){
 
 	my @values = ();
 
-	push(@values, $entites[$i]->{'entite_id'});
-	push(@values, $entites[$i]->{'gene_id'});
-	push(@values, $entites[$i]->{'type'});
+	push(@values, $entites[$i]->{'id_entite'});
+	push(@values, $entites[$i]->{'id_gene'});
+	push(@values, $entites[$i]->{'type_entite'});
 	push(@values, $entites[$i]->{'exon_pos'});
 	push(@values, $entites[$i]->{'SI_ba'});
 	push(@values, $entites[$i]->{'SI_dc'});
 	push(@values, $entites[$i]->{'SI_oj'});
-	push(@values, $entites[$i]->{'p_value_ba'});
-	push(@values, $entites[$i]->{'p_value_dc'});
-	push(@values, $entites[$i]->{'p_value_oj'});
-	push(@values, $adjp_values_ba[$i]);
-	push(@values, $adjp_values_dc[$i]);
-	push(@values, $adjp_values_oj[$i]);
+	push(@values, $entites[$i]->{'SI_pval_ba'});
+	push(@values, $entites[$i]->{'SI_pval_dc'});
+	push(@values, $entites[$i]->{'SI_pval_oj'});
+	push(@values, $SI_adjp_ba[$i]);
+	push(@values, $SI_adjp_dc[$i]);
+	push(@values, $SI_adjp_oj[$i]);
 	push(@values, $entites[$i]->{'nb_sondes_ba'});
 	push(@values, $entites[$i]->{'nb_sondes_dc'});
 	push(@values, $entites[$i]->{'nb_sondes_oj'});
