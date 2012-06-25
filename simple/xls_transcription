@@ -38,14 +38,14 @@ my $dir_xls = $config->{'dir_xls'};
 # Connection à elexir et préparation de la requete pour les infos de l'analyse
 # ==============================================================================
 
-my $dbh_elexir = DBI->connect(
+my $dbh = DBI->connect(
 	'DBI:mysql:' . $db_name . ':' . $db_host,
 	$db_user,
 	$db_pass
 );
 
 # On selectionne les infos de l'analyse
-my $select_infos_analyse_sth = $dbh_elexir->prepare(
+my $select_infos_analyse_sth = $dbh->prepare(
 	"SELECT a.id_project, a.name, p.organism, p.type as type_chips,
 	a.version, a.type
 	FROM projects AS p, analyses AS a
@@ -76,13 +76,13 @@ if($infos_analyse->{'type'} ne 'simple'){
 
 # On récupère les infos de la bdd
 my $id_projet = $infos_analyse->{"id_project"};
+my $type_chips = $infos_analyse->{'type_chips'};
 my $version = $infos_analyse->{'version'};
 my $orga = $infos_analyse->{'organism'};
 my $name = $infos_analyse->{'name'};
-my $type_chips = $infos_analyse->{'type_chips'};
 
 # on crée les variables du script qui déendent de l'analyse
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$version}{$orga};
+my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $fichier_sortie = $dir_sortie . '/' . $name . '_transcription.xls';
@@ -94,35 +94,20 @@ make_path($dir_sortie);
 # On se connecte a fasterdb et on prépare les requetes
 # ==============================================================================
 
-my $dbh_fasterdb = DBI->connect(
-	'DBI:mysql:' . $base_fasterdb . ':' . $db_host,
-	$db_user,
-	$db_pass
-);
-
-my $select_genes_nofdr_sth = $dbh_elexir->prepare(
-	"SELECT gene_id, trans_fc, trans_pval, trans_nb_sondes, trans_nb_exons
+my $select_genes_nofdr_sth = $dbh->prepare(
+	"SELECT id_gene, trans_fc, trans_pval, trans_nb_sondes, trans_nb_exons
 	FROM $table_trans
 	WHERE ABS(LOG2(trans_fc)) >= LOG2(?) AND trans_pval <= ?"
 );
 
-my $select_genes_fdr_sth = $dbh_elexir->prepare(
-	"SELECT gene_id, trans_fc, trans_adjp AS trans_pval, trans_nb_sondes, trans_nb_exons
+my $select_genes_fdr_sth = $dbh->prepare(
+	"SELECT id_gene, trans_fc, trans_adjp AS trans_pval, trans_nb_sondes, trans_nb_exons
 	FROM $table_trans
 	WHERE ABS(LOG2(trans_fc)) >= LOG2(?) AND trans_adjp <= ?"
 );
 
-my $select_infos_gene_sth = $dbh_fasterdb->prepare(
-	"SELECT stable_id_ensembl, official_symbol, description,
-	chromosome, start_sur_chromosome, end_sur_chromosome, strand
-	FROM genes
-	WHERE id = ?"
-);
-
-my $select_orthologues_sth = $dbh_fasterdb->prepare(
-	"SELECT genes_humains, genes_souris
-	FROM genes_orthologues
-	WHERE genes_humains = ? OR genes_souris = ?"
+my $select_infos_gene_sth = $dbh->prepare(
+	"SELECT * FROM $table_genes WHERE id_fasterdb = ?"
 );
 
 # ==============================================================================
@@ -144,7 +129,7 @@ my $couleur_down		= $xlsh->set_custom_color(41, 204, 255, 204);
 
 # On définit les format d'affichage
 my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
-my $format_resume_cell		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
+my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
 my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
 my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
@@ -166,21 +151,21 @@ $f_resume->write(4, 1, $seuil_pval, $format_resume_titre);
 my $num_ligne = 8;
 $f_resume->set_column(0, 0, 25);
 $f_resume->set_column(2, 2, 20);
-$f_resume->write($num_ligne++, 0, "Sondes et entites analysees", $format_resume_titre);
+$f_resume->write($num_ligne++, 0, "Sondes et entites analysees", $format_cell_center);
 $num_ligne++;
-$f_resume->write($num_ligne++, 0, "Sondes", $format_resume_titre);
+$f_resume->write($num_ligne++, 0, "Sondes", $format_cell_center);
 $num_ligne++;
-$f_resume->write($num_ligne++, 0, "Sur la puce", $format_resume_cell);
-$f_resume->write($num_ligne++, 0, "Avec gc < 18", $format_resume_cell);
-$f_resume->write($num_ligne++, 0, "Non ch", $format_resume_cell);
-$f_resume->write($num_ligne++, 0, "Exprimees", $format_resume_cell);
+$f_resume->write($num_ligne++, 0, "Sur la puce", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Avec gc < 18", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Non ch", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Exprimees", $format_cell_center);
 $num_ligne++;
-$f_resume->write($num_ligne++, 0, "Ciblant des entites", $format_resume_cell);
-$f_resume->write($num_ligne++, 0, "Introniques", $format_resume_cell);
+$f_resume->write($num_ligne++, 0, "Ciblant des entites", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Introniques", $format_cell_center);
 $f_resume->write($num_ligne++, 0, "Non utilisees (inter-geniques, chevauchantes, non hybridees...)", $format_cell_no_center);
 $num_ligne++;
-$f_resume->write($num_ligne++, 0, "Analysables*", $format_resume_cell);
-$f_resume->write($num_ligne++, 0, "Analysees*", $format_resume_cell);
+$f_resume->write($num_ligne++, 0, "Analysables*", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Analysees*", $format_cell_center);
 
 # Légende
 $f_resume->write(36, 0, "* analysable", $format_cell_no_center);
@@ -208,26 +193,14 @@ $select_genes_nofdr_sth->execute($seuil_trans, $seuil_pval);
 @genes = @{$select_genes_nofdr_sth->fetchall_arrayref({})};
 $select_genes_nofdr_sth->finish;
 
-my($nb_nofdr_up, $nb_nofdr_down) = write_list(
-	$f_transcription_no_fdr,
-	$format_entete,
-	$format_up,
-	$format_down,
-	@genes
-);
+my($nb_nofdr_up, $nb_nofdr_down) = write_list($f_transcription_no_fdr, @genes);
 
 # On selectionne les gènes fdr
 $select_genes_fdr_sth->execute($seuil_trans, $seuil_pval);
 @genes = @{$select_genes_fdr_sth->fetchall_arrayref({})};
 $select_genes_fdr_sth->finish;
 
-my($nb_fdr_up, $nb_fdr_down) = write_list(
-	$f_transcription_fdr,
-	$format_entete,
-	$format_up,
-	$format_down,
-	@genes
-);
+my($nb_fdr_up, $nb_fdr_down) = write_list($f_transcription_fdr,	@genes);
 
 # ==============================================================================
 # Fonction pour remplir la feuille
@@ -235,27 +208,30 @@ my($nb_fdr_up, $nb_fdr_down) = write_list(
 
 sub write_list{
 
-	my($f, $format_entete, $format_up, $format_down, @genes) = @_;
+	my($f, @genes) = @_;
 
 	my $nb_up = 0;
 	my $nb_down = 0;
 
 	# On modifie la largeur des colones
-	$f->set_column(0, 0, 12);
-	$f->set_column(1, 1, 12);
-	$f->set_column(3, 4, 18);
-	$f->set_column(5, 6, 23);
-	$f->set_column(7, 7, 10);
-	$f->set_column(10, 10, 12);
+	$f->set_column(0, 0, 12); # Fasterdb id
+	$f->set_column(1, 1, 18); # Source id
+	$f->set_column(2, 2, 12); # Link
+	$f->set_column(3, 3, 12); # Symbol
+	$f->set_column(4, 4, 30); # Description
+	$f->set_column(5, 5, 24); # Pos chrom
+	$f->set_column(6, 6, 12); # Regulation
+	$f->set_column(7, 7, 8); # FC
+	$f->set_column(8, 8, 12); # pval
+	$f->set_column(9, 9, 12); # nb probes
 
 	# On défini les entetes
 	my @entetes = (
 		'Fasterdb id',
+		'Source id',
 		'Link Elexir',
 		'Symbol',
 		'Name',
-		'Human Ensembl id',
-		'Mouse Ensembl id',
 		'Chr Position',
 		'Regulation',
 		'FC',
@@ -285,42 +261,21 @@ sub write_list{
 		my $gene = $genes[$i];
 
 		# On récupère les infos du gène
-		$select_infos_gene_sth->execute($gene->{'gene_id'});
+		$select_infos_gene_sth->execute($gene->{'id_gene'});
 		my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
 		$select_infos_gene_sth->finish;
-
-		# On selectionne les gènes orthologues
-		$select_orthologues_sth->execute($infos_gene->{'stable_id_ensembl'}, $infos_gene->{'stable_id_ensembl'});
-		my $orthologues = $select_orthologues_sth->fetchall_arrayref({});
-		$select_orthologues_sth->finish;
 
 		# On compte les up et les down
 		($gene->{'trans_fc'} >= 1) ? $nb_up++ : $nb_down++;
 
 		# On formatte les infos
-		my @orth_humain = map { $_->{'genes_humains'} } @{$orthologues};
-		my @orth_souris = map { $_->{'genes_souris'} } @{$orthologues};
-
-		if($infos_analyse->{'organism'} eq 'human'){
-
-			push(@orth_humain, $infos_gene->{'stable_id_ensembl'});
-
-		}else{
-
-			push(@orth_souris, $infos_gene->{'stable_id_ensembl'});
-
-		}
-
-		my $orth_humain = join(', ', @orth_humain);
-		my $orth_souris = join(', ', @orth_souris);
-
-		my $strand = ($infos_gene->{'strand'} eq '1') ? '+' : '-';
+		$infos_gene->{'description'} =~ s/\[.+\]$//;
 
 		my $pos_chrom =
 			$infos_gene->{'chromosome'} .
 			':' . $infos_gene->{'start_sur_chromosome'} .
 			'-' . $infos_gene->{'end_sur_chromosome'} .
-			':' . $strand;
+			':' . $infos_gene->{'strand'};
 
 		my $regulation = ($gene->{'trans_fc'} >= 1) ? 'up' : 'down';
 
@@ -328,12 +283,11 @@ sub write_list{
 
 		# On crée le tableau de data
 		my @data = (
-			$infos_gene->{'gene_id'},
+			$infos_gene->{'id_fasterdb'},
+			$infos_gene->{'id_source'},
 			'blah',
-			$infos_gene->{'official_symbol'},
+			$infos_gene->{'symbol'},
 			$infos_gene->{'description'},
-			$orth_humain,
-			$orth_souris,
 			$pos_chrom,
 			$regulation,
 			round(format_fold($gene->{'trans_fc'}), 2),
@@ -371,19 +325,19 @@ $f_resume->write($num_ligne++, 5, "Resultats", $format_resume_titre);
 $num_ligne++;
 $f_resume->write($num_ligne++, 5, "Sans correction des p-valeurs", $format_resume_titre);
 $num_ligne++;
-$f_resume->write($num_ligne, 5, "Genes regules", $format_resume_cell);
-$f_resume->write($num_ligne, 6, $nb_nofdr_up + $nb_nofdr_down, $format_resume_cell);
-$f_resume->write($num_ligne, 7, "Genes up", $format_resume_cell);
-$f_resume->write($num_ligne, 8, $nb_nofdr_up, $format_resume_cell);
-$f_resume->write($num_ligne, 9, "Genes down", $format_resume_cell);
-$f_resume->write($num_ligne, 10, $nb_nofdr_down, $format_resume_cell);
+$f_resume->write($num_ligne, 5, "Genes regules", $format_cell_center);
+$f_resume->write($num_ligne, 6, $nb_nofdr_up + $nb_nofdr_down, $format_cell_center);
+$f_resume->write($num_ligne, 7, "Genes up", $format_cell_center);
+$f_resume->write($num_ligne, 8, $nb_nofdr_up, $format_cell_center);
+$f_resume->write($num_ligne, 9, "Genes down", $format_cell_center);
+$f_resume->write($num_ligne, 10, $nb_nofdr_down, $format_cell_center);
 $num_ligne++;
 $num_ligne++;
 $f_resume->write($num_ligne++, 5, "Avec correction des p-valeurs", $format_resume_titre);
 $num_ligne++;
-$f_resume->write($num_ligne, 5, "Genes regules", $format_resume_cell);
-$f_resume->write($num_ligne, 6, $nb_fdr_up + $nb_fdr_down, $format_resume_cell);
-$f_resume->write($num_ligne, 7, "Genes up", $format_resume_cell);
-$f_resume->write($num_ligne, 8, $nb_fdr_up, $format_resume_cell);
-$f_resume->write($num_ligne, 9, "Genes down", $format_resume_cell);
-$f_resume->write($num_ligne, 10, $nb_fdr_down, $format_resume_cell);
+$f_resume->write($num_ligne, 5, "Genes regules", $format_cell_center);
+$f_resume->write($num_ligne, 6, $nb_fdr_up + $nb_fdr_down, $format_cell_center);
+$f_resume->write($num_ligne, 7, "Genes up", $format_cell_center);
+$f_resume->write($num_ligne, 8, $nb_fdr_up, $format_cell_center);
+$f_resume->write($num_ligne, 9, "Genes down", $format_cell_center);
+$f_resume->write($num_ligne, 10, $nb_fdr_down, $format_cell_center);

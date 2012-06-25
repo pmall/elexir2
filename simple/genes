@@ -62,38 +62,25 @@ if($analyse->{'type'} ne 'simple'){
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$analyse->{'version'}}{$analyse->{'organism'}};
-my $table_genes = $config->{'table_genes'}{$analyse->{'version'}};
-my $table_exons = $config->{'table_exons'}{$analyse->{'version'}};
-my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
-my $table_dabg = get_table_dabg($analyse->{'id_project'});
-my $table_intensites = get_table_intensites($analyse->{'id_project'});
-my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
+my $id_projet = $analyse->{'id_project'};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+
+my $table_genes = $config->{'table_genes'}{$version}{$orga};
+my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
+my $table_dabg = get_table_dabg($id_projet);
+my $table_intensites = get_table_intensites($id_projet);
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
 
 # ==============================================================================
-# On prépare les requetes sur la bonne base fasterdb
+# On prépare les requètes avec ces infos
 # ==============================================================================
-
-# On se connecte a fasterdb
-my $dbh_fdb = DBI->connect(
-	'DBI:mysql:' . $base_fasterdb . ':' . $db_host,
-	$db_user,
-	$db_pass
-);
 
 # On selectionne les gènes
-my $select_genes_sth = $dbh_fdb->prepare(
-	"SELECT id FROM $table_genes LIMIT ?"
+my $select_genes_sth = $dbh->prepare(
+	"SELECT id_fasterdb, nb_exons FROM $table_genes LIMIT ?"
 );
-
-# On selectionne le nombre d'exons d'un gène
-my $select_nb_exons_gene_sth = $dbh_fdb->prepare(
-	"SELECT COUNT(id) AS nb_exons FROM $table_exons WHERE id_gene = ?"
-);
-
-# ==============================================================================
-# On prépare la requete pour les sondes avec ces infos
-# ==============================================================================
 
 # On selectionne les sondes d'un gène
 my $select_infos_sondes_sth = $dbh->prepare(
@@ -155,6 +142,10 @@ my $insert_gene_sth = $dbh->prepare(
 
 print 'Analyse des gènes' . "\n";
 
+# On met les indexs des tables dabg et intensité en cache
+$dbh->do('LOAD INDEX INTO CACHE ' . $table_dabg);
+$dbh->do('LOAD INDEX INTO CACHE ' . $table_intensites);
+
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
 my @genes = ();
@@ -163,7 +154,7 @@ my @genes = ();
 $select_genes_sth->execute($limit);
 
 # Pour chaque gène
-while(my($id_gene) = $select_genes_sth->fetchrow_array){
+while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 
 	print $id_gene . "\n";
 
@@ -244,11 +235,6 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 	# On fait l'épissage seulement si le gène est homogène
 	# ======================================================================
-
-	# On selectionne son nombre d'exon du gène
-	$select_nb_exons_gene_sth->execute($id_gene);
-	my($nb_exons) = $select_nb_exons_gene_sth->fetchrow_array;
-	$select_nb_exons_gene_sth->finish;
 
 	# Si le gène est homogène on calcule les valeurs d'épissage
 	my $homogene = homogene($infos_sondes, \@sondes, $nb_exons);

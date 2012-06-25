@@ -59,20 +59,23 @@ if($analyse->{'type'} ne 'simple'){
 
 }
 
-# petit raccourcit...
-my $paire = $analyse->{'paired'};
-
 # ==============================================================================
 # On crée les noms de table dont on a besoin
 # ==============================================================================
 
-my $table_entites = $config->{'table_entites'}{$analyse->{'version'}}{$analyse->{'organism'}};
-my $table_sondes = $config->{'table_sondes'}{$analyse->{'type_chips'}}{$analyse->{'version'}}{$analyse->{'organism'}};
-my $table_dabg = get_table_dabg($analyse->{'id_project'});
-my $table_intensites = get_table_intensites($analyse->{'id_project'});
-my $table_trans = get_table_transcription($analyse->{'id_project'}, $id_analyse);
-my $table_si = get_table_si($analyse->{'id_project'}, $id_analyse);
-my $table_splicing = get_table_splicing($analyse->{'id_project'}, $id_analyse);
+my $id_projet = $analyse->{'id_project'};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $paire = $analyse->{'paired'};
+
+my $table_entites = $config->{'table_entites'}{$version}{$orga};
+my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
+my $table_dabg = get_table_dabg($id_projet);
+my $table_intensites = get_table_intensites($id_projet);
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
+my $table_si = get_table_si($id_projet, $id_analyse);
+my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 
 # ==============================================================================
 # On prépare les requete sur elexir pour l'analyse avec ces infos
@@ -162,6 +165,10 @@ my $insert_entite_sth = $dbh->prepare(
 # ==============================================================================
 
 print 'Analyse des entités' . "\n";
+
+# On met les indexs des tables dabg et intensité en cache
+$dbh->do('LOAD INDEX INTO CACHE ' . $table_dabg);
+$dbh->do('LOAD INDEX INTO CACHE ' . $table_intensites);
 
 # On défini une liste d'entité (on les garde toutes dans une liste pour calculer
 # les pvals ajustés)
