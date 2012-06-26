@@ -82,6 +82,7 @@ my $type_chips = $infos_analyse->{'type_chips'};
 my $version = $infos_analyse->{'version'};
 my $orga = $infos_analyse->{'organism'};
 my $name = $infos_analyse->{'name'};
+my $paire = $infos_analyse->{'paired'};
 
 # on crée les variables du script qui déendent de l'analyse
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
@@ -99,19 +100,16 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_entites_nofdr_sth = $dbh->prepare(
-	"SELECT e.*, g.epi_fc, g.epi_pval
+	"SELECT e.*, g.epi_fc, g.epi_pval, g.epi_nb_sondes, g.epi_nb_exons
 	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene
-	AND ABS(LOG2(SI)) >= LOG2(?) AND is_robust = 1"
+	WHERE g.id_gene = e.id_gene AND is_robust = 1"
 );
 
 my $select_entites_fdr_sth = $dbh->prepare(
-	"SELECT e.*,
-	g.epi_fc, g.epi_pval,
+	"SELECT e.*, g.epi_fc, g.epi_pval, g.epi_nb_sondes, g.epi_nb_exons,
 	e.SI_adjp AS SI_pval, e.SIsd_adjp AS SIsd_pval, e.psi_adjp AS psi_pval
 	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene
-	AND ABS(LOG2(SI)) >= LOG2(?) AND is_robust = 1"
+	WHERE g.id_gene = e.id_gene AND is_robust = 1"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -129,25 +127,25 @@ my $select_infos_entite_sth = $dbh->prepare(
 # ==============================================================================
 
 # Fichier
-my $resultat			= Spreadsheet::WriteExcel->new($fichier_sortie);
+my $xlsh			= Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # Feuilles
-my $f_resume			= $resultat->add_worksheet('Parametres et entites analysees');
-my $f_epissage_no_fdr		= $resultat->add_worksheet('NO FDR');
-my $f_epissage_fdr		= $resultat->add_worksheet('FDR');
+my $f_resume			= $xlsh->add_worksheet('Parametres et entites analysees');
+my $f_epissage_no_fdr		= $xlsh->add_worksheet('NO FDR');
+my $f_epissage_fdr		= $xlsh->add_worksheet('FDR');
 
 # Couleurs
-my $couleur_entete		= $resultat->set_custom_color(39, 189, 189, 189);
+my $couleur_entete		= $xlsh->set_custom_color(39, 189, 189, 189);
 
 # Formats
-my $format_resume_titre		= $resultat->add_format(color => 'black', bold => 1, center_across => 1);
-my $format_resume_intermediaire	= $resultat->add_format(color => 'black', italic => 1, center_across => 1);
-my $format_resume_cell		= $resultat->add_format(color => 'black', bold => 0, center_across => 1);
-my $format_merge_entete		= $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
-my $format_entete		= $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
-my $format_cell			= $resultat->add_format(color => 'black', border => 1, border_color => 'black', center_across => 1);
-my $format_cell_mauv_fc		= $resultat->add_format(color => 'red', border => 1, border_color => 'black', center_across => 1);
-my $format_cell_no_center	= $resultat->add_format(color => 'black', bold => 0);
+my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_resume_intermediaire	= $xlsh->add_format(color => 'black', italic => 1, center_across => 1);
+my $format_resume_cell		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
+my $format_merge_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_cell			= $xlsh->add_format(color => 'black', border => 1, border_color => 'black', center_across => 1);
+my $format_cell_mauv_fc		= $xlsh->add_format(color => 'red', border => 1, border_color => 'black', center_across => 1);
+my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
 
 # ==============================================================================
 # Feuille résumé
@@ -177,14 +175,14 @@ sub format_fold{
 my @entites = ();
 
 # On selectionne les entites no fdr
-$select_entites_nofdr_sth->execute($seuil_epissage);
+$select_entites_nofdr_sth->execute;
 @entites = @{$select_entites_nofdr_sth->fetchall_arrayref({})};
 $select_entites_nofdr_sth->finish;
 
 my($nb_nofdr_up, $nb_nofdr_down) = write_list($f_epissage_no_fdr, @entites);
 
 # On selectionne les entites fdr
-$select_entites_fdr_sth->execute($seuil_epissage);
+$select_entites_fdr_sth->execute;
 @entites = @{$select_entites_fdr_sth->fetchall_arrayref({})};
 $select_entites_fdr_sth->finish;
 
@@ -207,12 +205,12 @@ sub write_list{
 
 	# On défini les entete groupées
 	$f->merge_range(0, 0, 0, 3, 'Infos analyse', $format_merge_entete);
-	$f->merge_range(0, 4, 0, 9, 'Infos gene', $format_merge_entete);
-	$f->merge_range(0, 10, 0, 12, 'Reg gene', $format_merge_entete);
-	$f->merge_range(0, 13, 0, 16, 'Infos entite', $format_merge_entete);
-	$f->merge_range(0, 17, 0, 19, 'Reg SI', $format_merge_entete);
-	$f->merge_range(0, 20, 0, 22, 'Reg SIsd', $format_merge_entete);
-	$f->merge_range(0, 23, 0, 30, 'Reg Psi', $format_merge_entete);
+	$f->merge_range(0, 4, 0, 11, 'Infos gene', $format_merge_entete);
+	$f->merge_range(0, 12, 0, 15, 'Infos entite', $format_merge_entete);
+	$f->merge_range(0, 16, 0, 18, 'Reg gene', $format_merge_entete);
+	$f->merge_range(0, 19, 0, 21, 'Reg SI', $format_merge_entete);
+	$f->merge_range(0, 22, 0, 24, 'Reg SIsd', $format_merge_entete);
+	$f->merge_range(0, 25, 0, 32, 'Reg Psi', $format_merge_entete);
 
 	# On défini les entetes de chaque colonnes
 	my @entetes = (
@@ -220,25 +218,33 @@ sub write_list{
 		'SI',
 		'SIsd',
 		'Psi',
+		# Infos du gène
 		'Fasterdb id',
 		'Source id',
-		'Link Misea',
+		'Link Elexir',
 		'Symbol',
 		'Description',
 		'Chr Position',
+		'Nb probes',
+		'Nb exons',
+		# Infos entité
+		'AS Event Type',
+		'Exon position',
+		'Nb probes',
+		'AS Event Sequence',
+		# Reg gène
 		'Regulation',
 		'FC',
 		'Pvalue',
-		'AS Event Type',
-		'Exon position',
-		'Nb probes analysed',
-		'AS Event Sequence',
+		# Reg SI
 		'Regulation',
 		'Med SI',
 		'Pvalue',
+		# Reg SIsd
 		'Regulation',
 		'Med SIsd',
 		'Pvalue',
+		# Reg psi
 		'Regulation',
 		'Med Psi Control',
 		'sd Med Psi Control',
@@ -258,14 +264,14 @@ sub write_list{
 	# Fonction qui retourne 1 si l'entité est valide pour les trois types
 	sub commun{
 
-		my($entite, $seuil_pval) = @_;
+		my($entite) = @_;
 
 		return(
-			$entite->{'SI_pval'} <= $seuil_pval
-			&&
-			$entite->{'SIsd_pval'} <= $seuil_pval
-			&&
-			$entite->{'psi_pval'} <= $seuil_pval
+			($entite->{'SI'} >= $seuil_epissage and ($entite->{'SI_pval'} <= $seuil_pval))
+			and
+			($entite->{'SIsd'} >= $seuil_epissage and (!$paire or ($entite->{'SIsd_pval'} <= $seuil_pval)))
+			and
+			($entite->{'psi_fc'} >= $seuil_epissage and (!$paire or ($entite->{'psi_pval'} <= $seuil_pval)))
 		);
 
 	}
@@ -273,27 +279,27 @@ sub write_list{
 	# On classe les entites
 	@entites = sort {
 		# On classe déjà les communs en premier
-		commun($b, $seuil_pval) <=> commun($a, $seuil_pval)
-		||
+		commun($b) <=> commun($a)
+#		||
 		# Ensuite par FC gène fiable
-		(format_fold($b->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
-			<=>
-		(format_fold($a->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
-		||
+#		(format_fold($b->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
+#			<=>
+#		(format_fold($a->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
+#		||
 		# Ensuite par SI up ou down
-		($b->{'SI'} >= 1) <=> ($a->{'SI'} >= 1)
-		||
+#		($b->{'SI'} >= 1) <=> ($a->{'SI'} >= 1)
+#		||
 		# Ensuite par SI décroissant
-		format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
+#		format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
 	} @entites;
 
 	# Pour chaque entité
 	foreach my $entite (@entites){
 
 		# On test si il y en a au moins un
-		my $SI_ok = $entite->{'SI_pval'} <= $seuil_pval;
-		my $SIsd_ok = $entite->{'SIsd_pval'} <= $seuil_pval;
-		my $psi_ok = $entite->{'psi_pval'} <= $seuil_pval;
+		my $SI_ok = ($entite->{'SI'} >= $seuil_epissage and ($entite->{'SI_pval'} <= $seuil_pval));
+		my $SIsd_ok = ($entite->{'SIsd'} >= $seuil_epissage and (!$paire or ($entite->{'SIsd_pval'} <= $seuil_pval)));
+		my $psi_ok = ($entite->{'psi_fc'} >= $seuil_epissage and (!$paire or ($entite->{'psi_pval'} <= $seuil_pval)));
 
 		# On zappe si il n'y en a pas au moins un
 		next if(!$SI_ok and !$SIsd_ok and !$psi_ok);
@@ -326,8 +332,11 @@ sub write_list{
 			'-' . $infos_gene->{'end_sur_chromosome'} .
 			':' . $infos_gene->{'strand'};
 
+		my $prefix_pos = ($infos_entite->{'type'} eq 'intron-retention')
+			? 'i' : 'e' ;
+
 		my $pos_entite =
-			$entite->{'exon_pos'} .
+			$prefix_pos . $entite->{'exon_pos'} .
 			':' . $infos_entite->{'start_sur_gene'} .
 			'-' . $infos_entite->{'end_sur_gene'};
 
@@ -353,14 +362,17 @@ sub write_list{
 			$infos_gene->{'symbol'},
 			$infos_gene->{'description'},
 			$pos_chrom,
-			$reg_gene,
-			format_fold($entite->{'epi_fc'}),
-			$entite->{'epi_pval'},
+			$entite->{'epi_nb_sondes'},
+			$entite->{'epi_nb_exons'},
 			# Infos entité
 			$infos_entite->{'type'},
 			$pos_entite,
 			$entite->{'nb_sondes'},
 			'seq',
+			# Regulation gène
+			$reg_gene,
+			format_fold($entite->{'epi_fc'}),
+			$entite->{'epi_pval'},
 			# Algo SI
 			$reg_SI,
 			format_fold($entite->{'SI'}),

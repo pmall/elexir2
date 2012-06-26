@@ -131,6 +131,7 @@ my $couleur_down		= $xlsh->set_custom_color(41, 204, 255, 204);
 my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
 my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
 my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
+my $format_merge_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
 my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
@@ -213,6 +214,10 @@ sub write_list{
 	my $nb_up = 0;
 	my $nb_down = 0;
 
+	# On fait la première entete
+	$f->merge_range(0, 0, 0, 7, 'Infos gene', $format_merge_entete);
+	$f->merge_range(0, 8, 0, 10, 'Reg gene', $format_merge_entete);
+
 	# On modifie la largeur des colones
 	$f->set_column(0, 0, 12); # Fasterdb id
 	$f->set_column(1, 1, 18); # Source id
@@ -231,18 +236,18 @@ sub write_list{
 		'Source id',
 		'Link Elexir',
 		'Symbol',
-		'Name',
+		'Description',
 		'Chr Position',
+		'Nb probes',
+		'Nb exons',
 		'Regulation',
 		'FC',
-		'Pvalue',
-		'Nb probes',
-		'Nb exons'
+		'Pvalue'
 	);
 
 	for(my $j = 0; $j < @entetes; $j++){
 
-		$f->write(0, $j, $entetes[$j], $format_entete);
+		$f->write(1, $j, $entetes[$j], $format_entete);
 
 	}
 
@@ -289,18 +294,18 @@ sub write_list{
 			$infos_gene->{'symbol'},
 			$infos_gene->{'description'},
 			$pos_chrom,
+			$gene->{'trans_nb_sondes'},
+			$gene->{'trans_nb_exons'},
 			$regulation,
 			round(format_fold($gene->{'trans_fc'}), 2),
-			$gene->{'trans_pval'},
-			$gene->{'trans_nb_sondes'},
-			$gene->{'trans_nb_exons'}
+			$gene->{'trans_pval'}
 		);
 
 		# On affiche les data
 		for(my $j = 0; $j < @data; $j++){
 
 			# $i + 1 parce que la premiere ligne est l'entete
-			$f->write($i + 1, $j, $data[$j], $format);
+			$f->write($i + 2, $j, $data[$j], $format);
 
 		}
 
