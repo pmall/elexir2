@@ -3,21 +3,13 @@ use strict;
 use warnings;
 use Exporter qw(import);
 
-our @EXPORT = qw(get_organism_adaptor get_table_intensites get_table_dabg
-	get_table_transcription get_table_ni get_table_si get_table_splicing
-	date traduction_type);
+our @EXPORT = qw(get_table_intensites get_table_dabg
+	get_table_transcription get_table_splicing
+	format_fold date traduction_type);
 
 # ==============================================================================
 # Formatage commun a tout les scripts
 # ==============================================================================
-
-sub get_organism_adaptor{
-
-	my($organism) = @_;
-
-	return ($organism eq 'human') ? 'Human' : 'Mouse';
-
-}
 
 sub get_table_intensites{
 
@@ -43,22 +35,6 @@ sub get_table_transcription{
 
 }
 
-sub get_table_ni{
-
-	my($id_project, $id_analyse) = @_;
-
-	return '_' . $id_project . '__' . $id_analyse . '_NIs';
-
-}
-
-sub get_table_si{
-
-	my($id_project, $id_analyse) = @_;
-
-	return '_' . $id_project . '__' . $id_analyse . '_SIs';
-
-}
-
 sub get_table_splicing{
 
 	my($id_project, $id_analyse) = @_;
@@ -70,6 +46,14 @@ sub get_table_splicing{
 # ==============================================================================
 # Fonctions de formattage
 # ==============================================================================
+
+sub format_fold{
+
+	my($fold) = @_;
+
+	return ($fold >= 1) ? $fold : 1/$fold;
+
+}
 
 sub date{
 

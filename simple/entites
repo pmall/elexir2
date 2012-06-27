@@ -166,10 +166,6 @@ my $insert_entite_sth = $dbh->prepare(
 
 print 'Analyse des entités' . "\n";
 
-# On met les indexs des tables dabg et intensité en cache
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_dabg);
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_intensites);
-
 # On défini une liste d'entité (on les garde toutes dans une liste pour calculer
 # les pvals ajustés)
 my @entites = ();
@@ -388,7 +384,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			# On fait un test seulement si l'analyse est paire
 			if($paire){
 
-				$entite_gene->{'p_value_sd'} = ttest(
+				$entite_gene->{'SIsd_pval'} = ttest(
 					[log2(@{$entite_gene->{'SIsds'}})],
 					(log2($entite_gene->{'SIsd'}) >= 0)
 				);

@@ -149,10 +149,6 @@ my $insert_entite_sth = $dbh->prepare(
 
 print 'Analyse des entités' . "\n";
 
-# On met les indexs des tables dabg et intensité en cache
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_dabg);
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_intensites);
-
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};

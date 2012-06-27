@@ -142,10 +142,6 @@ my $insert_gene_sth = $dbh->prepare(
 
 print 'Analyse des gènes' . "\n";
 
-# On met les indexs des tables dabg et intensité en cache
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_dabg);
-$dbh->do('LOAD INDEX INTO CACHE ' . $table_intensites);
-
 # On défini une liste de gènes (on les garde tous dans une liste pour calculer
 # les pvals ajustés)
 my @genes = ();

@@ -9,8 +9,7 @@ use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
 use Math;
-use Analyse::RequetesCourantes;
-use Traitement_resultats::FonctionsXls;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -37,7 +36,7 @@ my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
 my $dir_xls = $config->{'dir_xls'};
 
 # ==============================================================================
-# Connection à elexir et préparation des requetes
+# On récupère les infos de l'analyse
 # ==============================================================================
 
 my $dbh = DBI->connect(
@@ -46,27 +45,12 @@ my $dbh = DBI->connect(
 	$db_pass
 );
 
-# On selectionne les infos de l'analyse
-my $select_infos_analyse_sth = $dbh->prepare(
-	"SELECT a.id_project, a.name, p.organism, p.type as type_chips,
-	a.version, a.type
-	FROM projects AS p, analyses AS a
-	WHERE a.id_project = p.id
-	AND a.id = ?"
-);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
-# ==============================================================================
-# On récupère les infos de l'analyse
-# ==============================================================================
-
-$select_infos_analyse_sth->execute($id_analyse);
-
-my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
-
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'simple'){
+if($analyse->{'type'} ne 'simple'){
 
 	die('Le script simple ne fonctionne que sur les analyses simples :o)');
 
@@ -77,12 +61,13 @@ if($infos_analyse->{'type'} ne 'simple'){
 # ==============================================================================
 
 # On récupère les infos de la bdd
-my $id_projet = $infos_analyse->{"id_project"};
-my $type_chips = $infos_analyse->{'type_chips'};
-my $version = $infos_analyse->{'version'};
-my $orga = $infos_analyse->{'organism'};
-my $name = $infos_analyse->{'name'};
-my $paire = $infos_analyse->{'paired'};
+my $id_projet = $analyse->{"id_project"};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $name = $analyse->{'name'};
+my $paire = $analyse->{'paired'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
 # on crée les variables du script qui déendent de l'analyse
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
@@ -117,7 +102,7 @@ my $select_infos_gene_sth = $dbh->prepare(
 );
 
 my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT type, exon_pos, start_sur_gene, end_sur_gene
+	"SELECT id, type, exon_pos, start_sur_gene, end_sur_gene
 	FROM $table_entites
 	WHERE id = ?"
 );
@@ -163,15 +148,6 @@ $f_resume->write(4, 1, $seuil_pval, $format_resume_titre);
 # On ajoute les entités dans les feuilles
 # ==============================================================================
 
-# Fonction pour formatter le fold
-sub format_fold{
-
-	my($fold) = @_;
-
-	return ($fold >= 1) ? $fold : 1/$fold;
-
-}
-
 my @entites = ();
 
 # On selectionne les entites no fdr
@@ -186,7 +162,7 @@ $select_entites_fdr_sth->execute;
 @entites = @{$select_entites_fdr_sth->fetchall_arrayref({})};
 $select_entites_fdr_sth->finish;
 
-my($nb_fdr_up, $nb_fdr_down) = write_list($f_epissage_no_fdr, @entites);
+my($nb_fdr_up, $nb_fdr_down) = write_list($f_epissage_fdr, @entites);
 
 # ==============================================================================
 # Fonction pour remplir la feuille
@@ -196,64 +172,89 @@ sub write_list{
 
 	my($f, @entites) = @_;
 
-	my $num_ligne = 2;	# On commence par la troisieme ligne (les deux
-				# premieres sont les entetes)
 	my $nb_gene = 0;
 	my $gene_id_prec = 0;
 	my $nb_ups = 0;
 	my $nb_downs = 0;
 
 	# On défini les entete groupées
+
+	my $o = ($paire) ? $nb_paires_rep : 0; # Offset nombre de paires de rep
+
 	$f->merge_range(0, 0, 0, 3, 'Infos analyse', $format_merge_entete);
 	$f->merge_range(0, 4, 0, 11, 'Infos gene', $format_merge_entete);
-	$f->merge_range(0, 12, 0, 15, 'Infos entite', $format_merge_entete);
-	$f->merge_range(0, 16, 0, 18, 'Reg gene', $format_merge_entete);
-	$f->merge_range(0, 19, 0, 21, 'Reg SI', $format_merge_entete);
-	$f->merge_range(0, 22, 0, 24, 'Reg SIsd', $format_merge_entete);
-	$f->merge_range(0, 25, 0, 32, 'Reg Psi', $format_merge_entete);
+	$f->merge_range(0, 12, 0, 17, 'Infos entite', $format_merge_entete);
+	$f->merge_range(0, 17, 0, 19, 'Reg gene', $format_merge_entete);
+	$f->merge_range(0, 20, 0, 22 + $o, 'Reg SI', $format_merge_entete);
+	$f->merge_range(0, 23 + $o, 0, 25 + ($o*2), 'Reg SIsd', $format_merge_entete);
+	$f->merge_range(0, 26 + ($o*2), 0, 33 + ($o*2), 'Reg Psi', $format_merge_entete);
 
 	# On défini les entetes de chaque colonnes
-	my @entetes = (
-		'Gene',
-		'SI',
-		'SIsd',
-		'Psi',
-		# Infos du gène
-		'Fasterdb id',
-		'Source id',
-		'Link Elexir',
-		'Symbol',
-		'Description',
-		'Chr Position',
-		'Nb probes',
-		'Nb exons',
-		# Infos entité
-		'AS Event Type',
-		'Exon position',
-		'Nb probes',
-		'AS Event Sequence',
-		# Reg gène
-		'Regulation',
-		'FC',
-		'Pvalue',
-		# Reg SI
-		'Regulation',
-		'Med SI',
-		'Pvalue',
-		# Reg SIsd
-		'Regulation',
-		'Med SIsd',
-		'Pvalue',
-		# Reg psi
-		'Regulation',
-		'Med Psi Control',
-		'sd Med Psi Control',
-		'Med Psi Test',
-		'sd Med Psi Test',
-		'Med Psi FC',
-		'sd Med Psi FC',
-		'Pvalue'
-	);
+
+	my @SIs = ();
+	my @SIsds = ();
+
+	if($paire){
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@SIs, 'SI' . ($i + 1));
+			push(@SIsds, 'SIsd' . ($i + 1));
+
+		}
+
+	}
+
+	my @entetes = ();
+
+	push(@entetes, 'Gene');
+	push(@entetes, 'SI');
+	push(@entetes, 'SIsd');
+	push(@entetes, 'Psi');
+
+	# Infos du gène
+	push(@entetes, 'Fasterdb id');
+	push(@entetes, 'Source id');
+	push(@entetes, 'Link Elexir');
+	push(@entetes, 'Symbol');
+	push(@entetes, 'Description');
+	push(@entetes, 'Chr Position');
+	push(@entetes, 'Nb probes');
+	push(@entetes, 'Nb exons');
+
+	# Infos entité
+	push(@entetes, 'Elexir id');
+	push(@entetes, 'AS Event Type');
+	push(@entetes, 'Exon position');
+	push(@entetes, 'Nb probes');
+	push(@entetes, 'AS Event Sequence');
+
+	# Reg gène
+	push(@entetes, 'Regulation');
+	push(@entetes, 'FC');
+	push(@entetes, 'Pvalue');
+
+	# Reg SI
+	push(@entetes, 'Regulation');
+	push(@entetes, @SIs) if($paire);
+	push(@entetes, 'Med SI');
+	push(@entetes, 'Pvalue');
+
+	# Reg SIsd
+	push(@entetes, 'Regulation');
+	push(@entetes, @SIsds) if($paire);
+	push(@entetes, 'Med SIsd');
+	push(@entetes, 'Pvalue');
+
+	# Reg psi
+	push(@entetes, 'Regulation');
+	push(@entetes, 'Med Psi Control');
+	push(@entetes, 'sd Med Psi Control');
+	push(@entetes, 'Med Psi Test');
+	push(@entetes, 'sd Med Psi Test');
+	push(@entetes, 'Med Psi FC');
+	push(@entetes, 'sd Med Psi FC');
+	push(@entetes, 'Pvalue');
 
 	for(my $j = 0; $j < @entetes; $j++){
 
@@ -267,11 +268,11 @@ sub write_list{
 		my($entite) = @_;
 
 		return(
-			($entite->{'SI'} >= $seuil_epissage and ($entite->{'SI_pval'} <= $seuil_pval))
+			((format_fold($entite->{'SI'}) >= $seuil_epissage) and ($entite->{'SI_pval'} <= $seuil_pval))
 			and
-			($entite->{'SIsd'} >= $seuil_epissage and (!$paire or ($entite->{'SIsd_pval'} <= $seuil_pval)))
+			((format_fold($entite->{'SIsd'}) >= $seuil_epissage) and ($entite->{'SIsd_pval'} <= $seuil_pval))
 			and
-			($entite->{'psi_fc'} >= $seuil_epissage and (!$paire or ($entite->{'psi_pval'} <= $seuil_pval)))
+			((format_fold($entite->{'psi_fc'}) >= $seuil_epissage) and ($entite->{'psi_pval'} <= $seuil_pval))
 		);
 
 	}
@@ -280,26 +281,27 @@ sub write_list{
 	@entites = sort {
 		# On classe déjà les communs en premier
 		commun($b) <=> commun($a)
-#		||
+		||
 		# Ensuite par FC gène fiable
-#		(format_fold($b->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
-#			<=>
-#		(format_fold($a->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
-#		||
-		# Ensuite par SI up ou down
-#		($b->{'SI'} >= 1) <=> ($a->{'SI'} >= 1)
-#		||
-		# Ensuite par SI décroissant
-#		format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
+		(format_fold($b->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
+		<=>
+		(format_fold($a->{'epi_fc'}) <= $seuil_fiabilite_fcGene)
+		||
+		# Ensuite par gène
+		$a->{'id_gene'} <=> $b->{'id_gene'}
 	} @entites;
 
+	my $nb_lignes = 2;
+
 	# Pour chaque entité
-	foreach my $entite (@entites){
+	for(my $i = 0; $i < @entites; $i++){
+
+		my $entite = $entites[$i];
 
 		# On test si il y en a au moins un
-		my $SI_ok = ($entite->{'SI'} >= $seuil_epissage and ($entite->{'SI_pval'} <= $seuil_pval));
-		my $SIsd_ok = ($entite->{'SIsd'} >= $seuil_epissage and (!$paire or ($entite->{'SIsd_pval'} <= $seuil_pval)));
-		my $psi_ok = ($entite->{'psi_fc'} >= $seuil_epissage and (!$paire or ($entite->{'psi_pval'} <= $seuil_pval)));
+		my $SI_ok = ((format_fold($entite->{'SI'}) >= $seuil_epissage) and ($entite->{'SI_pval'} <= $seuil_pval));
+		my $SIsd_ok = ((format_fold($entite->{'SIsd'}) >= $seuil_epissage) and ($entite->{'SIsd_pval'} <= $seuil_pval));
+		my $psi_ok = ((format_fold($entite->{'psi_fc'}) >= $seuil_epissage) and ($entite->{'psi_pval'} <= $seuil_pval));
 
 		# On zappe si il n'y en a pas au moins un
 		next if(!$SI_ok and !$SIsd_ok and !$psi_ok);
@@ -350,57 +352,66 @@ sub write_list{
 			: $format_cell_mauv_fc;
 
 		# On crée le tableau de data
-		my @data = (
-			$nb_gene,
-			($SI_ok) ? 'X' : '',
-			($SIsd_ok) ? 'X' : '',
-			($psi_ok) ? 'X' : '',
-			# Infos du gène
-			$infos_gene->{'id_fasterdb'},
-			$infos_gene->{'id_source'},
-			'blah',
-			$infos_gene->{'symbol'},
-			$infos_gene->{'description'},
-			$pos_chrom,
-			$entite->{'epi_nb_sondes'},
-			$entite->{'epi_nb_exons'},
-			# Infos entité
-			$infos_entite->{'type'},
-			$pos_entite,
-			$entite->{'nb_sondes'},
-			'seq',
-			# Regulation gène
-			$reg_gene,
-			format_fold($entite->{'epi_fc'}),
-			$entite->{'epi_pval'},
-			# Algo SI
-			$reg_SI,
-			format_fold($entite->{'SI'}),
-			$entite->{'SI_pval'},
-			# Algo SIsd
-			$reg_SIsd,
-			format_fold($entite->{'SIsd'}),
-			$entite->{'SIsd_pval'},
-			# Algo psi
-			$reg_psi,
-			$entite->{'psi_control'},
-			$entite->{'psi_sd_control'},
-			$entite->{'psi_test'},
-			$entite->{'psi_sd_test'},
-			$entite->{'psi_fc'},
-			$entite->{'psi_sd_fc'},
-			$entite->{'psi_pval'}
-		);
+		my @data = ();
+
+		push(@data, $nb_gene);
+		push(@data, ($SI_ok) ? 'X' : '');
+		push(@data, ($SIsd_ok) ? 'X' : '');
+		push(@data, ($psi_ok) ? 'X' : '');
+
+		# Infos du gène
+		push(@data, $infos_gene->{'id_fasterdb'});
+		push(@data, $infos_gene->{'id_source'});
+		push(@data, 'blah');
+		push(@data, $infos_gene->{'symbol'});
+		push(@data, $infos_gene->{'description'});
+		push(@data, $pos_chrom);
+		push(@data, $entite->{'epi_nb_sondes'});
+		push(@data, $entite->{'epi_nb_exons'});
+
+		# Infos entité
+		push(@data, $infos_entite->{'id'});
+		push(@data, $infos_entite->{'type'});
+		push(@data, $pos_entite);
+		push(@data, $entite->{'nb_sondes'});
+		push(@data, 'seq');
+
+		# Regulation gène
+		push(@data, $reg_gene);
+		push(@data, format_fold($entite->{'epi_fc'}));
+		push(@data, $entite->{'epi_pval'});
+
+		# Algo SI
+		push(@data, $reg_SI);
+		push(@data, map { $entite->{$_} } @SIs) if($paire);
+		push(@data, format_fold($entite->{'SI'}));
+		push(@data, $entite->{'SI_pval'});
+
+		# Algo SIsd
+		push(@data, $reg_SIsd);
+		push(@data, map { $entite->{$_} } @SIsds) if($paire);
+		push(@data, format_fold($entite->{'SIsd'}));
+		push(@data, $entite->{'SIsd_pval'});
+
+		# Algo psi
+		push(@data, $reg_psi);
+		push(@data, $entite->{'psi_control'});
+		push(@data, $entite->{'psi_sd_control'});
+		push(@data, $entite->{'psi_test'});
+		push(@data, $entite->{'psi_sd_test'});
+		push(@data, format_fold($entite->{'psi_fc'}));
+		push(@data, $entite->{'psi_sd_fc'});
+		push(@data, $entite->{'psi_pval'});
 
 		# On affiche les data
 		for(my $j = 0; $j < @data; $j++){
 
 			# $i + 1 parce que la premiere ligne est l'entete
-			$f->write($num_ligne, $j, $data[$j], $format);
+			$f->write($nb_lignes, $j, $data[$j], $format);
 
 		}
 
-		$num_ligne++;
+		$nb_lignes++;
 
 	}
 

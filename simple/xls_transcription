@@ -9,6 +9,7 @@ use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
 use Math;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -35,7 +36,7 @@ my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
 my $dir_xls = $config->{'dir_xls'};
 
 # ==============================================================================
-# Connection à elexir et préparation de la requete pour les infos de l'analyse
+# On récupère les infos de l'analyse
 # ==============================================================================
 
 my $dbh = DBI->connect(
@@ -44,27 +45,12 @@ my $dbh = DBI->connect(
 	$db_pass
 );
 
-# On selectionne les infos de l'analyse
-my $select_infos_analyse_sth = $dbh->prepare(
-	"SELECT a.id_project, a.name, p.organism, p.type as type_chips,
-	a.version, a.type
-	FROM projects AS p, analyses AS a
-	WHERE a.id_project = p.id
-	AND a.id = ?"
-);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
-# ==============================================================================
-# On récupère les infos de l'analyse
-# ==============================================================================
-
-$select_infos_analyse_sth->execute($id_analyse);
-
-my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
-
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'simple'){
+if($analyse->{'type'} ne 'simple'){
 
 	die('Le script simple ne fonctionne que sur les analyses simples :o)');
 
@@ -75,11 +61,11 @@ if($infos_analyse->{'type'} ne 'simple'){
 # ==============================================================================
 
 # On récupère les infos de la bdd
-my $id_projet = $infos_analyse->{"id_project"};
-my $type_chips = $infos_analyse->{'type_chips'};
-my $version = $infos_analyse->{'version'};
-my $orga = $infos_analyse->{'organism'};
-my $name = $infos_analyse->{'name'};
+my $id_projet = $analyse->{"id_project"};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $name = $analyse->{'name'};
 
 # on crée les variables du script qui déendent de l'analyse
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
@@ -177,15 +163,6 @@ $f_resume->write(37, 1, "avec sonde : gc <18, non ch, ciblant une entite et expr
 # ==============================================================================
 # On ajoute les gènes dans les feuilles
 # ==============================================================================
-
-# Fonction pour formatter le fold
-sub format_fold{
-
-	my($fold) = @_;
-
-	return ($fold >= 1) ? $fold : 1/$fold;
-
-}
 
 my @genes = ();
 
