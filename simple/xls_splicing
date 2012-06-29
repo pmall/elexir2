@@ -85,16 +85,18 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_entites_nofdr_sth = $dbh->prepare(
-	"SELECT e.*, g.epi_fc, g.epi_pval, g.epi_nb_sondes, g.epi_nb_exons
+	"SELECT e.*, g.trans_fc, g.trans_pval,
+	g.trans_nb_sondes, g.trans_nb_exons
 	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene AND is_robust = 1"
+	WHERE g.id_gene = e.id_gene"
 );
 
 my $select_entites_fdr_sth = $dbh->prepare(
-	"SELECT e.*, g.epi_fc, g.epi_pval, g.epi_nb_sondes, g.epi_nb_exons,
-	e.SI_adjp AS SI_pval, e.SIsd_adjp AS SIsd_pval, e.psi_adjp AS psi_pval
+	"SELECT e.*, g.trans_fc, g.trans_pval,
+	g.trans_nb_sondes, g.trans_nb_exons,
+	e.SI_adjp AS SI_pval, e.psi_adjp AS psi_pval
 	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene AND is_robust = 1"
+	WHERE g.id_gene = e.id_gene"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(

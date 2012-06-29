@@ -3,8 +3,5 @@
 dir=$(dirname $0)
 
 $dir/simple/xls_transcription $1
-$dir/simple/xls_splicing $1
 $dir/simple/xls_splicing_SI $1
-$dir/simple/xls_splicing_SIsd $1
-$dir/simple/xls_splicing_psi $1
 $dir/simple/xls_zip $1

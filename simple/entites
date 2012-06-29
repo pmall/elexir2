@@ -74,7 +74,6 @@ my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
 my $table_dabg = get_table_dabg($id_projet);
 my $table_intensites = get_table_intensites($id_projet);
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
-my $table_si = get_table_si($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 
 # ==============================================================================
@@ -88,7 +87,7 @@ my $select_genes_sth = $dbh->prepare(
 
 # On selectionne les entités codantes d'un gène
 my $select_entites_sth = $dbh->prepare(
-	"SELECT id, type, exon_pos FROM " . $table_entites . "
+	"SELECT id, id_gene, type, exon_pos FROM " . $table_entites . "
 	WHERE id_gene = ? AND type != 'intron'"
 );
 
@@ -137,11 +136,6 @@ push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields
 push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs)) if($paire);
 push(@fields_splicing, 'SI DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_splicing, 'SI_adjp DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED' } @fields_SIsds)) if($paire);
-push(@fields_splicing, 'SIsd DECIMAL(10,5) UNSIGNED');
-push(@fields_splicing, 'SIsd_pval DECIMAL(12,10) UNSIGNED') if($paire);
-push(@fields_splicing, 'SIsd_adjp DECIMAL(12,10) UNSIGNED') if($paire);
 push(@fields_splicing, 'psi_control DECIMAL(15,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'psi_sd_control DECIMAL(15,5) UNSIGNED NOT NULL') if($paire);
 push(@fields_splicing, 'psi_test DECIMAL(15,5) UNSIGNED NOT NULL');
@@ -149,9 +143,7 @@ push(@fields_splicing, 'psi_sd_test DECIMAL(15,5) UNSIGNED NOT NULL') if($paire)
 push(@fields_splicing, 'psi_fc DECIMAL(15,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'psi_sd_fc DECIMAL(15,5) UNSIGNED NOT NULL') if($paire);
 push(@fields_splicing, 'psi_pval DECIMAL(12,10) UNSIGNED NOT NULL') if($paire);
-push(@fields_splicing, 'psi_adjp DECIMAL(12,10) UNSIGNED NOT NULL') if($paire);
 push(@fields_splicing, 'nb_sondes SMALLINT UNSIGNED NOT NULL');
-push(@fields_splicing, 'is_robust TINYINT UNSIGNED NOT NULL');
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_splicing);
 $dbh->do('CREATE TABLE ' . $table_splicing . ' (' . join(', ', @fields_splicing) . ')');
@@ -166,10 +158,6 @@ my $insert_entite_sth = $dbh->prepare(
 
 print 'Analyse des entités' . "\n";
 
-# On défini une liste d'entité (on les garde toutes dans une liste pour calculer
-# les pvals ajustés)
-my @entites = ();
-
 # On selectionne les gènes
 $select_genes_sth->execute;
 
@@ -179,8 +167,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 	# ======================================================================
 	# On calcule les entités du gène
 	# ======================================================================
-
-	my @entites_gene = ();
 
 	# On selectionne les entités du gène
 	$select_entites_sth->execute($gene->{'id_gene'});
@@ -219,8 +205,11 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On récupère les infos des sondes exprimées
 		my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_sondes_ok, $seuil_dabg);
 
+		# On récupère le nombre de sondes
+		my $nb_sondes = scalar(@sondes);
+
 		# Si il n'y a pas trois sondes exprimées on zappe
-		next if(@sondes < $nb_sondes_min_entite);
+		next if($nb_sondes < $nb_sondes_min_entite);
 
 		# ==============================================================
 		# On calcule les valeurs d'expression de l'entité
@@ -236,10 +225,23 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my @SIs_sondes = $analyse->sis_sondes($gene->{'epi_fc'}, \@sondes);
 
 		# ==============================================================
+		# On calcule si l'entité est "cohérente"
+		# ==============================================================
+
+		my $is_robust = is_robust(
+			[map { median(@{$_}) } @SIs_sondes],
+			$seuil_si_robust,
+			(1/$seuil_si_robust)
+		);
+
+		# Si l'entité n'est pas cohérente on zappe
+		next if(!$is_robust);
+
+		# ==============================================================
 		# On calcule le SI de l'entité (ça fait chier la c diff pour paire et impaire)
 		# ==============================================================
 
-		my($SI, $p_value, @SIs) = si_matrix(\@SIs_sondes, $paire);
+		my($SI, $SI_pval, @SIs) = si_matrix(\@SIs_sondes, $paire);
 
 		# ==============================================================
 		# On calcule le PSI de l'entité
@@ -251,7 +253,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		my $psi_sd_test;
 		my $psi_fc;
 		my $psi_sd_fc;
-		my $p_value_psi;
+		my $psi_pval;
 
 		# on récupère les fcs psis de chaque paire de replicat
 		my @psis_control = ();
@@ -291,7 +293,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 			$psi_sd_fc = sd(@psis_fcs);
 
 			# test stat
-			$p_value_psi = ttest(
+			$psi_pval = ttest(
 				[log2(@psis_fcs)],
 				(log2($psi_fc) >= 0)
 			);
@@ -299,156 +301,33 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# ==============================================================
-		# On calcule si l'entité est "cohérente"
+		# On ajoute l'entité dans la table
 		# ==============================================================
 
-		my $is_robust = is_robust(
-			[map { median(@{$_}) } @SIs_sondes],
-			$seuil_si_robust,
-			(1/$seuil_si_robust)
-		);
+		my @values = ();
 
-		# ==============================================================
-		# On ajoute l'entité à la liste des entites
-		# ==============================================================
+		push(@values, $entite->{'id'});
+		push(@values, $entite->{'id_gene'});
+		push(@values, $entite->{'type'});
+		push(@values, $entite->{'exon_pos'});
+		push(@values, @expr);
+		push(@values, @SIs) if($paire);
+		push(@values, $SI);
+		push(@values, $SI_pval);
+		push(@values, $psi_control);
+		push(@values, $psi_sd_control) if($paire);
+		push(@values, $psi_test);
+		push(@values, $psi_sd_test) if($paire);
+		push(@values, $psi_fc);
+		push(@values, $psi_sd_fc) if($paire);
+		push(@values, $psi_pval) if($paire);
+		push(@values, $nb_sondes);
 
-		push(@entites_gene, {
-			'id_entite' => $entite->{'id'},
-			'id_gene' => $gene->{'id_gene'},
-			'type_entite' => $entite->{'type'},
-			'exon_pos' => $entite->{'exon_pos'},
-			'expression' => \@expr,
-			'SIs' => \@SIs,
-			'SI' => $SI,
-			'SI_pval' => $p_value,
-			'SIsds' => \@SIs, # par défaut les SIsd sont identiques aux SIs
-			'SIsd' => $SI, # idem
-			'SIsd_pval' => $p_value,
-			'psi_control' => $psi_control,
-			'psi_test' => $psi_test,
-			'psi_sd_control' => $psi_sd_control,
-			'psi_sd_test' => $psi_sd_test,
-			'psi_fc' => $psi_fc,
-			'psi_sd_fc' => $psi_sd_fc,
-			'psi_pval' => $p_value_psi,
-			'nb_sondes' => scalar(@sondes),
-			'is_robust' => $is_robust
-		});
+		$insert_entite_sth->execute(@values);
 
 	}
 
 	# On termine la requète pour les entités
 	$select_entites_sth->finish;
-
-	# ======================================================================
-	# On calcule les SIs standardisés des entites du gène
-	# ======================================================================
-
-	# Pour ça il faut calculer le 'SI' du gène
-	# On selectionne les entités exoniques du gène
-	my @entites_exoniques = grep {
-		$_->{'type_entite'} eq 'exon'
-	} @entites_gene;
-
-	# Si il y a des entités exoniques
-	if(@entites_exoniques > 0){
-
-		# On récupère les médianes des SIs des entités exoniques du gène
-		my @SIs_gene = ();
-
-		# Il y en a une par paire...
-		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
-
-			push(@SIs_gene, median(map {
-				$_->{'SIs'}->[$i]
-			} @entites_exoniques));
-
-		}
-
-		# Pour chaque entité du gène on calcule son/ses SIsd
-		foreach my $entite_gene (@entites_gene){
-
-			# Il y en a un par paire...
-			for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
-
-				$entite_gene->{'SIsds'}->[$i] = $entite_gene->{'SIs'}->[$i]/$SIs_gene[$i];
-
-			}
-
-			# Le SIsd est la médiane des SIsd des paires de replicats
-			# (en cas d'analyse non paire, il y en a qu'une, prendre la
-			# médiane ne change rien)
-
-			$entite_gene->{'SIsd'} = median(@{$entite_gene->{'SIsds'}});
-
-			# On fait un test seulement si l'analyse est paire
-			if($paire){
-
-				$entite_gene->{'SIsd_pval'} = ttest(
-					[log2(@{$entite_gene->{'SIsds'}})],
-					(log2($entite_gene->{'SIsd'}) >= 0)
-				);
-
-			}
-
-		}
-
-	}
-
-	# On ajoute les entités du gène à la liste des entités
-	push(@entites, @entites_gene);
-
-}
-
-# ==============================================================================
-# On calcule les pvalues ajustées et on ajoute dans la bdd
-# ==============================================================================
-
-# On corrige les pvalues des si
-my @SI_adjp = adjust_pvals(map { $_->{'SI_pval'} } @entites);
-
-# Si l'analyse est paire on corrige les autres pvalues
-my @SIsd_adjp = ();
-my @psi_adjp = ();
-
-if($paire){
-
-	@SIsd_adjp = adjust_pvals(map { $_->{'SIsd_pval'} } @entites);
-	@psi_adjp = adjust_pvals(map { $_->{'psi_pval'} } @entites);
-
-}
-
-# On ajoute chaque entité dans la bdd
-for(my $i = 0; $i < @entites; $i++){
-
-	my $entite = $entites[$i];
-
-	my @values = ();
-
-	push(@values, $entite->{'id_entite'});
-	push(@values, $entite->{'id_gene'});
-	push(@values, $entite->{'type_entite'});
-	push(@values, $entite->{'exon_pos'});
-	push(@values, @{$entite->{'expression'}});
-	push(@values, @{$entite->{'SIs'}}) if($paire);
-	push(@values, $entite->{'SI'});
-	push(@values, $entite->{'SI_pval'});
-	push(@values, $SI_adjp[$i]);
-	push(@values, @{$entite->{'SIsds'}}) if($paire);
-	push(@values, $entite->{'SIsd'});
-	push(@values, $entite->{'SIsd_pval'}) if($paire);
-	push(@values, $SIsd_adjp[$i]) if($paire);
-	push(@values, $entite->{'psi_control'});
-	push(@values, $entite->{'psi_sd_control'}) if($paire);
-	push(@values, $entite->{'psi_test'});
-	push(@values, $entite->{'psi_sd_test'}) if($paire);
-	push(@values, $entite->{'psi_fc'});
-	push(@values, $entite->{'psi_sd_fc'}) if($paire);
-	push(@values, $entite->{'psi_pval'}) if($paire);
-	push(@values, $psi_adjp[$i]) if($paire);
-	push(@values, $entite->{'nb_sondes'});
-	push(@values, $entite->{'is_robust'});
-
-	$insert_entite_sth->execute(@values);
 
 }

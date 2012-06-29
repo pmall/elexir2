@@ -86,7 +86,8 @@ sub fc_matrix{
 }
 
 # ==============================================================================
-# Retourne le SI du groupe de sonde et sa p_value à partir d'une matrice de SIs
+# Prend une matrice de valeurs (sondes x num replicat)
+# Permet de calculer les fcs du gène par réplicat
 # ==============================================================================
 
 sub si_matrix{

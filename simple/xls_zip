@@ -64,10 +64,7 @@ my $dir_analyse = $dir_project . '/' . $id_analyse;
 
 my $files = join(' ', (map { $infos_analyse->{'name'} . '_' . $_ } (
 	'transcription.xls',
-	'epissage.xls',
-	'epissage_SI.xls',
-	'epissage_SIsd.xls',
-	'epissage_psi.xls'
+	'epissage_SI.xls'
 )));
 
 `cd $dir_analyse && zip files.zip $files && chmod -R 777 $dir_project`;
