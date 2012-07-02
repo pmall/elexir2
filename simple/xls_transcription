@@ -110,6 +110,7 @@ my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center
 my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
 my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
 my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_entete_merge		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
 my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
 
@@ -162,29 +163,39 @@ $f->set_column(2, 2, 12); # Link
 $f->set_column(3, 3, 12); # Symbol
 $f->set_column(4, 4, 30); # Description
 $f->set_column(5, 5, 24); # Pos chrom
-$f->set_column(6, 6, 12); # Regulation
-$f->set_column(7, 7, 8); # FC
-$f->set_column(8, 8, 12); # pval
-$f->set_column(9, 9, 12); # nb probes
+$f->set_column(7, 7, 12); # Regulation
+$f->set_column(8, 8, 8); # FC
+$f->set_column(9, 9, 12); # pval
+$f->set_column(10, 10, 12); # nb probes
+
+# On fait les premiers entetes
+$f->merge_range(0, 0, 0, 5, 'Infos Gene', $format_entete_merge);
+$f->merge_range(0, 7, 0, 11, 'Algo SI', $format_entete_merge);
 
 # On défini les entetes
 my @entetes = ();
 
+# Infos du gène
 push(@entetes, 'Fasterdb id');
 push(@entetes, 'Source id');
 push(@entetes, 'Link Elexir');
 push(@entetes, 'Symbol');
 push(@entetes, 'Description');
 push(@entetes, 'Chr Position');
-push(@entetes, 'Nb probes');
-push(@entetes, 'Nb exons');
+push(@entetes, '');
+
+# Regulation
 push(@entetes, 'Regulation');
 push(@entetes, 'FC');
 push(@entetes, 'Pvalue');
+push(@entetes, 'Nb probes');
+push(@entetes, 'Nb exons');
 
 for(my $j = 0; $j < @entetes; $j++){
 
-	$f->write(0, $j, $entetes[$j], $format_entete);
+	my $format = ($entetes[$j] ne '') ? $format_entete : undef;
+
+	$f->write(1, $j, $entetes[$j], $format);
 
 }
 
@@ -234,23 +245,29 @@ for(my $i = 0; $i < @genes; $i++){
 	# On crée le tableau de data
 	my @data = ();
 
+	# Infos du gène
 	push(@data, $infos_gene->{'id_fasterdb'});
 	push(@data, $infos_gene->{'id_source'});
 	push(@data, 'blah');
 	push(@data, $infos_gene->{'symbol'});
 	push(@data, $infos_gene->{'description'});
 	push(@data, $pos_chrom);
-	push(@data, $gene->{'trans_nb_sondes'});
-	push(@data, $gene->{'trans_nb_exons'});
+	push(@data, '');
+
+	# Regulation
 	push(@data, $regulation);
 	push(@data, round(format_fold($gene->{'trans_fc'}), 2));
 	push(@data, $gene->{'trans_pval'});
+	push(@data, $gene->{'trans_nb_sondes'});
+	push(@data, $gene->{'trans_nb_exons'});
 
 	# On affiche les data
 	for(my $j = 0; $j < @data; $j++){
 
-		# $i + 1 parce que la premiere ligne est l'entete
-		$f->write($i + 1, $j, $data[$j], $format);
+		my $format = ($data[$j] ne '') ? $format : undef;
+
+		# +2 parce que les deux premières lignes sont les entetes
+		$f->write($i + 2, $j, $data[$j], $format);
 
 	}
 
