@@ -74,7 +74,6 @@ my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
 my $table_dabg = get_table_dabg($id_projet);
 my $table_intensites = get_table_intensites($id_projet);
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
-my $table_si = get_table_si($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 
 # ==============================================================================
@@ -126,13 +125,9 @@ push(@fields_splicing, 'SI_oj DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval_ba DECIMAL(12,10) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval_dc DECIMAL(12,10) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval_oj DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_splicing, 'SI_adjp_ba DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_splicing, 'SI_adjp_dc DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_splicing, 'SI_adjp_oj DECIMAL(12,10) UNSIGNED NOT NULL');
 push(@fields_splicing, 'nb_sondes_ba SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'nb_sondes_dc SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'nb_sondes_oj SMALLINT UNSIGNED NOT NULL');
-push(@fields_splicing, 'is_robust_ba TINYINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'is_robust_dc TINYINT UNSIGNED NOT NULL');
 push(@fields_splicing, 'is_robust_oj TINYINT UNSIGNED NOT NULL');
 
@@ -242,14 +237,28 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		next if(@sondes_oj < $nb_sondes_min_entite);
 
 		# ==============================================================
-		# On calcule les SIs des sondes
+		# Si B/A n'est pas cohérent on zappe
 		# ==============================================================
 
-		# Comparaison B/A
+		# On récupère le SI des sondes de B/A
 		my @SIs_sondes_ba = $analyse_ba->sis_sondes(
 			$gene->{'fc_ba'},
 			\@sondes_ba
 		);
+
+		# On calcule si B/A est cohérent
+		my $is_robust_ba = is_robust(
+			[map { median(@{$_}) } @SIs_sondes_ba],
+			$seuil_si_robust,
+			(1/$seuil_si_robust)
+		);
+
+		# Si il ne l'est pas on zappe
+		next if(!$is_robust_ba);
+
+		# ==============================================================
+		# On calcule les SIs des sondes
+		# ==============================================================
 
 		# Comparaison D/C
 		my @SIs_sondes_dc = $analyse_dc->sis_sondes(
@@ -273,19 +282,12 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# Comparaison D/C
 		my($SI_dc, $p_value_dc) = si_matrix(\@SIs_sondes_dc, $paire);
 
-
 		# Comparaison O/J
 		my($SI_oj, $p_value_oj) = si_matrix(\@SIs_sondes_oj, $paire);
 
 		# ==============================================================
-		# On calcule si l'entité est "cohérente"
+		# On calcule si l'entité est "cohérente" dans D/C et O/J
 		# ==============================================================
-
-		my $is_robust_ba = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_ba],
-			$seuil_si_robust,
-			(1/$seuil_si_robust)
-		);
 
 		my $is_robust_dc = is_robust(
 			[map { median(@{$_}) } @SIs_sondes_dc],
@@ -300,65 +302,38 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		);
 
 		# ==============================================================
+		# On calcule les nombres de sondes analysés
+		# ==============================================================
+
+		my $nb_sondes_ba = @sondes_ba;
+		my $nb_sondes_dc = @sondes_dc;
+		my $nb_sondes_oj = @sondes_oj;
+
+		# ==============================================================
 		# On ajoute l'entité à la liste des entites
 		# ==============================================================
 
-		push(@entites, {
-			'id_entite' => $entite->{'id'},
-			'id_gene' => $gene->{'id_gene'},
-			'type_entite' => $entite->{'type'},
-			'exon_pos' => $entite->{'exon_pos'},
-			'SI_ba' => $SI_ba,
-			'SI_dc' => $SI_dc,
-			'SI_oj' => $SI_oj,
-			'SI_pval_ba' => $p_value_ba,
-			'SI_pval_dc' => $p_value_dc,
-			'SI_pval_oj' => $p_value_oj,
-			'nb_sondes_ba' => scalar(@sondes_ba),
-			'nb_sondes_dc' => scalar(@sondes_dc),
-			'nb_sondes_oj' => scalar(@sondes_oj),
-			'is_robust_ba' => $is_robust_ba,
-			'is_robust_dc' => $is_robust_dc,
-			'is_robust_oj' => $is_robust_oj,
-		});
+		$insert_entite_sth->execute(
+			$entite->{'id'},
+			$gene->{'id_gene'},
+			$entite->{'type'},
+			$entite->{'exon_pos'},
+			$SI_ba,
+			$SI_dc,
+			$SI_oj,
+			$p_value_ba,
+			$p_value_dc,
+			$p_value_oj,
+			$nb_sondes_ba,
+			$nb_sondes_dc,
+			$nb_sondes_oj,
+			$is_robust_dc,
+			$is_robust_oj,
+		);
 
 	}
 
 	# On termine la requète pour les entités
 	$select_entites_sth->finish;
-
-}
-
-# On calcule les pvalues ajustées
-my @SI_adjp_ba = adjust_pvals(map { $_->{'SI_pval_ba'} } @entites);
-my @SI_adjp_dc = adjust_pvals(map { $_->{'SI_pval_dc'} } @entites);
-my @SI_adjp_oj = adjust_pvals(map { $_->{'SI_pval_oj'} } @entites);
-
-# On ajoute les entités
-for(my $i = 0; $i < @entites; $i++){
-
-	my @values = ();
-
-	push(@values, $entites[$i]->{'id_entite'});
-	push(@values, $entites[$i]->{'id_gene'});
-	push(@values, $entites[$i]->{'type_entite'});
-	push(@values, $entites[$i]->{'exon_pos'});
-	push(@values, $entites[$i]->{'SI_ba'});
-	push(@values, $entites[$i]->{'SI_dc'});
-	push(@values, $entites[$i]->{'SI_oj'});
-	push(@values, $entites[$i]->{'SI_pval_ba'});
-	push(@values, $entites[$i]->{'SI_pval_dc'});
-	push(@values, $entites[$i]->{'SI_pval_oj'});
-	push(@values, $SI_adjp_ba[$i]);
-	push(@values, $SI_adjp_dc[$i]);
-	push(@values, $SI_adjp_oj[$i]);
-	push(@values, $entites[$i]->{'nb_sondes_ba'});
-	push(@values, $entites[$i]->{'nb_sondes_dc'});
-	push(@values, $entites[$i]->{'nb_sondes_oj'});
-	push(@values, $entites[$i]->{'is_robust_ba'});
-	push(@values, $entites[$i]->{'is_robust_dc'});
-	push(@values, $entites[$i]->{'is_robust_oj'});
-
-	$insert_entite_sth->execute(@values);
 
 }

@@ -28,9 +28,9 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Paramètres de sélection pour les résulats
-my $seuil_epissage = $config->{'simple'}{'excel'}{'seuil_epissage'};
+my $seuil_epissage = $config->{'compose'}{'excel'}{'seuil_epissage_simple'};
+my $seuil_epissage_j_vs_o = $config->{'compose'}{'excel'}{'seuil_epissage_j_vs_o'};
 my $seuil_pval = $config->{'simple'}{'excel'}{'seuil_pval'};
-my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -50,9 +50,9 @@ my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($analyse->{'type'} ne 'simple'){
+if($analyse->{'type'} ne 'compose'){
 
-	die('Le script simple ne fonctionne que sur les analyses simples :o)');
+	die('Le script composé ne fonctionne que sur les analyses composées :o)');
 
 }
 
@@ -85,12 +85,8 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_entites_sth = $dbh->prepare(
-	"SELECT e.*, g.trans_fc, g.trans_pval,
-	g.trans_nb_sondes, g.trans_nb_exons
-	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene
-	AND ABS(LOG2(SI)) >= LOG2(?)
-	AND SI_pval <= ?"
+	"SELECT e.* FROM $table_splicing
+	WHERE ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -112,7 +108,8 @@ my $xlsh			= Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # Feuilles
 my $f_resume			= $xlsh->add_worksheet('Parametres et entites analysees');
-my $f				= $xlsh->add_worksheet('Epissage');
+my $f_up			= $xlsh->add_worksheet('B vs A > ' . $seuil_epissage);
+my $f_down			= $xlsh->add_worksheet('B vs A < -' . $seuil_epissage);
 
 # On défini les couleurs
 my $couleur_entete		= $xlsh->set_custom_color(40, 189, 189, 189);
@@ -154,92 +151,6 @@ my $num_ligne = 8;
 # On ajoute les entités dans la feuille
 # ==============================================================================
 
-# Offset pour le nombre de colones selon le nombre de paires de rep
-my $o_si = ($paire) ? $nb_paires_rep : 0;
-my $o_psi = ($paire) ? 4 : 0;
-
-# On modifie la largeur des colones
-$f->set_column(0, 0, 12); # Fasterdb id
-$f->set_column(1, 1, 18); # Source id
-$f->set_column(2, 2, 12); # Link
-$f->set_column(3, 3, 12); # Symbol
-$f->set_column(4, 4, 12); # Elexir id
-$f->set_column(5, 5, 12); # Type
-$f->set_column(7, 7, 18); # Coordonnées
-$f->set_column(9, 9, 18); # Sequence
-$f->set_column(23 + $o_si + $o_psi, 23 + $o_si + $o_psi, 24); # Description
-$f->set_column(24 + $o_si + $o_psi, 24 + $o_si + $o_psi, 24); # Coordonnées
-
-# On fait les premiers entetes
-$f->merge_range(0, 0, 0, 9, 'Infos Entite', $format_entete_merge);
-$f->merge_range(0, 11, 0, 13 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 15 + $o_si, 0, 18 + $o_si + $o_psi, 'Algo Psi', $format_entete_merge);
-$f->merge_range(0, 20 + $o_si + $o_psi, 0, 26 + $o_si + $o_psi, 'Infos gene', $format_entete_merge);
-
-# On défini les entetes de chaque colonnes
-
-my @SIs = ();
-
-if($paire){
-
-	for(my $i = 0; $i < $nb_paires_rep; $i++){
-
-		push(@SIs, 'SI' . ($i + 1));
-
-	}
-
-}
-
-my @entetes = ();
-
-# Infos entité
-push(@entetes, 'Fasterdb ID');
-push(@entetes, 'Source ID');
-push(@entetes, 'Link Elexir');
-push(@entetes, 'Symbol');
-push(@entetes, 'Elexir ID');
-push(@entetes, 'Type');
-push(@entetes, 'Position');
-push(@entetes, 'Coordonnees');
-push(@entetes, 'Nb probes');
-push(@entetes, 'Sequence');
-push(@entetes, ''); # Space
-
-# Reg SI
-push(@entetes, 'Reg');
-push(@entetes, @SIs) if($paire);
-push(@entetes, 'Med SI');
-push(@entetes, 'Pvalue');
-push(@entetes, ''); # Space
-
-# Reg psi
-push(@entetes, 'Reg');
-push(@entetes, 'Med cont');
-push(@entetes, 'Sd cont') if($paire);
-push(@entetes, 'Med test');
-push(@entetes, 'Sd test') if($paire);
-push(@entetes, 'Med FC');
-push(@entetes, 'Sd FC') if($paire);
-push(@entetes, 'Pvalue') if($paire);
-push(@entetes, ''); # Space
-
-# Reg gène
-push(@entetes, 'Reg');
-push(@entetes, 'FC');
-push(@entetes, 'Pvalue');
-push(@entetes, 'Description');
-push(@entetes, 'Chr Position');
-push(@entetes, 'Nb probes');
-push(@entetes, 'Nb exons');
-
-for(my $j = 0; $j < @entetes; $j++){
-
-	my $format = ($entetes[$j] ne '') ? $format_entete : undef;
-
-	$f->write(1, $j, $entetes[$j], $format);
-
-}
-
 # On ajoute chaque entité dans la feuille, en comptant les ups et les downs
 my $num_genes = 0;
 my $id_gene_prec = 0;
@@ -257,7 +168,7 @@ my %SI_max_gene = ();
 foreach my $entite (@entites){
 
 	my $id_gene = $entite->{'id_gene'};
-	my $SI = format_fold($entite->{'SI'});
+	my $SI = format_fold($entite->{'SI_oj'});
 
 	if(!$SI_max_gene{$id_gene} or $SI > $SI_max_gene{$id_gene}){
 
@@ -267,128 +178,210 @@ foreach my $entite (@entites){
 
 }
 
-# On classe les entites
-@entites = sort {
-	# Ensuite par FC gène fiable
-	format_fold($b->{'trans_fc'}) <= $seuil_fiabilite_fcGene
-	<=>
-	format_fold($a->{'trans_fc'}) <= $seuil_fiabilite_fcGene
-	||
-	# Ensuite par gène
-	$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
-	||
-	# Ensuite encore par SI (au sein du gène)
-	format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
-} @entites;
+# On récupère les entités qui ont B/A up et ceux qui ont B/A down
+my @entites_ba_up = grep { $_->{'SI_ba'} >= 1 } @entites;
+my @entites_ba_down = grep { $_->{'SI_ba'} < 1 } @entites;
 
-for(my $i = 0; $i < @entites; $i++){
+# On écrit ces deux listes d'entités, chacune dans la feuille appropriée
+write_list($f_up, @entites_ba_up);
+write_list($f_down, @entites_ba_down);
 
-	my $entite = $entites[$i];
+sub write_list{
 
-	# On récupère les infos du gène
-	$select_infos_gene_sth->execute($entite->{'id_gene'});
-	my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
-	$select_infos_gene_sth->finish;
+	my($f, @entites) = @_;
 
-	# On récupère les infos de l'entité
-	$select_infos_entite_sth->execute($entite->{'id_entite'});
-	my $infos_entite = $select_infos_entite_sth->fetchrow_hashref;
-	$select_infos_entite_sth->finish;
+	# On modifie la largeur des colones
+	$f->set_column(0, 0, 12); # Fasterdb id
+	$f->set_column(1, 1, 18); # Source id
+	$f->set_column(2, 2, 12); # Link
+	$f->set_column(3, 3, 12); # Symbol
+	$f->set_column(4, 4, 12); # Elexir id
+	$f->set_column(5, 5, 12); # Type
+	$f->set_column(7, 7, 18); # Coordonnées
+	$f->set_column(8, 8, 18); # Sequence
 
-	# On compte combien de gènes sont passés
-	if($infos_gene->{'id_fasterdb'} != $id_gene_prec){
+	# On fait les premiers entetes
+	$f->merge_range(0, 0, 0, 8, 'Infos Entite', $format_entete_merge);
+	$f->merge_range(0, 10, 0, 13, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 15, 0, 19, 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 21, 0, 25, 'Regulation O/J', $format_entete_merge);
 
-		$num_genes++;
+	# On défini les entetes de chaque colonnes
+	my @entetes = ();
 
-		$id_gene_prec = $infos_gene->{'id_fasterdb'};
+	# Infos entité
+	push(@entetes, 'Fasterdb ID');
+	push(@entetes, 'Source ID');
+	push(@entetes, 'Link Elexir');
+	push(@entetes, 'Symbol');
+	push(@entetes, 'Elexir ID');
+	push(@entetes, 'Type');
+	push(@entetes, 'Position');
+	push(@entetes, 'Coordonnees');
+	push(@entetes, 'Sequence');
+	push(@entetes, ''); # Space
+
+	# Reg SI B/A
+	push(@entetes, 'Reg');
+	push(@entetes, 'SI B/A');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'NB sondes');
+	push(@entetes, ''); # Space
+
+	# Reg SI D/C
+	push(@entetes, 'Reg');
+	push(@entetes, 'SI D/C');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'NB sondes');
+	push(@entetes, 'Coherent');
+	push(@entetes, ''); # Space
+
+	# Reg SI O/J
+	push(@entetes, 'Reg');
+	push(@entetes, 'SI O/J');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'NB sondes');
+	push(@entetes, 'Coherent');
+
+	for(my $j = 0; $j < @entetes; $j++){
+
+		my $format = ($entetes[$j] ne '') ? $format_entete : undef;
+
+		$f->write(1, $j, $entetes[$j], $format);
 
 	}
 
-	# On compte les up et les down
-	($entite->{'SI'} >= 1) ? $nb_ups++ : $nb_downs++;
+	# On classe les entites
+	@entites = sort {
+		# déjà on classe par fc fort/fc faible
+		format_fold($b->{'SI_oj'}) >= $seuil_epissage_j_vs_o
+		<=>
+		format_fold($a->{'SI_oj'}) >= $seuil_epissage_j_vs_o
+		||
+		# Ensuite par gène
+		$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
+		||
+		# Ensuite encore par SI (au sein du gène)
+		format_fold($b->{'SI_oj'}) <=> format_fold($a->{'SI_oj'})
+	} @entites;
 
-	# on formatte les infos
-	$infos_gene->{'description'} =~ s/\[.+\]$//;
+	# Pour chaque entité
+	for(my $i = 0; $i < @entites; $i++){
 
-	my $pos_chrom =
-		$infos_gene->{'chromosome'} .
-		':' . $infos_gene->{'start_sur_chromosome'} .
-		'-' . $infos_gene->{'end_sur_chromosome'} .
-		':' . $infos_gene->{'strand'};
+		my $entite = $entites[$i];
 
-	my $pos_entite = $infos_entite->{'start_sur_gene'} .
-		'-' . $infos_entite->{'end_sur_gene'};
+		# On récupère les infos du gène
+		$select_infos_gene_sth->execute($entite->{'id_gene'});
+		my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
+		$select_infos_gene_sth->finish;
 
-	my $reg_gene = ($entite->{'trans_fc'} >= 1) ? 'up' : 'down';
-	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
-	my $reg_psi = ($entite->{'psi_fc'} >= 1) ? 'up' : 'down';
+		# On récupère les infos de l'entité
+		$select_infos_entite_sth->execute($entite->{'id_entite'});
+		my $infos_entite = $select_infos_entite_sth->fetchrow_hashref;
+		$select_infos_entite_sth->finish;
 
-	# On défini le format des cellules de cette ligne
-	my $format;
+		# on formatte les infos
+		$infos_gene->{'description'} =~ s/\[.+\]$//;
 
-	if(format_fold($entite->{'trans_fc'}) > $seuil_fiabilite_fcGene){
+		my $pos_chrom =
+			$infos_gene->{'chromosome'} .
+			':' . $infos_gene->{'start_sur_chromosome'} .
+			'-' . $infos_gene->{'end_sur_chromosome'} .
+			':' . $infos_gene->{'strand'};
 
-		$format = ($num_genes % 2 == 0)
-			? $format_mauv_fc_even
-			: $format_mauv_fc_odd;
+		my $pos_entite = $infos_entite->{'start_sur_gene'} .
+			'-' . $infos_entite->{'end_sur_gene'};
 
-	}else{
+		my $reg_ba = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
+		my $reg_dc = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
+		my $reg_oj;
+		my $format;
 
-		$format = ($entite->{'SI'} >= 1)
-			? ($num_genes % 2 == 0) ? $format_up_even : $format_up_odd
-			: ($num_genes % 2 == 0) ? $format_down_even : $format_down_odd;
+		# On défini la regulation de O/J
+		if($entite->{'SI_ba'} >= 1){
 
-	}
+			if($entite->{'SI_oj'} >= 1){
 
-	# On crée le tableau de data
-	my @data = ();
+				$reg_oj = 'Renforce';
+				$format = $format_up_odd;
 
-	# Infos du gène
-	push(@data, $infos_gene->{'id_fasterdb'});
-	push(@data, $infos_gene->{'id_source'});
-	push(@data, 'blah');
-	push(@data, $infos_gene->{'symbol'});
-	push(@data, $infos_entite->{'id'});
-	push(@data, $infos_entite->{'type'});
-	push(@data, $infos_entite->{'exon_pos'});
-	push(@data, $pos_entite);
-	push(@data, $entite->{'nb_sondes'});
-	push(@data, 'seq');
-	push(@data, ''); # Space
+			}else{
 
-	# Algo SI
-	push(@data, $reg_SI);
-	push(@data, map { $entite->{$_} } @SIs) if($paire);
-	push(@data, format_fold($entite->{'SI'}));
-	push(@data, $entite->{'SI_pval'});
-	push(@data, ''); # Space
+				$reg_oj = 'Affaiblit';
+				$format = $format_down_odd;
 
-	# Algo psi
-	push(@data, $reg_psi);
-	push(@data, $entite->{'psi_control'});
-	push(@data, $entite->{'psi_sd_control'}) if($paire);
-	push(@data, $entite->{'psi_test'});
-	push(@data, $entite->{'psi_sd_test'}) if($paire);
-	push(@data, format_fold($entite->{'psi_fc'}));
-	push(@data, $entite->{'psi_sd_fc'}) if($paire);
-	push(@data, $entite->{'psi_pval'}) if($paire);
-	push(@data, ''); # Space
+			}
 
-	# Regulation gène
-	push(@data, $reg_gene);
-	push(@data, format_fold($entite->{'trans_fc'}));
-	push(@data, $entite->{'trans_pval'});
-	push(@data, $infos_gene->{'description'});
-	push(@data, $pos_chrom);
-	push(@data, $entite->{'trans_nb_sondes'});
-	push(@data, $entite->{'trans_nb_exons'});
+		}else{
 
-	# On affiche les data
-	for(my $j = 0; $j < @data; $j++){
+			if($entite->{'SI_oj'} >= 1){
 
-		my $format = ($data[$j] ne '') ? $format : undef;
+				$reg_oj = 'Affaiblit';
+				$format = $format_down_odd;
 
-		$f->write($i + 2, $j, $data[$j], $format);
+			}else{
+
+				$reg_oj = 'Renforce';
+				$format = $format_up_odd;
+
+			}
+
+		}
+
+		# Si O/J est trop faible on lui donne un format spécial
+		if(format_fold($entite->{'SI_oj'}) < $seuil_epissage_j_vs_o){
+
+			$format = $format_mauv_fc_odd;
+
+		}
+
+		# On crée le tableau de data
+		my @data = ();
+
+		# Infos du gène
+		push(@data, $infos_gene->{'id_fasterdb'});
+		push(@data, $infos_gene->{'id_source'});
+		push(@data, 'blah');
+		push(@data, $infos_gene->{'symbol'});
+		push(@data, $infos_entite->{'id'});
+		push(@data, $infos_entite->{'type'});
+		push(@data, $infos_entite->{'exon_pos'});
+		push(@data, $pos_entite);
+		push(@data, 'seq');
+		push(@data, ''); # Space
+
+		# Algo SI B/A
+		push(@data, $reg_ba);
+		push(@data, format_fold($entite->{'SI_ba'}));
+		push(@data, $entite->{'SI_pval_ba'});
+		push(@data, $entite->{'nb_sondes_ba'});
+		push(@data, ''); # Space
+
+		# Algo SI B/A
+		push(@data, $reg_dc);
+		push(@data, format_fold($entite->{'SI_dc'}));
+		push(@data, $entite->{'SI_pval_dc'});
+		push(@data, $entite->{'nb_sondes_dc'});
+		push(@data, $entite->{'is_robust_dc'});
+		push(@data, ''); # Space
+
+		# Algo SI B/A
+		push(@data, $reg_oj);
+		push(@data, format_fold($entite->{'SI_oj'}));
+		push(@data, $entite->{'SI_pval_oj'});
+		push(@data, $entite->{'nb_sondes_oj'});
+		push(@data, $entite->{'is_robust_oj'});
+		push(@data, ''); # Space
+
+		# On affiche les data
+		for(my $j = 0; $j < @data; $j++){
+
+			my $format = ($data[$j] ne '') ? $format : undef;
+
+			# +2 parce que les deux premières lignes sont les entetes
+			$f->write($i + 2, $j, $data[$j], $format);
+
+		}
 
 	}
 

@@ -114,9 +114,6 @@ my @fields_trans = (
 	'pval_ba DECIMAL(12,10) UNSIGNED NOT NULL',
 	'pval_dc DECIMAL(12,10) UNSIGNED NOT NULL',
 	'pval_oj DECIMAL(12,10) UNSIGNED NOT NULL',
-	'adjp_ba DECIMAL(12,10) UNSIGNED NOT NULL',
-	'adjp_dc DECIMAL(12,10) UNSIGNED NOT NULL',
-	'adjp_oj DECIMAL(12,10) UNSIGNED NOT NULL',
 	'nb_sondes_ba SMALLINT UNSIGNED NOT NULL',
 	'nb_sondes_dc SMALLINT UNSIGNED NOT NULL',
 	'nb_sondes_oj SMALLINT UNSIGNED NOT NULL',
@@ -141,10 +138,6 @@ print 'Analyse des gènes' . "\n";
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
-
-# On défini une liste de gènes (on les garde tous dans une liste pour calculer
-# les pvals ajustés)
-my @genes = ();
 
 # On selectionne les gènes
 $select_genes_sth->execute($limit);
@@ -264,49 +257,20 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# On ajoute le gène a la bdd
 	# ======================================================================
 
-	push(@genes, {
-		'id_gene' => $id_gene,
-		'fc_ba' => $fc_ba,
-		'fc_dc' => $fc_dc,
-		'fc_oj' => $fc_oj,
-		'pval_ba' => $p_value_ba,
-		'pval_dc' => $p_value_dc,
-		'pval_oj' => $p_value_oj,
-		'nb_sondes_ba' => $nb_sondes_ba,
-		'nb_sondes_dc' => $nb_sondes_dc,
-		'nb_sondes_oj' => $nb_sondes_oj,
-		'nb_exons_ba' => $nb_exons_ba,
-		'nb_exons_dc' => $nb_exons_dc,
-		'nb_exons_oj' => $nb_exons_oj
-	});
-
-}
-
-# On calcule les pvalues ajustées
-my @adjp_ba = adjust_pvals(map { $_->{'pval_ba'} } @genes);
-my @adjp_dc = adjust_pvals(map { $_->{'pval_dc'} } @genes);
-my @adjp_oj = adjust_pvals(map { $_->{'pval_oj'} } @genes);
-
-# On ajoute les gènes
-for(my $i = 0; $i < @genes; $i++){
-
 	$insert_gene_sth->execute(
-		$genes[$i]->{'id_gene'},
-		$genes[$i]->{'fc_ba'},
-		$genes[$i]->{'fc_dc'},
-		$genes[$i]->{'fc_oj'},
-		$genes[$i]->{'pval_ba'},
-		$genes[$i]->{'pval_dc'},
-		$genes[$i]->{'pval_oj'},
-		$adjp_ba[$i],
-		$adjp_dc[$i],
-		$adjp_oj[$i],
-		$genes[$i]->{'nb_sondes_ba'},
-		$genes[$i]->{'nb_sondes_dc'},
-		$genes[$i]->{'nb_sondes_oj'},
-		$genes[$i]->{'nb_exons_ba'},
-		$genes[$i]->{'nb_exons_dc'},
-		$genes[$i]->{'nb_exons_oj'}
+		$id_gene,
+		$fc_ba,
+		$fc_dc,
+		$fc_oj,
+		$p_value_ba,
+		$p_value_dc,
+		$p_value_oj,
+		$nb_sondes_ba,
+		$nb_sondes_dc,
+		$nb_sondes_oj,
+		$nb_exons_ba,
+		$nb_exons_dc,
+		$nb_exons_oj
 	);
 
 }

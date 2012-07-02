@@ -8,9 +8,8 @@ use Spreadsheet::WriteExcel;
 use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
-use Math qw(round);
-use Analyse::RequetesCourantes;
-use Traitement_resultats::FonctionsXls;
+use Math;
+use Analyse;
 
 # ==============================================================================
 # Parametres
@@ -28,55 +27,30 @@ my $db_user = $config->{'db_user'};
 my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
-# -- Paramètres de sélection pour les résulats -- #
-my $seuil_trans_simple = $config->{'compose'}{'excel'}{'seuil_trans_simple'};
+# Paramètres de sélection pour les résulats
+my $seuil_trans = $config->{'compose'}{'excel'}{'seuil_trans_simple'};
 my $seuil_trans_j_vs_o = $config->{'compose'}{'excel'}{'seuil_trans_j_vs_o'};
-my $seuil_pval = $config->{'compose'}{'excel'}{'seuil_pval'};
-my $seuil_fiabilite_fcGene = $config->{'compose'}{'excel'}{'seuil_fc_gene'};
+my $seuil_pval = $config->{'simple'}{'excel'}{'seuil_pval'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
 
 # ==============================================================================
-# Connection à elexir et préparation des requetes
+# On récupère les infos de l'analyse
 # ==============================================================================
 
-my $probes_db = DBI->connect(
-	"DBI:mysql:" . $db_name . ":" . $db_host,
+my $dbh = DBI->connect(
+	'DBI:mysql:' . $db_name . ':' . $db_host,
 	$db_user,
 	$db_pass
 );
 
-# On selectionne les infos de l'analyse
-my $select_infos_analyse_sth = $probes_db->prepare(
-	"SELECT p.id AS id_project, p.organism, a.name, a.version, a.type,
-	COUNT(DISTINCT ca.name) AS nb_rep_cont, COUNT(DISTINCT cb.name) AS nb_rep_test
-	FROM analyses AS a, projects AS p, groups AS la, groups AS lb, chips AS ca, chips AS cb
-	WHERE a.id_project = p.id
-	AND a.id = la.id_analysis
-	AND a.id = lb.id_analysis
-	AND la.letter = 'A'
-	AND lb.letter = 'B'
-	AND p.id = ca.id_project
-	AND p.id = cb.id_project
-	AND la.`condition` = ca.`condition`
-	AND lb.`condition` = cb.`condition`
-	AND a.id = ?
-	GROUP BY p.id"
-);
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 
-# ==============================================================================
-# On récupère les infos de l'analyse
-# ==============================================================================
-
-$select_infos_analyse_sth->execute($id_analyse);
-
-my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
-
-die('L\'id de l\'analyse n\'est pas valide.') if(!$infos_analyse);
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($infos_analyse->{'type'} ne 'compose'){
+if($analyse->{'type'} ne 'compose'){
 
 	die('Le script composé ne fonctionne que sur les analyses composées :o)');
 
@@ -86,388 +60,329 @@ if($infos_analyse->{'type'} ne 'compose'){
 # On récupère les infos dont on a besoin selon les infos de l'analyse
 # ==============================================================================
 
-my $id_projet = $infos_analyse->{'id_project'};
-my $version = $infos_analyse->{'version'};
-my $orga = $infos_analyse->{'organism'};
-my $nb_repl_cont = $infos_analyse->{'nb_rep_cont'};
-my $nb_repl_test = $infos_analyse->{'nb_rep_test'};
-my $name = $infos_analyse->{'name'};
+# On récupère les infos de la bdd
+my $id_projet = $analyse->{"id_project"};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $name = $analyse->{'name'};
 
 # on crée les variables du script qui déendent de l'analyse
-my $base_fasterdb = $config->{'db_name_fasterdb'}{$version}{$orga};
+my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $fichier_sortie = $dir_sortie . '/' . $name . '_transcription.xls';
 
-# On crée les dossier
+# On crée le répertoire de sortie au cas ou il existe pas
 make_path($dir_sortie);
 
 # ==============================================================================
-# On se connecte a fasterdb
+# On se connecte a fasterdb et on prépare les requetes
 # ==============================================================================
 
-my $faster_db = DBI->connect(
-	"DBI:mysql:" . $base_fasterdb . ":" . $db_host,
-	$db_user,
-	$db_pass
+my $select_genes_sth = $dbh->prepare(
+	"SELECT * FROM $table_trans
+	WHERE ABS(LOG2(fc_ba)) >= LOG2(?) AND pval_ba <= ?"
+);
+
+my $select_infos_gene_sth = $dbh->prepare(
+	"SELECT * FROM $table_genes WHERE id_fasterdb = ?"
 );
 
 # ==============================================================================
-# On initialise le fichier
+# Initialisation fichier excel
 # ==============================================================================
 
-my $resultat = Spreadsheet::WriteExcel->new($fichier_sortie);
-my $f_notice = $resultat->add_worksheet('Resume de l\'analyse');
-my $f_transcription_no_fdr_ba_inclusion = $resultat->add_worksheet('NO FDR - B vs A > 1.5');
-my $f_transcription_no_fdr_ba_exclusion = $resultat->add_worksheet('NO FDR - B vs A < -1.5');
-my $f_transcription_fdr_ba_inclusion = $resultat->add_worksheet('FDR - B vs A > 1.5');
-my $f_transcription_fdr_ba_exclusion = $resultat->add_worksheet('FDR - B vs A < -1.5');
+# On crée un fichier excel
+my $xlsh = Spreadsheet::WriteExcel->new($fichier_sortie);
 
-#-------------------------------------------------------------------#
-#                           Formats du fichier                      #
-#-------------------------------------------------------------------#
+# On ajoute les pages
+my $f_resume			= $xlsh->add_worksheet('Resume de l\'analyse');
+my $f_up			= $xlsh->add_worksheet('BA > ' . $seuil_trans);
+my $f_down			= $xlsh->add_worksheet('BA < -' . $seuil_trans);
 
-# Couleurs
-my $couleur_entete = $resultat->set_custom_color(39, 189, 189, 189);
-my $couleur_up     = $resultat->set_custom_color(40, 255, 204, 153);
-my $couleur_down   = $resultat->set_custom_color(41, 204, 255, 204);
+# On défini les couleurs
+my $couleur_entete		= $xlsh->set_custom_color(39, 189, 189, 189);
+my $couleur_up			= $xlsh->set_custom_color(40, 255, 204, 153);
+my $couleur_down		= $xlsh->set_custom_color(41, 204, 255, 204);
+my $couleur_mauv_fc		= $xlsh->set_custom_color(45, 255, 102, 102);
 
-# Formats
-my $format_resume_titre   = $resultat->add_format(color => 'black', bold => 1, center_across => 1);
-my $format_resume_cell    = $resultat->add_format(color => 'black', bold => 0, center_across => 1);
-my $format_cell_no_center = $resultat->add_format(color => 'black', bold => 0);
-my $format_entete         = $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
-my $format_merge_entete   = $resultat->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
-my $format_up             = $resultat->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
-my $format_down           = $resultat->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
-my $format_cell_mauv_pval = $resultat->add_format(color => 'red', border => 0, border_color => 'black', center_across => 1);
+# On définit les format d'affichage
+my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
+my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
+my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_entete_merge		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
+my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
+my $format_mauv_fc		= $xlsh->add_format(color => 'black', bg_color => $couleur_mauv_fc, border => 1, border_color => 'black', center_across => 1);
 
+# ==============================================================================
+# Feuille résumé
+# ==============================================================================
 
-#-------------------------------------------------------------------#
-#                          Données à afficher                       #
-#-------------------------------------------------------------------#
+# Infos de base
+$f_resume->write(0, 0, date(), $format_cell_no_center);
+$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
+$f_resume->write(3, 0, "Seuil fold", $format_resume_titre);
+$f_resume->write(3, 1, round($seuil_trans, 2), $format_resume_titre);
+$f_resume->write(4, 0, "Seuil p-value", $format_resume_titre);
+$f_resume->write(4, 1, $seuil_pval, $format_resume_titre);
 
-# On set la largeur des colonnes
-setting_columns($f_transcription_no_fdr_ba_inclusion);
-setting_columns($f_transcription_fdr_ba_inclusion);
-setting_columns($f_transcription_no_fdr_ba_exclusion);
-setting_columns($f_transcription_fdr_ba_exclusion);
+# Infos sur les sondes
+my $num_ligne = 8;
+$f_resume->set_column(0, 0, 25);
+$f_resume->set_column(2, 2, 20);
+$f_resume->write($num_ligne++, 0, "Sondes et entites analysees", $format_cell_center);
+$num_ligne++;
+$f_resume->write($num_ligne++, 0, "Sondes", $format_cell_center);
+$num_ligne++;
+$f_resume->write($num_ligne++, 0, "Sur la puce", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Avec gc < 18", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Non ch", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Exprimees", $format_cell_center);
+$num_ligne++;
+$f_resume->write($num_ligne++, 0, "Ciblant des entites", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Introniques", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Non utilisees (inter-geniques, chevauchantes, non hybridees...)", $format_cell_no_center);
+$num_ligne++;
+$f_resume->write($num_ligne++, 0, "Analysables*", $format_cell_center);
+$f_resume->write($num_ligne++, 0, "Analysees*", $format_cell_center);
 
-# Colonnes d'en-tête mergées
-merging_columns($f_transcription_no_fdr_ba_inclusion);
-merging_columns($f_transcription_fdr_ba_inclusion);
-merging_columns($f_transcription_no_fdr_ba_exclusion);
-merging_columns($f_transcription_fdr_ba_exclusion);
+# Légende
+$f_resume->write(36, 0, "* analysable", $format_cell_no_center);
+$f_resume->write(36, 1, "avec sonde : gc < 18, non ch et ciblant une entite", $format_cell_no_center);
+$f_resume->write(37, 0, "* analysable", $format_cell_no_center);
+$f_resume->write(37, 1, "avec sonde : gc <18, non ch, ciblant une entite et exprimee dans l'experience", $format_cell_no_center);
 
-# En-tetes des onglets
-my @entete_gene_trans = ('Fasterdb id', 'Symbol', 'Name', 'Human Ensembl id', 'Mouse Ensembl id', 'Chr Position', 'Link Elexir', 'Regulation', 'FC B/A', 'Pvalue', 'Nb probes', 'Nb exons', 'Link Elexir', 'Regulation', 'FC D/C', 'Pvalue', 'Nb probes', 'Nb exons', 'Effet du siRNA', 'FC J/O', 'Pvalue', 'Nb probes', 'Nb exons');
+# ==============================================================================
+# On ajoute les gènes dans la feuille
+# ==============================================================================
 
-# Ecriture
-&FonctionsXls::ecriture(\@entete_gene_trans, $f_transcription_no_fdr_ba_inclusion, 0, $format_entete);
-&FonctionsXls::ecriture(\@entete_gene_trans, $f_transcription_fdr_ba_inclusion, 0, $format_entete);
-&FonctionsXls::ecriture(\@entete_gene_trans, $f_transcription_no_fdr_ba_exclusion, 0, $format_entete);
-&FonctionsXls::ecriture(\@entete_gene_trans, $f_transcription_fdr_ba_exclusion, 0, $format_entete);
+# On compte les up et les downs
+my $nb_ups = 0;
+my $nb_downs = 0;
 
+# On selectionne les gènes régulés
+$select_genes_sth->execute($seuil_trans, $seuil_pval);
+my @genes = @{$select_genes_sth->fetchall_arrayref({})};
+$select_genes_sth->finish;
 
-#-------------------------------------------------------------------#
-#                              Traitement                           #
-#-------------------------------------------------------------------#
+# On récupère les gènes qui ont B/A up et ceux qui ont B/A down
+my @genes_ba_up = grep { $_->{'fc_ba'} >= 1 } @genes;
+my @genes_ba_down = grep { $_->{'fc_ba'} < 1 } @genes;
 
-# ---------------------------- Resume ----------------------------- #
+# On écrit ces deux listes de gène, chacune dans la feuille appropriée
+write_list($f_up, @genes_ba_up);
+write_list($f_down, @genes_ba_down);
 
-# Date
-$f_notice->write(0, 0, date(), $format_cell_no_center);
+# Fonction pour remplir une feuille
+sub write_list{
 
-# Paramètres utilisés
-$f_notice->write(2, 0, "Parametres utilises", $format_resume_titre);
-my @parametre_fc_ba   = ("Seuil fold B/A", round($seuil_trans_simple, 2));
-my @parametre_pval_ba = ("Seuil p-value B/A ", $seuil_pval);
-my @parametre_fc_jo   = ("Seuil fold J/O", $seuil_trans_j_vs_o);
-my @parametre_pval_jo = ("Seuil p-value J/O ", $seuil_pval);
-&FonctionsXls::ecriture(\@parametre_fc_ba, $f_notice, 3, $format_resume_cell);
-&FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 4, $format_resume_cell);
-&FonctionsXls::ecriture(\@parametre_fc_jo, $f_notice, 5, $format_resume_cell);
-&FonctionsXls::ecriture(\@parametre_pval_ba, $f_notice, 6, $format_resume_cell);
+	my($f, @genes) = @_;
 
-my $select;
+	# On modifie la largeur des colones
+	$f->set_column(0, 0, 12); # Fasterdb id
+	$f->set_column(1, 1, 18); # Source id
+	$f->set_column(2, 2, 12); # Link
+	$f->set_column(3, 3, 12); # Symbol
+	$f->set_column(4, 4, 30); # Description
+	$f->set_column(5, 5, 24); # Pos chrom
+	$f->set_column(6, 6, 12); # Regulation
+	$f->set_column(7, 7, 8); # FC
+	$f->set_column(8, 8, 12); # pval
+	$f->set_column(9, 9, 12); # nb probes
 
-# Récupération des événements B/A régulés
-my %hash_ba_inclusion_no_fdr = ();
-my %hash_ba_inclusion_fdr    = ();
-my %hash_ba_exclusion_no_fdr = ();
-my %hash_ba_exclusion_fdr    = ();
-my $requete_ba_inclusion =
-    "SELECT gene_id, fc_ba, pval_ba, pval_ba, nb_sondes_ba, nb_exons_ba
-    FROM $table_trans"; #faut récupérer les pvalue ajustées 
-$select = $probes_db->prepare($requete_ba_inclusion);
-$select -> execute;
-while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
+	# On fait les premiers entetes
+	$f->merge_range(0, 0, 0, 5, 'Infos Gene', $format_entete_merge);
+	$f->merge_range(0, 7, 0, 11, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 13, 0, 17, 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 19, 0, 23, 'Regulation O/J', $format_entete_merge);
 
-    my $fc_a_tester = ($fc >= 1) ? $fc : -1/$fc;
+	# On défini les entetes
+	my @entetes = ();
 
-    # B/A <= -1.45 -> Exclusion
-    if ( $fc_a_tester <= -$seuil_trans_simple ) {
-    
-	    if( $pval <= $seuil_pval ){
-	        $hash_ba_exclusion_no_fdr{$gene_id}->{"fc"}        = $fc;
-	        $hash_ba_exclusion_no_fdr{$gene_id}->{"pval"}      = $pval;
-            $hash_ba_exclusion_no_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-            $hash_ba_exclusion_no_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-	    }
-        if( $adjp <= $seuil_pval ){
-            $hash_ba_exclusion_fdr{$gene_id}->{"fc"}        = $fc;
-            $hash_ba_exclusion_fdr{$gene_id}->{"pval"}      = $adjp;
-            $hash_ba_exclusion_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-            $hash_ba_exclusion_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-        }
-    
-    # B/A >= 1.45 -> Inclusion
-    }elsif ( $fc_a_tester >= $seuil_trans_simple ){
-    
-	    if( $pval <= $seuil_pval ){
-	        $hash_ba_inclusion_no_fdr{$gene_id}->{"fc"}        = $fc;
-	        $hash_ba_inclusion_no_fdr{$gene_id}->{"pval"}      = $pval;
-            $hash_ba_inclusion_no_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-            $hash_ba_inclusion_no_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-	    }
-        if( $adjp <= $seuil_pval ){
-            $hash_ba_inclusion_fdr{$gene_id}->{"fc"}        = $fc;
-            $hash_ba_inclusion_fdr{$gene_id}->{"pval"}      = $adjp;
-            $hash_ba_inclusion_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-            $hash_ba_inclusion_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-        }
-    
-    }
+	# Infos du gène
+	push(@entetes, 'Fasterdb id');
+	push(@entetes, 'Source id');
+	push(@entetes, 'Link Elexir');
+	push(@entetes, 'Symbol');
+	push(@entetes, 'Description');
+	push(@entetes, 'Chr Position');
+	push(@entetes, ''); # Space
+
+	# Regulation B/A
+	push(@entetes, 'Reg');
+	push(@entetes, 'FC');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'Nb probes');
+	push(@entetes, 'Nb exons');
+	push(@entetes, ''); # Space
+
+	# Regulation D/C
+	push(@entetes, 'Reg');
+	push(@entetes, 'FC');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'Nb probes');
+	push(@entetes, 'Nb exons');
+	push(@entetes, ''); # Space
+
+	# Regulation O/J
+	push(@entetes, 'Reg');
+	push(@entetes, 'FC');
+	push(@entetes, 'Pvalue');
+	push(@entetes, 'Nb probes');
+	push(@entetes, 'Nb exons');
+
+	for(my $j = 0; $j < @entetes; $j++){
+
+		my $format = ($entetes[$j] ne '') ? $format_entete : undef;
+
+		$f->write(1, $j, $entetes[$j], $format);
+
+	}
+
+	# On classe les gènes
+	@genes = sort {
+		# déjà on classe par fc fort/fc faible
+		format_fold($b->{'fc_oj'}) >= $seuil_trans_j_vs_o
+		<=>
+		format_fold($a->{'fc_oj'}) >= $seuil_trans_j_vs_o
+		||
+		# Puis par fc_oj qui renforce ou affaiblit
+		$b->{'fc_oj'} >= 1 <=> $a->{'fc_oj'} >= 1
+		||
+		# Puis par fc_oj décroissant
+		format_fold($b->{'fc_oj'}) <=> format_fold($a->{'fc_oj'})
+	} @genes;
+
+	# On affiche chaque gène
+	for(my $i = 0; $i < @genes; $i++){
+
+		my $gene = $genes[$i];
+
+		# On récupère les infos du gène
+		$select_infos_gene_sth->execute($gene->{'id_gene'});
+		my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
+		$select_infos_gene_sth->finish;
+
+		# On formatte les infos
+		$infos_gene->{'description'} =~ s/\[.+\]$//;
+
+		my $pos_chrom =
+			$infos_gene->{'chromosome'} .
+			':' . $infos_gene->{'start_sur_chromosome'} .
+			'-' . $infos_gene->{'end_sur_chromosome'} .
+			':' . $infos_gene->{'strand'};
+
+		my $reg_ba = ($gene->{'fc_ba'} >= 1) ? 'up' : 'down';
+		my $reg_dc = ($gene->{'fc_dc'} >= 1) ? 'up' : 'down';
+		my $reg_oj;
+		my $format;
+
+		# On défini la regulation de O/J
+		if($gene->{'fc_ba'} >= 1){
+
+			if($gene->{'fc_oj'} >= 1){
+
+				$reg_oj = 'Renforce';
+				$format = $format_up;
+
+			}else{
+
+				$reg_oj = 'Affaiblit';
+				$format = $format_down;
+
+			}
+
+		}else{
+
+			if($gene->{'fc_oj'} >= 1){
+
+				$reg_oj = 'Affaiblit';
+				$format = $format_down;
+
+			}else{
+
+				$reg_oj = 'Renforce';
+				$format = $format_up;
+
+			}
+
+		}
+
+		# Si O/J est trop faible on lui donne un format spécial
+		if(format_fold($gene->{'fc_oj'}) < $seuil_trans_j_vs_o){
+
+			$format = $format_mauv_fc;
+
+		}
+
+		# On crée le tableau de data
+		my @data = ();
+
+		# Infos du gène
+		push(@data, $infos_gene->{'id_fasterdb'});
+		push(@data, $infos_gene->{'id_source'});
+		push(@data, 'blah');
+		push(@data, $infos_gene->{'symbol'});
+		push(@data, $infos_gene->{'description'});
+		push(@data, $pos_chrom);
+		push(@data, '');
+
+		# Regulation B/A
+		push(@data, $reg_ba);
+		push(@data, round(format_fold($gene->{'fc_ba'}), 2));
+		push(@data, $gene->{'pval_ba'});
+		push(@data, $gene->{'nb_sondes_ba'});
+		push(@data, $gene->{'nb_exons_ba'});
+		push(@data, '');
+
+		# Regulation D/C
+		push(@data, $reg_dc);
+		push(@data, round(format_fold($gene->{'fc_dc'}), 2));
+		push(@data, $gene->{'pval_dc'});
+		push(@data, $gene->{'nb_sondes_dc'});
+		push(@data, $gene->{'nb_exons_dc'});
+		push(@data, '');
+
+		# Regulation O/J
+		push(@data, $reg_oj);
+		push(@data, round(format_fold($gene->{'fc_oj'}), 2));
+		push(@data, $gene->{'pval_oj'});
+		push(@data, $gene->{'nb_sondes_oj'});
+		push(@data, $gene->{'nb_exons_oj'});
+
+		# On affiche les data
+		for(my $j = 0; $j < @data; $j++){
+
+			my $format = ($data[$j] ne '') ? $format : undef;
+
+			# +2 parce que les deux premières lignes sont les entetes
+			$f->write($i + 2, $j, $data[$j], $format);
+
+		}
+
+	}
 
 }
-$select -> finish;
 
+# ==============================================================================
+# On écrit le nombre de gènes up/down
+# ==============================================================================
 
-# Récupération des événements D/C
-my %hash_dc_no_fdr = ();
-my %hash_dc_fdr = ();
-my $requete_dc =
-    "SELECT gene_id, fc_dc, pval_dc, pval_dc, nb_sondes_dc, nb_exons_dc
-    FROM $table_trans"; #faut récupérer les pvalue ajustées 
-$select = $probes_db->prepare($requete_dc);
-$select -> execute;
-while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
-    
-        $hash_dc_no_fdr{$gene_id}->{"fc"}        = $fc;
-        $hash_dc_no_fdr{$gene_id}->{"pval"}      = $pval;
-        $hash_dc_no_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-        $hash_dc_no_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
+$num_ligne = 8;
 
-        $hash_dc_fdr{$gene_id}->{"fc"}        = $fc;
-        $hash_dc_fdr{$gene_id}->{"pval"}      = $adjp;
-        $hash_dc_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-        $hash_dc_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
+$f_resume->set_column(5, 5, 30);
+$f_resume->set_column(9, 9, 13);
+$f_resume->set_column(9, 9, 13);
+$f_resume->set_column(11, 11, 18);
 
-}
-$select -> finish;
-
-# Récupération des événements J/O
-my %hash_jo_no_fdr = ();
-my %hash_jo_fdr = ();
-my $requete_jo =
-    "SELECT gene_id, fc_oj, pval_oj, pval_oj, nb_sondes_oj, nb_exons_oj
-    FROM $table_trans"; #faut récupérer les pvalue ajustées 
-$select = $probes_db->prepare($requete_jo);
-$select -> execute;
-while( my ($gene_id, $fc, $pval, $adjp, $nb_sondes, $nb_exons) = $select -> fetchrow_array){
-    
-    $hash_jo_no_fdr{$gene_id}->{"fc"}        = $fc;
-    $hash_jo_no_fdr{$gene_id}->{"pval"}      = $pval;
-    $hash_jo_no_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-    $hash_jo_no_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-    
-    $hash_jo_fdr{$gene_id}->{"fc"}        = $fc;
-    $hash_jo_fdr{$gene_id}->{"pval"}      = $adjp;
-    $hash_jo_fdr{$gene_id}->{"nb_sondes"} = $nb_sondes;
-    $hash_jo_fdr{$gene_id}->{"nb_exons"}  = $nb_exons;
-
-}
-$select -> finish;
-
-# ------------------------- Récup infos --------------------------- #
-
-my ($h_genes_ortholgues_humain, $h_genes_ortholgues_souris) = &RequetesCourantes::requete_genes_orthologues($faster_db);
-
-my $h_genes_carac = &RequetesCourantes::requete_genes_caracteristiques($faster_db);
-
-
-# ------------------------- Résultats --------------------------- #
-
-# B/A inclusion NO FDR
-process("inclusion", \%hash_ba_inclusion_no_fdr, \%hash_dc_no_fdr, \%hash_jo_no_fdr, $f_transcription_no_fdr_ba_inclusion);
-
-# B/A inclusion FDR
-process("inclusion", \%hash_ba_inclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_transcription_fdr_ba_inclusion);
-
-# B/A exclusion NO FDR
-process("exclusion", \%hash_ba_exclusion_no_fdr, \%hash_dc_no_fdr, \%hash_jo_no_fdr, $f_transcription_no_fdr_ba_exclusion);
-
-# B/A exclusion FDR
-process("exclusion", \%hash_ba_exclusion_fdr, \%hash_dc_fdr, \%hash_jo_fdr, $f_transcription_fdr_ba_exclusion);
-
-# ------------------------------------------------------------------ #
-#                              Subroutines                           #
-# ------------------------------------------------------------------ #
-
-sub setting_columns {
-    my($feuille) = @_;
-
-    $feuille->set_column(0, 23, 11);
-    $feuille->set_column(2, 5, 22);
-    $feuille->set_column(5, 5, 24);
-    $feuille->set_column(18, 18, 13);
-
-}
-# ------------------------------------------------------------------ #
-sub merging_columns{
-    my($feuille) = @_;
-    
-=pud
-    $feuille->merge_range('G1:L1', 'B/A = O', $format_merge_entete);
-    $feuille->merge_range('M1:R1', 'D/C = J', $format_merge_entete);
-    $feuille->merge_range('S1:W1', 'J/O = P', $format_merge_entete);
-=cut
-	
-}
-#------------------------------------------------------------------#
-sub process {
-
-    my ($type_event_ba, $hash_reg_ba, $hash_dc, $hash_jo, $feuille) = @_;
-    
-    my $num_ligne = 1;
-
-    # Traitement gène par gène des gènes régulés en B/A
-    while(my ($gene_id, $hash_ba) = each %$hash_reg_ba){
-        
-	    # On récupère les infos du gène courant
-	    
-	    my $gene_infos   = $h_genes_carac->{$gene_id};
-	    my $hash_ensembl = &FonctionsXls::get_gene_identifiants_ensembl($gene_infos->{"ensembl"}, $h_genes_ortholgues_humain, $h_genes_ortholgues_souris);
-            my $strand = ($gene_infos->{"strand"} eq '1') ? '+' : '-';
-	    my @data_gene    = ($gene_id, $gene_infos->{"symbol"}, $gene_infos->{"desc"}, $hash_ensembl->{"ensembl_humain"}, $hash_ensembl->{"ensembl_souris"}, "chr" . $gene_infos->{"chr"}.":".$gene_infos->{"start"}."-".$gene_infos->{"end"}.":".$strand);
-        
-        
-        # B/A
-        
-        $hash_ba->{"link"}             = ''; #"http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_ab".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
-        my ($reg_ba, $fc_ba)           = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_ba->{"fc"});
-        if ($reg_ba eq "down"){ $fc_ba = -$fc_ba; }
-        $hash_ba->{"reg"}              = $reg_ba;
-        $hash_ba->{"fc"}               = $fc_ba;
-        my @data_ba = ($hash_ba->{"link"}, $hash_ba->{"reg"}, $hash_ba->{"fc"}, $hash_ba->{"pval"}, $hash_ba->{"nb_sondes"}, $hash_ba->{"nb_exons"});
-        
-        
-        # D/C
-        
-        my @data_dc = ();
-        if ( $hash_dc->{$gene_id}->{"fc"} ){
-            $hash_dc->{$gene_id}->{"link"} = ''; #"http://172.21.100.5/elexir/main.pl?id=$gene_id&experiment=$projet_num_simple_cd".$orga."&dabg=on&entity=exon&color=absolute&gc_content=on&probe=reverse&repeat=on&bio_mol=cDNA_Only&id_ortholog=unknown";
-            my ($reg_dc, $fc_dc)           = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_dc->{$gene_id}->{"fc"});
-            if ($reg_dc eq "down"){ $fc_dc = -$fc_dc; }
-            $hash_dc->{$gene_id}->{"fc"}   = $fc_dc;
-            $hash_dc->{$gene_id}->{"reg"}  = $reg_dc;
-            @data_dc = ($hash_dc->{$gene_id}->{"link"}, $hash_dc->{$gene_id}->{"reg"}, $hash_dc->{$gene_id}->{"fc"}, $hash_dc->{$gene_id}->{"pval"}, $hash_dc->{$gene_id}->{"nb_sondes"}, $hash_dc->{$gene_id}->{"nb_exons"});
-        }else{
-            @data_dc = ("-", "-", "-", "-", "-", "-");
-        }
-        
-        
-        
-        # J/O
-        
-        my @data_jo = ();
-        if( $hash_jo->{$gene_id}->{"fc"} ){
-
-            # On ne peut interpréter J/O que si B/A et D/C ont été calculés
-            if( $data_dc[0] ne "-" ){
-
-                my ($reg_jo, $fc_jo) = &FonctionsXls::get_regulation_fold_for_xls_from_log2_to_base10($hash_jo->{$gene_id}->{"fc"});
-            
-                # On détermine l'effet de la déplétion
-            
-                # B/A est une inclusion
-                if ( $type_event_ba eq "inclusion" ){
-
-                    # D/C est une exclusion ou une inclusion moins importante que B/A
-                    if ( $hash_dc->{$gene_id}->{"fc"} < $hash_ba->{"fc"} ){
-                        $hash_jo->{$gene_id}->{"effet"}  = "Affaiblit";
-                        $hash_jo->{$gene_id}->{"fc"}     = -$fc_jo;
-
-                    # D/C est une inclusion plus importante
-                    }elsif( $hash_dc->{$gene_id}->{"fc"} >= $hash_ba->{"fc"} ){
-                        $hash_jo->{$gene_id}->{"effet"}  = "Renforce";
-                        $hash_jo->{$gene_id}->{"fc"}     = $fc_jo;
-                    }
-
-                # B/A est une exclusion
-                }elsif( $type_event_ba eq "exclusion" ){
-
-                    # D/C est une exclusion moins importante
-                    if ( $hash_dc->{$gene_id}->{"fc"} < $hash_ba->{"fc"} ){
-                        $hash_jo->{$gene_id}->{"effet"}  = "Renforce";
-                        $hash_jo->{$gene_id}->{"fc"}     = $fc_jo;
-
-                    # D/C est une inclusion ou une exlusion moins importante que B/A
-                    }elsif( $hash_dc->{$gene_id}->{"fc"} >= $hash_ba->{"fc"} ){
-                        $hash_jo->{$gene_id}->{"effet"}  = "Affaiblit";
-                        $hash_jo->{$gene_id}->{"fc"}     = -$fc_jo;
-                    }
-
-                }
-                # On ajoute la catégorie "ça fait rien"
-                if ( abs($hash_jo->{$gene_id}->{"fc"}) < $seuil_trans_j_vs_o ) {
-                    $hash_jo->{$gene_id}->{"effet"}  = "Peu d'effet";
-                }
-            
-                @data_jo = ($hash_jo->{$gene_id}->{"effet"}, $hash_jo->{$gene_id}->{"fc"}, $hash_jo->{$gene_id}->{"pval"}, $hash_jo->{$gene_id}->{"nb_sondes"}, $hash_jo->{$gene_id}->{"nb_exons"});
-
-            # Pas de D/C -> pas d'interprétation de J/O
-            }else{
-                @data_jo = ("-", "-", "-", "-", "-");
-            }
-
-        }else{
-            @data_jo = ("-", "-", "-", "-", "-");
-        }
-
-
-        # Ecriture
-        my @data = (@data_gene, @data_ba, @data_dc, @data_jo);
-        if ( $hash_jo->{$gene_id}->{"pval"} <= $seuil_pval && $hash_jo->{$gene_id}->{"effet"} ne "Peu d'effet" ) {
-            &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format_resume_cell);
-        }else{
-            &FonctionsXls::ecriture(\@data, $feuille, $num_ligne, $format_cell_mauv_pval);
-        }
-        
-        # On incrémente le nb de gènes traités
-        $num_ligne++;
-
-    }
-    
-    
-}
-# ------------------------------------------------------------------ #
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+$f_resume->write($num_ligne++, 5, "Resultats", $format_resume_titre);
+$num_ligne++;
+$f_resume->write($num_ligne, 5, "Genes regules", $format_cell_center);
+$f_resume->write($num_ligne, 6, $nb_ups + $nb_downs, $format_cell_center);
+$f_resume->write($num_ligne, 7, "Genes up", $format_cell_center);
+$f_resume->write($num_ligne, 8, $nb_ups, $format_cell_center);
+$f_resume->write($num_ligne, 9, "Genes down", $format_cell_center);
+$f_resume->write($num_ligne, 10, $nb_downs, $format_cell_center);
