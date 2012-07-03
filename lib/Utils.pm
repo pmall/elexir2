@@ -130,6 +130,64 @@ sub si_matrix{
 }
 
 # ==============================================================================
+# Retourne la valeur sommée et les valeurs à utiliser pour le test (valeurs
+# medianes pour chaque sonde) à partir d'une matrice (sondes x valeur)
+# PAS D'EFFET REPLICAT
+# ==============================================================================
+
+sub sum_no_rep_effect{
+
+	my($ref_matrix) = @_;
+
+	# Pour chaque sonde on récupère la médiane des valeurs
+	my @valeurs_a_tester = map { median(@{$_}) } @{$ref_matrix};
+
+	# La valeur somme est la médiane des valeurs à tester
+	my $sum = median(@valeurs_a_tester);
+
+	# On retourne les deux
+	return($sum, @valeurs_a_tester);
+
+}
+
+# ==============================================================================
+# Retourne la valeur sommée et les valeurs à utiliser pour le test (valeurs
+# medianes de chaque replicat) à partir d'une matrice (sondes x valeur)
+# AVEC EFFET REPLICAT
+# => Inutile d'utiliser ça sur une exp non paire.
+# => Pour une exp non paire utiliser sum_no_rep_effect
+# ==============================================================================
+
+sub sum_rep_effect{
+
+	my($ref_matrix) = @_;
+
+	# On initialise les valeurs à tester
+	my @valeurs_a_tester = ();
+
+	# On récupère le nombre de colones de la matrice
+	my $nb_cols = @{$ref_matrix->[0]};
+
+	# Pour chaque colones
+	for(my $i = 0; $i < $nb_cols; $i++){
+
+		# On récupère les valeurs de cette colonne
+		my @valeurs_col = map { $_->[$i] } @{$ref_matrix};
+
+		# On ajoute la médiane de la colonne aux valeurs à tester
+		push(@valeurs_a_tester, median(@valeurs_col));
+
+	}
+
+	# La valeur somme est la médiane des valeurs à tester
+	my $sum = median(@valeurs_a_tester));
+
+	# On retourne les deux
+	return($sum, @valeurs_a_tester);
+
+}
+
+# ==============================================================================
 # Retourne si un groupe de sondes est homogene ou non
 # ==============================================================================
 
