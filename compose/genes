@@ -154,6 +154,7 @@ print 'Analyse des gènes' . "\n";
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
+my $analyse_oj = $analyse;
 
 # On selectionne les gènes
 $select_genes_sth->execute($limit);
@@ -243,24 +244,19 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# FC des sondes
-	my @fcs_sondes_ba = $analyse->fcs_sondes(\@sondes_ba);
-	my @fcs_sondes_dc = $analyse->fcs_sondes(\@sondes_dc);
-	my @fcs_sondes_oj = $analyse->fcs_sondes(\@sondes_oj);
+	my $ref_fcs_sondes_ba = $analyse_ba->fcs_sondes(\@sondes_ba);
+	my $ref_fcs_sondes_dc = $analyse_dc->fcs_sondes(\@sondes_dc);
+	my $ref_fcs_sondes_oj = $analyse_oj->fcs_sondes(\@sondes_oj);
 
 	# FC gene sans effet rep
-	my($fc_ba, $p_value_ba) = $analyse_ba->fc_gene(\@fcs_sondes_ba);
-	my($fc_dc, $p_value_dc) = $analyse_dc->fc_gene(\@fcs_sondes_dc);
-	my($fc_oj, $p_value_oj) = $analyse->fc_gene(\@fcs_sondes_oj);
+	my($fc_ba, $p_value_ba) = $analyse_ba->fc_gene($ref_fcs_sondes_ba);
+	my($fc_dc, $p_value_dc) = $analyse_dc->fc_gene($ref_fcs_sondes_dc);
+	my($fc_oj, $p_value_oj) = $analyse_oj->fc_gene($ref_fcs_sondes_oj);
 
 	# FCs gene avec effet rep
-	my @fcs_ba = sum_rep_effect(\@fcs_sondes_ba);
-	my @fcs_dc = sum_rep_effect(\@fcs_sondes_dc);
-	my @fcs_oj = sum_rep_effect(\@fcs_sondes_oj);
-
-	# On vire les premiers fcs rep, car c'est le fc total
-	shift @fcs_ba;
-	shift @fcs_dc;
-	shift @fcs_oj;
+	my @fcs_ba = rep_effect($ref_fcs_sondes_ba);
+	my @fcs_dc = rep_effect($ref_fcs_sondes_dc);
+	my @fcs_oj = rep_effect($ref_fcs_sondes_oj);
 
 	# Nombre de sondes concernées
 	my $nb_sondes_ba = @sondes_ba;

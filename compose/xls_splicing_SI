@@ -314,7 +314,7 @@ sub write_list{
 		my $pos_entite = $infos_entite->{'start_sur_gene'} .
 			'-' . $infos_entite->{'end_sur_gene'};
 
-		# On récupère les SIs
+		# On récupère les SIs des replicats
 		my @SIs_ba = ();
 		my @SIs_dc = ();
 		my @SIs_oj = ();

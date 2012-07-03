@@ -376,20 +376,20 @@ sub fcs_sonde{
 	foreach my $paire (@{$this->{'design'}}){
 
 		# On calcule la valeur de la sonde pour control et test
-		my @fcs_cont = $paire->{'cont'}->fcs_sonde($sonde);
-		my @fcs_test = $paire->{'test'}->fcs_sonde($sonde);
+		my $ref_fcs_cont = $paire->{'cont'}->fcs_sonde($sonde);
+		my $ref_fcs_test = $paire->{'test'}->fcs_sonde($sonde);
 
 		# On fait tout les fcs de cette paire de replicat
-		for(my $i = 0; $i < @fcs_cont; $i++){
+		for(my $i = 0; $i < @{$ref_fcs_cont}; $i++){
 
-			push(@fcs, $fcs_test[$i]/$fcs_cont[$i]);
+			push(@fcs, $ref_fcs_test->[$i]/$ref_fcs_cont->[$i]);
 
 		}
 
 	}
 
 	# On retourne les fcs de la sonde dans chaque paire de replicats
-	return @fcs;
+	return \@fcs;
 
 }
 
@@ -405,13 +405,13 @@ sub fcs_sondes{
 
 	foreach my $sonde (@{$ref_sondes}){
 
-		my @fcs_sonde = $this->fcs_sonde($sonde);
+		my $ref_fcs_sonde = $this->fcs_sonde($sonde);
 
-		push(@fcs_sondes, \@fcs_sonde);
+		push(@fcs_sondes, $ref_fcs_sonde);
 
 	}
 
-	return @fcs_sondes;
+	return \@fcs_sondes;
 
 }
 
@@ -421,10 +421,10 @@ sub fcs_sondes{
 
 sub fc_gene{
 
-	my($this, $ref_fcs) = @_;
+	my($this, $ref_fcs_sondes) = @_;
 
 	# On somme les fc des sondes sans effet replicat
-	my($fc, @fcs_a_tester) = sum_no_rep_effect($ref_fcs);
+	my($fc, @fcs_a_tester) = sum_no_rep_effect($ref_fcs_sondes);
 
 	# On fait le test stat
 	my $p_value = ttest([log2(@fcs_a_tester)], (log2($fc) >= 0));
@@ -439,19 +439,17 @@ sub fc_gene{
 
 sub sis_sonde{
 
-	my($this, $fcs_groupe, $sonde) = @_;
+	my($this, $ref_fcs_groupe, $ref_fcs_sonde) = @_;
 
 	my @SIs = ();
 
-	my @fcs = $this->fcs_sonde($sonde);
+	for(my $i = 0; $i < @{$ref_fcs_sonde}; $i++){
 
-	for(my $i = 0; $i < @fcs; $i++){
-
-		push(@SIs, ($fcs[$i]/$fcs_groupe->[$i]))
+		push(@SIs, ($ref_fcs_sonde->[$i]/$ref_fcs_groupe->[$i]))
 
 	}
 
-	return @SIs;
+	return \@SIs;
 
 }
 
@@ -461,19 +459,22 @@ sub sis_sonde{
 
 sub sis_sondes{
 
-	my($this, $fcs_groupe, $ref_sondes) = @_;
+	my($this, $ref_fcs_groupe, $ref_fcs_sondes) = @_;
 
 	my @SIs_sondes = ();
 
-	foreach my $sonde (@{$ref_sondes}){
+	foreach my $ref_fcs_sonde (@{$ref_fcs_sondes}){
 
-		my @SIs_sonde = $this->sis_sonde($fcs_groupe, $sonde);
+		my $ref_SIs_sonde = $this->sis_sonde(
+			$ref_fcs_groupe,
+			$ref_fcs_sonde
+		);
 
-		push(@SIs_sondes, \@SIs_sonde);
+		push(@SIs_sondes, $ref_SIs_sonde);
 
 	}
 
-	return @SIs_sondes;
+	return \@SIs_sondes;
 
 }
 

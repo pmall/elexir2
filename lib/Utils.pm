@@ -6,7 +6,8 @@ use lib $FindBin::Bin;
 use Math;
 use Exporter qw(import);
 
-our @EXPORT = qw(union inter sum_no_rep_effect sum_rep_effect homogene is_robust);
+our @EXPORT = qw(union inter sum_no_rep_effect sum_rep_effect rep_effect
+	homogene is_robust);
 
 # ==============================================================================
 # Retourne l'union de deux listes de sondes
@@ -91,12 +92,12 @@ sub sum_no_rep_effect{
 # => Pour une exp non paire utiliser sum_no_rep_effect
 # ==============================================================================
 
-sub sum_rep_effect{
+sub rep_effect{
 
 	my($ref_matrix) = @_;
 
 	# On initialise les valeurs à tester
-	my @valeurs_a_tester = ();
+	my @valeurs_reps = ();
 
 	# On récupère le nombre de colones de la matrice
 	my $nb_cols = @{$ref_matrix->[0]};
@@ -108,9 +109,21 @@ sub sum_rep_effect{
 		my @valeurs_col = map { $_->[$i] } @{$ref_matrix};
 
 		# On ajoute la médiane de la colonne aux valeurs à tester
-		push(@valeurs_a_tester, median(@valeurs_col));
+		push(@valeurs_reps, median(@valeurs_col));
 
 	}
+
+	# On retourne les valeurs des rep
+	return(@valeurs_reps);
+
+}
+
+sub sum_rep_effect{
+
+	my($ref_matrix) = @_;
+
+	# On initialise les valeurs à tester
+	my @valeurs_a_tester = rep_effect($ref_matrix);
 
 	# La valeur somme est la médiane des valeurs à tester
 	my $sum = median(@valeurs_a_tester);

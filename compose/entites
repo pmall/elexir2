@@ -267,14 +267,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# On récupère le SI des sondes de B/A
-		my @SIs_sondes_ba = $analyse_ba->sis_sondes(
+		my $ref_SIs_sondes_ba = $analyse_ba->sis_sondes(
 			\@fcs_gene_ba,
-			\@sondes_ba
+			$analyse_ba->fcs_sondes(\@sondes_ba)
 		);
 
 		# On calcule si B/A est cohérent
 		my $is_robust_ba = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_ba],
+			[map { median(@{$_}) } @{$ref_SIs_sondes_ba}],
 			$seuil_si_robust,
 			(1/$seuil_si_robust)
 		);
@@ -296,14 +296,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# Comparaison D/C
-		my @SIs_sondes_dc = $analyse_dc->sis_sondes(
+		my $ref_SIs_sondes_dc = $analyse_dc->sis_sondes(
 			\@fcs_gene_dc,
-			\@sondes_dc
+			$analyse_dc->fcs_sondes(\@sondes_dc)
 		);
 
 		# On calcule si D/C est cohérent
 		my $is_robust_dc = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_dc],
+			[map { median(@{$_}) } @{$ref_SIs_sondes_dc}],
 			$seuil_si_robust,
 			(1/$seuil_si_robust)
 		);
@@ -318,14 +318,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# Comparaison O/J
-		my @SIs_sondes_oj = $analyse_oj->sis_sondes(
+		my $ref_SIs_sondes_oj = $analyse_oj->sis_sondes(
 			\@fcs_gene_oj,
-			\@sondes_oj
+			$analyse_oj->fcs_sondes(\@sondes_oj)
 		);
 
 		# On calcule si O/J est cohérent
 		my $is_robust_oj = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_oj],
+			[map { median(@{$_}) } @{$ref_SIs_sondes_oj}],
 			$seuil_si_robust,
 			(1/$seuil_si_robust)
 		);
@@ -336,17 +336,17 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		# Comparaison B/A
 		my($SI_ba, $p_value_ba, @SIs_ba) = $analyse_ba->si_entite(
-			\@SIs_sondes_ba
+			$ref_SIs_sondes_ba
 		);
 
 		# Comparaison D/C
 		my($SI_dc, $p_value_dc, @SIs_dc) = $analyse_dc->si_entite(
-			\@SIs_sondes_dc
+			$ref_SIs_sondes_dc
 		);
 
 		# Comparaison O/J
 		my($SI_oj, $p_value_oj, @SIs_oj) = $analyse_oj->si_entite(
-			\@SIs_sondes_oj
+			$ref_SIs_sondes_oj
 		);
 
 		# ==============================================================

@@ -92,7 +92,7 @@ sub fcs_sonde{
 
 	my($ref_samples, $sonde) = @_;
 
-	return (mean(map {$sonde->{$_}} @{$ref_samples}));
+	return [mean(map {$sonde->{$_}} @{$ref_samples})];
 
 }
 

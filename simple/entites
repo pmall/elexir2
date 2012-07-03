@@ -226,14 +226,17 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		}
 
 		# On récupère les SIs des sondes
-		my @SIs_sondes = $analyse->sis_sondes(\@fcs_gene, \@sondes);
+		my $ref_SIs_sondes = $analyse->sis_sondes(
+			\@fcs_gene,
+			$analyse->fcs_sondes(\@sondes)
+		);
 
 		# ==============================================================
 		# On calcule si l'entité est "cohérente", on zappe si non
 		# ==============================================================
 
 		my $is_robust = is_robust(
-			[map { median(@{$_}) } @SIs_sondes],
+			[map { median(@{$_}) } @{$ref_SIs_sondes}],
 			$seuil_si_robust,
 			(1/$seuil_si_robust)
 		);
@@ -245,7 +248,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On calcule le SI de l'entité
 		# ==============================================================
 
-		my($SI, $SI_pval, @SIs) = $analyse->si_entite(\@SIs_sondes);
+		my($SI, $SI_pval, @SIs) = $analyse->si_entite($ref_SIs_sondes);
 
 		# ==============================================================
 		# On calcule le PSI de l'entité
