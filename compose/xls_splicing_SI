@@ -85,7 +85,7 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_entites_sth = $dbh->prepare(
-	"SELECT e.* FROM $table_splicing
+	"SELECT * FROM $table_splicing
 	WHERE ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
 );
 
