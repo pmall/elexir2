@@ -3,5 +3,5 @@
 dir=$(dirname $0)
 
 $dir/compose/xls_transcription $1
-$dir/compose/xls_splicing $1
+$dir/compose/xls_splicing_SI $1
 $dir/compose/xls_zip $1

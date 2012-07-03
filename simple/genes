@@ -121,10 +121,7 @@ my @fields_trans = (
 	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
 	'trans_nb_sondes SMALLINT UNSIGNED NOT NULL',
 	'trans_nb_exons SMALLINT UNSIGNED NOT NULL',
-	'epi_fc DECIMAL(10,5) UNSIGNED',
-	'epi_pval DECIMAL(12,5) UNSIGNED',
-	'epi_nb_sondes SMALLINT UNSIGNED',
-	'epi_nb_exons SMALLINT UNSIGNED'
+	'epi_fc DECIMAL(10,5) UNSIGNED'
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -242,21 +239,13 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		if(@sondes_epissage >= $nb_sondes_min_gene){
 
 			# ======================================================
-			# Calcul des fold change et de la pvalue pour l'épissage
+			# Calcul des fold change du gène par replicat
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			($fc_gene_epissage, $p_value_epissage) = $analyse->fc_gene(
+			($fc_gene_epissage) = $analyse->fc_gene(
 				\@sondes_epissage
 			);
-
-			# NB sondes utilisées pour l'épissage
-			$nb_sondes_epissage = @sondes_epissage;
-
-			# NB exons cibles par des sondes lors de l'épissage
-			$nb_exons_epissage = scalar(uniq(map {
-				$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-			} @sondes_epissage));
 
 		}
 
@@ -273,10 +262,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$p_value_trans,
 		$nb_sondes_trans,
 		$nb_exons_trans,
-		$fc_gene_epissage,
-		$p_value_epissage,
-		$nb_sondes_epissage,
-		$nb_exons_epissage
+		$fc_gene_epissage
 	);
 
 }

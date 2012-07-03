@@ -74,7 +74,7 @@ sub fc_matrix{
 	# Pour chaque sonde on récupère la médiane de ses fcs
 	my @fcs = map { median(@{$_}) } @{$ref_matrix_fcs};
 
-	# On calcule le fc du groupe (médiane de ces médianes de fc)
+	# On calcule le fc du groupe (médiane des médianes de fc)
 	my $fc = median(@fcs);
 
 	# On fait le test stat
