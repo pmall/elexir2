@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Format;
 use Math;
+use Stats;
 use Utils;
 use Replicat;
 
@@ -393,7 +394,7 @@ sub fcs_sonde{
 }
 
 # ==============================================================================
-# Retourne la liste des FCs de chaque sonde (liste de liste)
+# Retourne la liste des FCs de chaque sonde (matrice)
 # ==============================================================================
 
 sub fcs_sondes{
@@ -420,11 +421,15 @@ sub fcs_sondes{
 
 sub fc_gene{
 
-	my($this, $ref_sondes) = @_;
+	my($this, $ref_fcs) = @_;
 
-	my @fcs_sondes = $this->fcs_sondes($ref_sondes);
+	# On somme les fc des sondes sans effet replicat
+	my($fc, @fcs_a_tester) = sum_no_rep_effect($ref_fcs);
 
-	return fc_matrix(\@fcs_sondes);
+	# On fait le test stat
+	my $p_value = ttest([log2(@fcs_a_tester)], (log2($fc) >= 0));
+
+	return ($fc, $p_value, @fcs_a_tester);
 
 }
 
@@ -434,13 +439,17 @@ sub fc_gene{
 
 sub sis_sonde{
 
-	my($this, $fc_groupe, $sonde) = @_;
+	my($this, $fcs_groupe, $sonde) = @_;
 
 	my @SIs = ();
 
 	my @fcs = $this->fcs_sonde($sonde);
 
-	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
+	for(my $i = 0; $i < @fcs; $i++){
+
+		push(@SIs, ($fcs[$i]/$fcs_groupe->[$i]))
+
+	}
 
 	return @SIs;
 
@@ -452,13 +461,13 @@ sub sis_sonde{
 
 sub sis_sondes{
 
-	my($this, $fc_groupe, $ref_sondes) = @_;
+	my($this, $fcs_groupe, $ref_sondes) = @_;
 
 	my @SIs_sondes = ();
 
 	foreach my $sonde (@{$ref_sondes}){
 
-		my @SIs_sonde = $this->sis_sonde($fc_groupe, $sonde);
+		my @SIs_sonde = $this->sis_sonde($fcs_groupe, $sonde);
 
 		push(@SIs_sondes, \@SIs_sonde);
 
@@ -474,11 +483,24 @@ sub sis_sondes{
 
 sub si_entite{
 
-	my($this, $fc_groupe, $ref_sondes) = @_;
+	my($this, $ref_SIs) = @_;
 
-	my @SIs_sondes = $this->sis_sondes($fc_groupe, $ref_sondes);
+	my $SI;
+	my @SIs_a_tester = ();
 
-	return si_matrix(\@SIs_sondes, $this->{'paired'});
+	if($this->{'paired'}){
+
+		($SI, @SIs_a_tester) = sum_rep_effect($ref_SIs);
+
+	}else{
+
+		($SI, @SIs_a_tester) = sum_no_rep_effect($ref_SIs);
+
+	}
+
+	my $p_value = ttest([log2(@SIs_a_tester)], (log2($SI) >= 0));
+
+	return($SI, $p_value, @SIs_a_tester);
 
 }
 

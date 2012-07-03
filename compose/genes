@@ -67,6 +67,7 @@ my $id_projet = $analyse->{'id_project'};
 my $type_chips = $analyse->{'type_chips'};
 my $version = $analyse->{'version'};
 my $orga = $analyse->{'organism'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
@@ -106,6 +107,18 @@ my $select_intensite_sth = $dbh->prepare(
 # On crée la table qui contient les valeurs des gène
 # ==============================================================================
 
+my @fields_fc_ba = ();
+my @fields_fc_dc = ();
+my @fields_fc_oj = ();
+
+for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+	push(@fields_fc_ba, 'fc_ba' . ($i + 1));
+	push(@fields_fc_dc, 'fc_dc' . ($i + 1));
+	push(@fields_fc_oj, 'fc_oj' . ($i + 1));
+
+}
+
 my @fields_trans = (
 	'id_gene INT UNSIGNED NOT NULL PRIMARY KEY',
 	'fc_ba DECIMAL(10,5) UNSIGNED NOT NULL',
@@ -119,7 +132,10 @@ my @fields_trans = (
 	'nb_sondes_oj SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_ba SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_dc SMALLINT UNSIGNED NOT NULL',
-	'nb_exons_oj SMALLINT UNSIGNED NOT NULL'
+	'nb_exons_oj SMALLINT UNSIGNED NOT NULL',
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_ba),
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_dc),
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_oj)
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -226,14 +242,25 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# Analyse pour les trois comparaisons
 	# ======================================================================
 
-	# FC gene B/A
-	my($fc_ba, $p_value_ba) = $analyse_ba->fc_gene(\@sondes_ba);
+	# FC des sondes
+	my @fcs_sondes_ba = $analyse->fcs_sondes(\@sondes_ba);
+	my @fcs_sondes_dc = $analyse->fcs_sondes(\@sondes_dc);
+	my @fcs_sondes_oj = $analyse->fcs_sondes(\@sondes_oj);
 
-	# FC gene D/C
-	my($fc_dc, $p_value_dc) = $analyse_dc->fc_gene(\@sondes_dc);
+	# FC gene sans effet rep
+	my($fc_ba, $p_value_ba) = $analyse_ba->fc_gene(\@fcs_sondes_ba);
+	my($fc_dc, $p_value_dc) = $analyse_dc->fc_gene(\@fcs_sondes_dc);
+	my($fc_oj, $p_value_oj) = $analyse->fc_gene(\@fcs_sondes_oj);
 
-	# FC gene O/J
-	my($fc_oj, $p_value_oj) = $analyse->fc_gene(\@sondes_oj);
+	# FCs gene avec effet rep
+	my @fcs_ba = sum_rep_effect(\@fcs_sondes_ba);
+	my @fcs_dc = sum_rep_effect(\@fcs_sondes_dc);
+	my @fcs_oj = sum_rep_effect(\@fcs_sondes_oj);
+
+	# On vire les premiers fcs rep, car c'est le fc total
+	shift @fcs_ba;
+	shift @fcs_dc;
+	shift @fcs_oj;
 
 	# Nombre de sondes concernées
 	my $nb_sondes_ba = @sondes_ba;
@@ -270,7 +297,10 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$nb_sondes_oj,
 		$nb_exons_ba,
 		$nb_exons_dc,
-		$nb_exons_oj
+		$nb_exons_oj,
+		@fcs_ba,
+		@fcs_dc,
+		@fcs_oj
 	);
 
 }

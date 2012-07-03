@@ -8,7 +8,6 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
 use Utils;
-use Stats;
 use Analyse;
 
 # ==============================================================================
@@ -66,6 +65,7 @@ my $id_projet = $analyse->{'id_project'};
 my $type_chips = $analyse->{'type_chips'};
 my $version = $analyse->{'version'};
 my $orga = $analyse->{'organism'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
@@ -106,11 +106,13 @@ my $select_intensite_sth = $dbh->prepare(
 # ==============================================================================
 
 my @fields_expr = ();
+my @fields_epi_fc = ();
 
-for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
+for(my $i = 0; $i < $nb_paires_rep; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
+	push(@fields_epi_fc, 'epi_fc' . ($i + 1));
 
 }
 
@@ -121,7 +123,7 @@ my @fields_trans = (
 	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
 	'trans_nb_sondes SMALLINT UNSIGNED NOT NULL',
 	'trans_nb_exons SMALLINT UNSIGNED NOT NULL',
-	'epi_fc DECIMAL(10,5) UNSIGNED'
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED'; } @fields_epi_fc)
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -198,7 +200,9 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# Calcul du fc du gène et de sa p_value
-	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(\@sondes_trans);
+	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(
+		[$analyse->fcs_sondes(\@sondes_trans)]
+	);
 
 	# NB sondes utilisées pour la transcription
 	my $nb_sondes_trans = @sondes_trans;
@@ -214,10 +218,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 
 	# On déclare les valeurs d'épissage
 	my @sondes_epissage = ();
-	my $fc_gene_epissage;
-	my $p_value_epissage;
-	my $nb_sondes_epissage;
-	my $nb_exons_epissage;
+	my @fcs_gene_epissage = (undef)x$nb_paires_rep;
 
 	# ======================================================================
 	# On fait l'épissage seulement si le gène est homogène
@@ -243,9 +244,13 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			($fc_gene_epissage) = $analyse->fc_gene(
-				\@sondes_epissage
+			@fcs_gene_epissage = sum_rep_effect(
+				[$analyse->fcs_sondes(\@sondes_epissage)]
 			);
+
+			# On vire le premier element de la liste, c'est la
+			# médiane de tout les fc rep
+			shift @fcs_gene_epissage;
 
 		}
 
@@ -262,7 +267,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$p_value_trans,
 		$nb_sondes_trans,
 		$nb_exons_trans,
-		$fc_gene_epissage
+		@fcs_gene_epissage
 	);
 
 }

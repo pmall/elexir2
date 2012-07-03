@@ -179,6 +179,7 @@ $f->merge_range(0, 17 + $o_si + $o_psi, 0, 23 + $o_si + $o_psi, 'Infos gene', $f
 $f->merge_range(0, 25 + $o_si + $o_psi, 0, 27 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
+my @entetes = ();
 
 my @SIs = ();
 
@@ -191,8 +192,6 @@ if($paire){
 	}
 
 }
-
-my @entetes = ();
 
 # Infos entité
 push(@entetes, 'Fasterdb ID');
@@ -359,7 +358,7 @@ for(my $i = 0; $i < @entites; $i++){
 
 	# Algo SI
 	push(@data, $reg_SI);
-	push(@data, map { $entite->{$_} } @SIs) if($paire);
+	push(@data, map { format_fold($entite->{$_}) } @SIs) if($paire);
 	push(@data, format_fold($entite->{'SI'}));
 	push(@data, $entite->{'SI_pval'});
 	push(@data, $entite->{'nb_sondes'});

@@ -68,6 +68,7 @@ my $type_chips = $analyse->{'type_chips'};
 my $version = $analyse->{'version'};
 my $orga = $analyse->{'organism'};
 my $paire = $analyse->{'paired'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
 my $table_entites = $config->{'table_entites'}{$version}{$orga};
 my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
@@ -113,14 +114,29 @@ my $select_intensite_sth = $dbh->prepare(
 # On crée dynamiquement la table
 # ==============================================================================
 
+my @fields_SIs_ba = ();
+my @fields_SIs_dc = ();
+my @fields_SIs_oj = ();
+
+for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+	push(@fields_SIs_ba, 'SI_ba' . ($i + 1));
+	push(@fields_SIs_dc, 'SI_dc' . ($i + 1));
+	push(@fields_SIs_oj, 'SI_oj' . ($i + 1));
+
+}
+
 my @fields_splicing = ();
 
 push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
 push(@fields_splicing, 'id_gene INT UNSIGNED NOT NULL');
 push(@fields_splicing, 'type_entite ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
 push(@fields_splicing, 'exon_pos SMALLINT UNSIGNED NOT NULL');
+push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs_ba)) if($paire);
 push(@fields_splicing, 'SI_ba DECIMAL(10,5) UNSIGNED NOT NULL');
+push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs_dc)) if($paire);
 push(@fields_splicing, 'SI_dc DECIMAL(10,5) UNSIGNED NOT NULL');
+push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs_oj)) if($paire);
 push(@fields_splicing, 'SI_oj DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval_ba DECIMAL(12,10) UNSIGNED NOT NULL');
 push(@fields_splicing, 'SI_pval_dc DECIMAL(12,10) UNSIGNED NOT NULL');
@@ -147,6 +163,7 @@ print 'Analyse des entités' . "\n";
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
+my $analyse_oj = $analyse;
 
 # On défini une liste d'entité
 my @entites = ();
@@ -240,9 +257,18 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# Si B/A n'est pas cohérent on zappe
 		# ==============================================================
 
+		# On récupère les fcs ba du gène
+		my @fcs_gene_ba = ();
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@fcs_gene_ba, $gene->{'fc_ba' . ($i + 1)});
+
+		}
+
 		# On récupère le SI des sondes de B/A
 		my @SIs_sondes_ba = $analyse_ba->sis_sondes(
-			$gene->{'fc_ba'},
+			\@fcs_gene_ba,
 			\@sondes_ba
 		);
 
@@ -257,19 +283,51 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		next if(!$is_robust_ba);
 
 		# ==============================================================
-		# On calcule les SIs des sondes
+		# On fait la même pour les autres
 		# ==============================================================
+
+		# On récupère les fcs dc du gène
+		my @fcs_gene_dc = ();
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@fcs_gene_dc, $gene->{'fc_dc' . ($i + 1)});
+
+		}
 
 		# Comparaison D/C
 		my @SIs_sondes_dc = $analyse_dc->sis_sondes(
-			$gene->{'fc_dc'},
+			\@fcs_gene_dc,
 			\@sondes_dc
 		);
 
+		# On calcule si D/C est cohérent
+		my $is_robust_dc = is_robust(
+			[map { median(@{$_}) } @SIs_sondes_dc],
+			$seuil_si_robust,
+			(1/$seuil_si_robust)
+		);
+
+		# On récupère les fcs oj du gène
+		my @fcs_gene_oj = ();
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@fcs_gene_oj, $gene->{'fc_oj' . ($i + 1)});
+
+		}
+
 		# Comparaison O/J
-		my @SIs_sondes_oj = $analyse->sis_sondes(
-			$gene->{'fc_oj'},
+		my @SIs_sondes_oj = $analyse_oj->sis_sondes(
+			\@fcs_gene_oj,
 			\@sondes_oj
+		);
+
+		# On calcule si O/J est cohérent
+		my $is_robust_oj = is_robust(
+			[map { median(@{$_}) } @SIs_sondes_oj],
+			$seuil_si_robust,
+			(1/$seuil_si_robust)
 		);
 
 		# ==============================================================
@@ -277,28 +335,18 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my($SI_ba, $p_value_ba) = si_matrix(\@SIs_sondes_ba, $paire);
-
-		# Comparaison D/C
-		my($SI_dc, $p_value_dc) = si_matrix(\@SIs_sondes_dc, $paire);
-
-		# Comparaison O/J
-		my($SI_oj, $p_value_oj) = si_matrix(\@SIs_sondes_oj, $paire);
-
-		# ==============================================================
-		# On calcule si l'entité est "cohérente" dans D/C et O/J
-		# ==============================================================
-
-		my $is_robust_dc = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_dc],
-			$seuil_si_robust,
-			(1/$seuil_si_robust)
+		my($SI_ba, $p_value_ba, @SIs_ba) = $analyse_ba->si_entite(
+			\@SIs_sondes_ba
 		);
 
-		my $is_robust_oj = is_robust(
-			[map { median(@{$_}) } @SIs_sondes_oj],
-			$seuil_si_robust,
-			(1/$seuil_si_robust)
+		# Comparaison D/C
+		my($SI_dc, $p_value_dc, @SIs_dc) = $analyse_dc->si_entite(
+			\@SIs_sondes_dc
+		);
+
+		# Comparaison O/J
+		my($SI_oj, $p_value_oj, @SIs_oj) = $analyse_oj->si_entite(
+			\@SIs_sondes_oj
 		);
 
 		# ==============================================================
@@ -313,23 +361,28 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On ajoute l'entité à la liste des entites
 		# ==============================================================
 
-		$insert_entite_sth->execute(
-			$entite->{'id'},
-			$gene->{'id_gene'},
-			$entite->{'type'},
-			$entite->{'exon_pos'},
-			$SI_ba,
-			$SI_dc,
-			$SI_oj,
-			$p_value_ba,
-			$p_value_dc,
-			$p_value_oj,
-			$nb_sondes_ba,
-			$nb_sondes_dc,
-			$nb_sondes_oj,
-			$is_robust_dc,
-			$is_robust_oj,
-		);
+		my @values = ();
+
+		push(@values, $entite->{'id'});
+		push(@values, $gene->{'id_gene'});
+		push(@values, $entite->{'type'});
+		push(@values, $entite->{'exon_pos'});
+		push(@values, @SIs_ba) if($paire);
+		push(@values, $SI_ba);
+		push(@values, @SIs_dc) if($paire);
+		push(@values, $SI_dc);
+		push(@values, @SIs_oj) if($paire);
+		push(@values, $SI_oj);
+		push(@values, $p_value_ba);
+		push(@values, $p_value_dc);
+		push(@values, $p_value_oj);
+		push(@values, $nb_sondes_ba);
+		push(@values, $nb_sondes_dc);
+		push(@values, $nb_sondes_oj);
+		push(@values, $is_robust_dc);
+		push(@values, $is_robust_oj);
+
+		$insert_entite_sth->execute(@values);
 
 	}
 

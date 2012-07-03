@@ -85,7 +85,7 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_entites_sth = $dbh->prepare(
-	"SELECT e.* FROM $table_splicing
+	"SELECT * FROM $table_splicing
 	WHERE ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
 );
 
@@ -190,6 +190,9 @@ sub write_list{
 
 	my($f, @entites) = @_;
 
+	# Offset pour le nombre de colones selon le nombre de paires de rep
+	my $o_si = ($paire) ? $nb_paires_rep : 0;
+
 	# On modifie la largeur des colones
 	$f->set_column(0, 0, 12); # Fasterdb id
 	$f->set_column(1, 1, 18); # Source id
@@ -202,12 +205,28 @@ sub write_list{
 
 	# On fait les premiers entetes
 	$f->merge_range(0, 0, 0, 8, 'Infos Entite', $format_entete_merge);
-	$f->merge_range(0, 10, 0, 13, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 15, 0, 19, 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 21, 0, 25, 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 10, 0, 13 + $o_si, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 15 + $o_si, 0, 19 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 21 + ($o_si * 2), 0, 25 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
 
 	# On défini les entetes de chaque colonnes
 	my @entetes = ();
+
+	my @entete_SIs_ba = ();
+	my @entete_SIs_dc = ();
+	my @entete_SIs_oj = ();
+
+	if($paire){
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@entete_SIs_ba, 'SI' . ($i + 1) . ' B/A');
+			push(@entete_SIs_dc, 'SI' . ($i + 1) . ' D/C');
+			push(@entete_SIs_oj, 'SI' . ($i + 1) . ' O/J');
+
+		}
+
+	}
 
 	# Infos entité
 	push(@entetes, 'Fasterdb ID');
@@ -223,6 +242,7 @@ sub write_list{
 
 	# Reg SI B/A
 	push(@entetes, 'Reg');
+	push(@entetes, @entete_SIs_ba) if($paire);
 	push(@entetes, 'SI B/A');
 	push(@entetes, 'Pvalue');
 	push(@entetes, 'NB sondes');
@@ -230,6 +250,7 @@ sub write_list{
 
 	# Reg SI D/C
 	push(@entetes, 'Reg');
+	push(@entetes, @entete_SIs_dc) if($paire);
 	push(@entetes, 'SI D/C');
 	push(@entetes, 'Pvalue');
 	push(@entetes, 'NB sondes');
@@ -238,6 +259,7 @@ sub write_list{
 
 	# Reg SI O/J
 	push(@entetes, 'Reg');
+	push(@entetes, @entete_SIs_oj) if($paire);
 	push(@entetes, 'SI O/J');
 	push(@entetes, 'Pvalue');
 	push(@entetes, 'NB sondes');
@@ -292,6 +314,24 @@ sub write_list{
 		my $pos_entite = $infos_entite->{'start_sur_gene'} .
 			'-' . $infos_entite->{'end_sur_gene'};
 
+		# On récupère les SIs
+		my @SIs_ba = ();
+		my @SIs_dc = ();
+		my @SIs_oj = ();
+
+		if($paire){
+
+			foreach(my $i = 0; $i < $nb_paires_rep; $i++){
+
+				push(@SIs_ba, $entite->{'SI_ba' . ($i + 1)});
+				push(@SIs_dc, $entite->{'SI_dc' . ($i + 1)});
+				push(@SIs_oj, $entite->{'SI_oj' . ($i + 1)});
+
+			}
+
+		}
+
+		# On défini les régulations
 		my $reg_ba = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
 		my $reg_dc = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
 		my $reg_oj;
@@ -352,6 +392,7 @@ sub write_list{
 
 		# Algo SI B/A
 		push(@data, $reg_ba);
+		push(@data, map { format_fold($_) } @SIs_ba) if($paire);
 		push(@data, format_fold($entite->{'SI_ba'}));
 		push(@data, $entite->{'SI_pval_ba'});
 		push(@data, $entite->{'nb_sondes_ba'});
@@ -359,6 +400,7 @@ sub write_list{
 
 		# Algo SI B/A
 		push(@data, $reg_dc);
+		push(@data, map { format_fold($_) } @SIs_dc) if($paire);
 		push(@data, format_fold($entite->{'SI_dc'}));
 		push(@data, $entite->{'SI_pval_dc'});
 		push(@data, $entite->{'nb_sondes_dc'});
@@ -367,11 +409,11 @@ sub write_list{
 
 		# Algo SI B/A
 		push(@data, $reg_oj);
+		push(@data, map { format_fold($_) } @SIs_oj) if($paire);
 		push(@data, format_fold($entite->{'SI_oj'}));
 		push(@data, $entite->{'SI_pval_oj'});
 		push(@data, $entite->{'nb_sondes_oj'});
 		push(@data, $entite->{'is_robust_oj'});
-		push(@data, ''); # Space
 
 		# On affiche les data
 		for(my $j = 0; $j < @data; $j++){

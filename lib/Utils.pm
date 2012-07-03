@@ -4,10 +4,9 @@ use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Math;
-use Stats;
 use Exporter qw(import);
 
-our @EXPORT = qw(union inter fc_matrix si_matrix homogene is_robust);
+our @EXPORT = qw(union inter sum_no_rep_effect sum_rep_effect homogene is_robust);
 
 # ==============================================================================
 # Retourne l'union de deux listes de sondes
@@ -64,72 +63,6 @@ sub inter{
 }
 
 # ==============================================================================
-# Retourne le FC du groupe de sonde et sa p_value à partir d'une matrice de fcs
-# ==============================================================================
-
-sub fc_matrix{
-
-	my($ref_matrix_fcs) = @_;
-
-	# Pour chaque sonde on récupère la médiane de ses fcs
-	my @fcs = map { median(@{$_}) } @{$ref_matrix_fcs};
-
-	# On calcule le fc du groupe (médiane des médianes de fc)
-	my $fc = median(@fcs);
-
-	# On fait le test stat
-	my $p_value = ttest([log2(@fcs)], (log2($fc) >= 0));
-
-	# On retourne le fc et le test stat
-	return($fc, $p_value);
-
-}
-
-# ==============================================================================
-# Prend une matrice de valeurs (sondes x num replicat)
-# Permet de calculer les fcs du gène par réplicat
-# ==============================================================================
-
-sub si_matrix{
-
-	my($ref_matrix_SIs, $paired) = @_;
-
-	my @SIs = ();
-	my @SIs_a_tester = ();
-
-	# On récupère à l'arrach le nombre de paires de replicats
-	my $nb_replicats = @{$ref_matrix_SIs->[0]};
-
-	# Pour chaque paire de replicat
-	for(my $i = 0; $i < $nb_replicats; $i++){
-
-		my @SIs_paire_rep = map { $_->[$i] } @{$ref_matrix_SIs};
-
-		my $SI_paire_rep = median(@SIs_paire_rep);
-
-		push(@SIs, $SI_paire_rep);
-
-		if($paired){
-
-			push(@SIs_a_tester, $SI_paire_rep);
-
-		}else{
-
-			push(@SIs_a_tester, @SIs_paire_rep);
-
-		}
-
-	}
-
-	my $SI = median(@SIs);
-
-	my $p_value = ttest([log2(@SIs_a_tester)], (log2($SI) >= 0));
-
-	return($SI, $p_value, @SIs);
-
-}
-
-# ==============================================================================
 # Retourne la valeur sommée et les valeurs à utiliser pour le test (valeurs
 # medianes pour chaque sonde) à partir d'une matrice (sondes x valeur)
 # PAS D'EFFET REPLICAT
@@ -180,7 +113,7 @@ sub sum_rep_effect{
 	}
 
 	# La valeur somme est la médiane des valeurs à tester
-	my $sum = median(@valeurs_a_tester));
+	my $sum = median(@valeurs_a_tester);
 
 	# On retourne les deux
 	return($sum, @valeurs_a_tester);
