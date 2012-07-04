@@ -79,6 +79,10 @@ make_path($dir_sortie);
 # On se connecte a fasterdb et on prépare les requetes
 # ==============================================================================
 
+my $select_nb_genes_total_sth = $dbh->prepare(
+	"SELECT COUNT(*) FROM $table_trans"
+);
+
 my $select_genes_sth = $dbh->prepare(
 	"SELECT id_gene, trans_fc, trans_pval, trans_nb_sondes, trans_nb_exons
 	FROM $table_trans
@@ -113,44 +117,6 @@ my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => 
 my $format_entete_merge		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
 my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
-
-# ==============================================================================
-# Feuille résumé
-# ==============================================================================
-
-# Infos de base
-$f_resume->write(0, 0, date(), $format_cell_no_center);
-$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
-$f_resume->write(3, 0, "Seuil fold", $format_resume_titre);
-$f_resume->write(3, 1, round($seuil_trans, 2), $format_resume_titre);
-$f_resume->write(4, 0, "Seuil p-value", $format_resume_titre);
-$f_resume->write(4, 1, $seuil_pval, $format_resume_titre);
-
-# Infos sur les sondes
-my $num_ligne = 8;
-$f_resume->set_column(0, 0, 25);
-$f_resume->set_column(2, 2, 20);
-$f_resume->write($num_ligne++, 0, "Sondes et entites analysees", $format_cell_center);
-$num_ligne++;
-$f_resume->write($num_ligne++, 0, "Sondes", $format_cell_center);
-$num_ligne++;
-$f_resume->write($num_ligne++, 0, "Sur la puce", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Avec gc < 18", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Non ch", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Exprimees", $format_cell_center);
-$num_ligne++;
-$f_resume->write($num_ligne++, 0, "Ciblant des entites", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Introniques", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Non utilisees (inter-geniques, chevauchantes, non hybridees...)", $format_cell_no_center);
-$num_ligne++;
-$f_resume->write($num_ligne++, 0, "Analysables*", $format_cell_center);
-$f_resume->write($num_ligne++, 0, "Analysees*", $format_cell_center);
-
-# Légende
-$f_resume->write(36, 0, "* analysable", $format_cell_no_center);
-$f_resume->write(36, 1, "avec sonde : gc < 18, non ch et ciblant une entite", $format_cell_no_center);
-$f_resume->write(37, 0, "* analysable", $format_cell_no_center);
-$f_resume->write(37, 1, "avec sonde : gc <18, non ch, ciblant une entite et exprimee dans l'experience", $format_cell_no_center);
 
 # ==============================================================================
 # On ajoute les gènes dans la feuille
@@ -274,21 +240,26 @@ for(my $i = 0; $i < @genes; $i++){
 }
 
 # ==============================================================================
-# On écrit le nombre de gènes up/down
+# On écrit la page de résumé
 # ==============================================================================
 
-$num_ligne = 8;
+$select_nb_genes_total_sth->execute;
+my($nb_genes_total) = $select_nb_genes_total_sth->fetchrow_array;
+$select_nb_genes_total_sth->finish;
 
-$f_resume->set_column(5, 5, 30);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(11, 11, 18);
-
-$f_resume->write($num_ligne++, 5, "Resultats", $format_resume_titre);
-$num_ligne++;
-$f_resume->write($num_ligne, 5, "Genes regules", $format_cell_center);
-$f_resume->write($num_ligne, 6, $nb_ups + $nb_downs, $format_cell_center);
-$f_resume->write($num_ligne, 7, "Genes up", $format_cell_center);
-$f_resume->write($num_ligne, 8, $nb_ups, $format_cell_center);
-$f_resume->write($num_ligne, 9, "Genes down", $format_cell_center);
-$f_resume->write($num_ligne, 10, $nb_downs, $format_cell_center);
+$f_resume->set_column(0, 0, 30);
+$f_resume->write(0, 0, date(), $format_cell_center);
+$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
+$f_resume->write(3, 0, "Seuil fold", $format_cell_center);
+$f_resume->write(3, 1, round($seuil_trans, 2), $format_cell_center);
+$f_resume->write(4, 0, "Seuil p-value", $format_cell_center);
+$f_resume->write(4, 1, $seuil_pval, $format_cell_center);
+$f_resume->write(6, 0, "Resultats", $format_resume_titre);
+$f_resume->write(7, 0, "Genes exprimes", $format_cell_center);
+$f_resume->write(7, 1, $nb_genes_total, $format_cell_center);
+$f_resume->write(8, 0, "Genes regules", $format_cell_center);
+$f_resume->write(8, 1, $nb_ups + $nb_downs, $format_cell_center);
+$f_resume->write(9, 0, "Genes up", $format_cell_center);
+$f_resume->write(9, 1, $nb_ups, $format_cell_center);
+$f_resume->write(10, 0, "Genes down", $format_cell_center);
+$f_resume->write(10, 1, $nb_downs, $format_cell_center);

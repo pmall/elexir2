@@ -84,6 +84,10 @@ make_path($dir_sortie);
 # On se connecte a fasterdb
 # ==============================================================================
 
+my $select_nb_entites_total_sth = $dbh->prepare(
+	"SELECT COUNT(*) FROM $table_splicing"
+);
+
 my $select_entites_sth = $dbh->prepare(
 	"SELECT e.*, g.trans_fc, g.trans_pval,
 	g.trans_nb_sondes, g.trans_nb_exons
@@ -135,20 +139,6 @@ my $format_down_odd		= $xlsh->add_format(color => 'black', bg_color => $couleur_
 my $format_down_even		= $xlsh->add_format(color => 'black', bg_color => $couleur_down_even, border => 1, border_color => 'black', center_across => 1);
 my $format_mauv_fc_odd		= $xlsh->add_format(color => 'black', bg_color => $couleur_mauv_fc_odd, border => 1, border_color => 'black', center_across => 1);
 my $format_mauv_fc_even		= $xlsh->add_format(color => 'black', bg_color => $couleur_mauv_fc_even, border => 1, border_color => 'black', center_across => 1);
-
-# ==============================================================================
-# Feuille résumé
-# ==============================================================================
-
-# Infos de base
-$f_resume->write(0, 0, date(), $format_cell_no_center);
-$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
-$f_resume->write(3, 0, "Seuil fold", $format_resume_titre);
-$f_resume->write(3, 1, round($seuil_epissage, 2), $format_resume_titre);
-$f_resume->write(4, 0, "Seuil p-value", $format_resume_titre);
-$f_resume->write(4, 1, $seuil_pval, $format_resume_titre);
-
-my $num_ligne = 8;
 
 # ==============================================================================
 # On ajoute les entités dans la feuille
@@ -205,18 +195,18 @@ push(@entetes, ''); # Space
 # Reg SI
 push(@entetes, 'Reg');
 push(@entetes, @entetes_SIs) if($paire);
-push(@entetes, 'Med SI');
+push(@entetes, 'SI');
 push(@entetes, 'Pvalue');
 push(@entetes, 'Nb probes');
 push(@entetes, ''); # Space
 
 # Reg psi
 push(@entetes, 'Reg');
-push(@entetes, 'Med cont');
+push(@entetes, 'control');
 push(@entetes, 'Sd cont') if($paire);
-push(@entetes, 'Med test');
+push(@entetes, 'test');
 push(@entetes, 'Sd test') if($paire);
-push(@entetes, 'Med FC');
+push(@entetes, 'FC');
 push(@entetes, 'Sd FC') if($paire);
 push(@entetes, 'Pvalue') if($paire);
 push(@entetes, ''); # Space
@@ -415,19 +405,26 @@ for(my $i = 0; $i < @entites; $i++){
 }
 
 # ==============================================================================
-# On écrit le nombre d'entités up/down
+# On écrit la page de résumé
 # ==============================================================================
 
-$f_resume->set_column(5, 5, 30);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(11, 11, 18);
+$select_nb_entites_total_sth->execute;
+my($nb_entites_total) = $select_nb_entites_total_sth->fetchrow_array;
+$select_nb_entites_total_sth->finish;
 
-$f_resume->write($num_ligne++, 5, "Resultats", $format_resume_titre);
-$num_ligne++;
-$f_resume->write($num_ligne, 5, "Entités regules", $format_cell_center);
-$f_resume->write($num_ligne, 6, $nb_ups + $nb_downs, $format_cell_center);
-$f_resume->write($num_ligne, 7, "Entités up", $format_cell_center);
-$f_resume->write($num_ligne, 8, $nb_ups, $format_cell_center);
-$f_resume->write($num_ligne, 9, "Entités down", $format_cell_center);
-$f_resume->write($num_ligne, 10, $nb_downs, $format_cell_center);
+$f_resume->set_column(0, 0, 30);
+$f_resume->write(0, 0, date(), $format_cell_center);
+$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
+$f_resume->write(3, 0, "Seuil fold", $format_cell_center);
+$f_resume->write(3, 1, round($seuil_epissage, 2), $format_cell_center);
+$f_resume->write(4, 0, "Seuil p-value", $format_cell_center);
+$f_resume->write(4, 1, $seuil_pval, $format_cell_center);
+$f_resume->write(6, 0, "Resultats", $format_resume_titre);
+$f_resume->write(7, 0, "Entites exprimees", $format_cell_center);
+$f_resume->write(7, 1, $nb_entites_total, $format_cell_center);
+$f_resume->write(8, 0, "Entites regules", $format_cell_center);
+$f_resume->write(8, 1, $nb_ups + $nb_downs, $format_cell_center);
+$f_resume->write(9, 0, "Entites up", $format_cell_center);
+$f_resume->write(9, 1, $nb_ups, $format_cell_center);
+$f_resume->write(10, 0, "Entites down", $format_cell_center);
+$f_resume->write(10, 1, $nb_downs, $format_cell_center);
