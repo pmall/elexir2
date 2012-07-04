@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Format;
 use Math;
+use Stats;
 use Utils;
 use Replicat;
 
@@ -240,7 +241,7 @@ sub get_sondes_exprimees{
 
 	}
 
-	return @sondes;	
+	return \@sondes;	
 
 }
 
@@ -287,32 +288,34 @@ sub lissage{
 
 	foreach my $paire (@{$this->{'design'}}){
 
-		my @sondes_lisses_cont_rep = $paire->{'cont'}->lissage(
+		my $sondes_lisses_cont_rep = $paire->{'cont'}->lissage(
 			$ref_sondes,
 			$ref_func_aggr
 		);
 
-		my @sondes_lisses_test_rep = $paire->{'test'}->lissage(
+		my $sondes_lisses_test_rep = $paire->{'test'}->lissage(
 			$ref_sondes,
 			$ref_func_aggr
 		);
 
 		@sondes_lisses_cont = inter(
 			\@sondes_lisses_cont,
-			\@sondes_lisses_cont_rep
+			$sondes_lisses_cont_rep
 		);
 
 		@sondes_lisses_test = inter(
 			\@sondes_lisses_test,
-			\@sondes_lisses_test_rep
+			$sondes_lisses_test_rep
 		);
 
 	}
 
-	return $ref_func_aggr->(
+	my @aggr = $ref_func_aggr->(
 		\@sondes_lisses_cont,
 		\@sondes_lisses_test
 	);
+
+	return \@aggr;
 
 }
 
@@ -375,25 +378,25 @@ sub fcs_sonde{
 	foreach my $paire (@{$this->{'design'}}){
 
 		# On calcule la valeur de la sonde pour control et test
-		my @fcs_cont = $paire->{'cont'}->fcs_sonde($sonde);
-		my @fcs_test = $paire->{'test'}->fcs_sonde($sonde);
+		my $ref_fcs_cont = $paire->{'cont'}->fcs_sonde($sonde);
+		my $ref_fcs_test = $paire->{'test'}->fcs_sonde($sonde);
 
 		# On fait tout les fcs de cette paire de replicat
-		for(my $i = 0; $i < @fcs_cont; $i++){
+		for(my $i = 0; $i < @{$ref_fcs_cont}; $i++){
 
-			push(@fcs, $fcs_test[$i]/$fcs_cont[$i]);
+			push(@fcs, $ref_fcs_test->[$i]/$ref_fcs_cont->[$i]);
 
 		}
 
 	}
 
 	# On retourne les fcs de la sonde dans chaque paire de replicats
-	return @fcs;
+	return \@fcs;
 
 }
 
 # ==============================================================================
-# Retourne la liste des FCs de chaque sonde (liste de liste)
+# Retourne la liste des FCs de chaque sonde (matrice)
 # ==============================================================================
 
 sub fcs_sondes{
@@ -404,13 +407,13 @@ sub fcs_sondes{
 
 	foreach my $sonde (@{$ref_sondes}){
 
-		my @fcs_sonde = $this->fcs_sonde($sonde);
+		my $ref_fcs_sonde = $this->fcs_sonde($sonde);
 
-		push(@fcs_sondes, \@fcs_sonde);
+		push(@fcs_sondes, $ref_fcs_sonde);
 
 	}
 
-	return @fcs_sondes;
+	return \@fcs_sondes;
 
 }
 
@@ -420,11 +423,15 @@ sub fcs_sondes{
 
 sub fc_gene{
 
-	my($this, $ref_sondes) = @_;
+	my($this, $ref_fcs_sondes) = @_;
 
-	my @fcs_sondes = $this->fcs_sondes($ref_sondes);
+	# On somme les fc des sondes sans effet replicat
+	my($fc, @fcs_a_tester) = sum_no_rep_effect($ref_fcs_sondes);
 
-	return fc_matrix(\@fcs_sondes);
+	# On fait le test stat
+	my $p_value = ttest([log2(@fcs_a_tester)], (log2($fc) >= 0));
+
+	return ($fc, $p_value, @fcs_a_tester);
 
 }
 
@@ -434,15 +441,17 @@ sub fc_gene{
 
 sub sis_sonde{
 
-	my($this, $fc_groupe, $sonde) = @_;
+	my($this, $ref_fcs_groupe, $ref_fcs_sonde) = @_;
 
 	my @SIs = ();
 
-	my @fcs = $this->fcs_sonde($sonde);
+	for(my $i = 0; $i < @{$ref_fcs_sonde}; $i++){
 
-	foreach(@fcs){ push(@SIs, ($_/$fc_groupe)) }
+		push(@SIs, ($ref_fcs_sonde->[$i]/$ref_fcs_groupe->[$i]))
 
-	return @SIs;
+	}
+
+	return \@SIs;
 
 }
 
@@ -452,19 +461,22 @@ sub sis_sonde{
 
 sub sis_sondes{
 
-	my($this, $fc_groupe, $ref_sondes) = @_;
+	my($this, $ref_fcs_groupe, $ref_fcs_sondes) = @_;
 
 	my @SIs_sondes = ();
 
-	foreach my $sonde (@{$ref_sondes}){
+	foreach my $ref_fcs_sonde (@{$ref_fcs_sondes}){
 
-		my @SIs_sonde = $this->sis_sonde($fc_groupe, $sonde);
+		my $ref_SIs_sonde = $this->sis_sonde(
+			$ref_fcs_groupe,
+			$ref_fcs_sonde
+		);
 
-		push(@SIs_sondes, \@SIs_sonde);
+		push(@SIs_sondes, $ref_SIs_sonde);
 
 	}
 
-	return @SIs_sondes;
+	return \@SIs_sondes;
 
 }
 
@@ -474,11 +486,24 @@ sub sis_sondes{
 
 sub si_entite{
 
-	my($this, $fc_groupe, $ref_sondes) = @_;
+	my($this, $ref_SIs) = @_;
 
-	my @SIs_sondes = $this->sis_sondes($fc_groupe, $ref_sondes);
+	my $SI;
+	my @SIs_a_tester = ();
 
-	return si_matrix(\@SIs_sondes, $this->{'paired'});
+	if($this->{'paired'}){
+
+		($SI, @SIs_a_tester) = sum_rep_effect($ref_SIs);
+
+	}else{
+
+		($SI, @SIs_a_tester) = sum_no_rep_effect($ref_SIs);
+
+	}
+
+	my $p_value = ttest([log2(@SIs_a_tester)], (log2($SI) >= 0));
+
+	return($SI, $p_value, @SIs_a_tester);
 
 }
 

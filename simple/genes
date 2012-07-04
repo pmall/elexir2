@@ -8,7 +8,6 @@ use FindBin qw($Bin);
 use lib $FindBin::Bin . '/../lib';
 use Format;
 use Utils;
-use Stats;
 use Analyse;
 
 # ==============================================================================
@@ -66,6 +65,7 @@ my $id_projet = $analyse->{'id_project'};
 my $type_chips = $analyse->{'type_chips'};
 my $version = $analyse->{'version'};
 my $orga = $analyse->{'organism'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
@@ -106,11 +106,13 @@ my $select_intensite_sth = $dbh->prepare(
 # ==============================================================================
 
 my @fields_expr = ();
+my @fields_epi_fc = ();
 
-for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
+for(my $i = 0; $i < $nb_paires_rep; $i++){
 
 	push(@fields_expr, 'control' . ($i + 1));
 	push(@fields_expr, 'test' . ($i + 1));
+	push(@fields_epi_fc, 'epi_fc' . ($i + 1));
 
 }
 
@@ -121,7 +123,7 @@ my @fields_trans = (
 	'trans_pval DECIMAL(12,10) UNSIGNED NOT NULL',
 	'trans_nb_sondes SMALLINT UNSIGNED NOT NULL',
 	'trans_nb_exons SMALLINT UNSIGNED NOT NULL',
-	'epi_fc DECIMAL(10,5) UNSIGNED'
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED'; } @fields_epi_fc)
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -172,59 +174,61 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	next if(@{$ids_probes_ok} < $nb_sondes_min_gene);
 
 	# On récupère les sondes exprimées
-	my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_probes_ok, $seuil_dabg);
+	my $ref_sondes = $analyse->get_sondes_exprimees(
+		$dbh,
+		$ids_probes_ok,
+		$seuil_dabg
+	);
 
 	# Si il n'y a pas six sondes on zappe
-	next if(@sondes < $nb_sondes_min_gene);
+	next if(@{$ref_sondes} < $nb_sondes_min_gene);
 
 	# ======================================================================
 	# Etape de lissage pour la transcription
 	# ======================================================================
 
 	# On selectionne les sondes qui passe le lissage transcription
-	my @sondes_trans = $analyse->lissage_transcription(\@sondes);
+	my $ref_sondes_trans = $analyse->lissage_transcription($ref_sondes);
 
 	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
-	next if(@sondes_trans < $nb_sondes_min_gene);
+	next if(@{$ref_sondes_trans} < $nb_sondes_min_gene);
 
 	# ======================================================================
 	# Calcul de l'expression de gène
 	# ======================================================================
 
-	my @expr = $analyse->expressions(\@sondes);
+	my @expr = $analyse->expressions($ref_sondes);
 
 	# ======================================================================
 	# Calcul des fold change et de la pvalue pour la transcription
 	# ======================================================================
 
 	# Calcul du fc du gène et de sa p_value
-	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(\@sondes_trans);
+	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(
+		$analyse->fcs_sondes($ref_sondes_trans)
+	);
 
 	# NB sondes utilisées pour la transcription
-	my $nb_sondes_trans = @sondes_trans;
+	my $nb_sondes_trans = @{$ref_sondes_trans};
 
 	# NB exons cibles par des sondes lors de la transcription
 	my $nb_exons_trans = scalar(uniq(map {
 		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
-	} @sondes_trans));
+	} @{$ref_sondes_trans}));
 
 	# ======================================================================
 	# Analyse au niveau de l'épissage
 	# ======================================================================
 
 	# On déclare les valeurs d'épissage
-	my @sondes_epissage = ();
-	my $fc_gene_epissage;
-	my $p_value_epissage;
-	my $nb_sondes_epissage;
-	my $nb_exons_epissage;
+	my @fcs_gene_epissage = (undef)x$nb_paires_rep;
 
 	# ======================================================================
 	# On fait l'épissage seulement si le gène est homogène
 	# ======================================================================
 
 	# Si le gène est homogène on calcule les valeurs d'épissage
-	my $homogene = homogene($infos_sondes, \@sondes, $nb_exons);
+	my $homogene = homogene($infos_sondes, $ref_sondes, $nb_exons);
 
 	if($homogene){
 
@@ -233,18 +237,20 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		# ==============================================================
 
 		# On selectionne les sondes qui passe le lissage de l'épissage
-		@sondes_epissage = $analyse->lissage_epissage(\@sondes);
+		my $ref_sondes_epissage = $analyse->lissage_epissage(
+			$ref_sondes
+		);
 
 		# Seulement si on a plus de 6 sondes épissage
-		if(@sondes_epissage >= $nb_sondes_min_gene){
+		if(@{$ref_sondes_epissage} >= $nb_sondes_min_gene){
 
 			# ======================================================
 			# Calcul des fold change du gène par replicat
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			($fc_gene_epissage) = $analyse->fc_gene(
-				\@sondes_epissage
+			@fcs_gene_epissage = rep_effect(
+				$analyse->fcs_sondes($ref_sondes_epissage)
 			);
 
 		}
@@ -262,7 +268,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$p_value_trans,
 		$nb_sondes_trans,
 		$nb_exons_trans,
-		$fc_gene_epissage
+		@fcs_gene_epissage
 	);
 
 }

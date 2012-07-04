@@ -4,10 +4,10 @@ use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Math;
-use Stats;
 use Exporter qw(import);
 
-our @EXPORT = qw(union inter fc_matrix si_matrix homogene is_robust);
+our @EXPORT = qw(union inter sum_no_rep_effect sum_rep_effect rep_effect
+	homogene is_robust);
 
 # ==============================================================================
 # Retourne l'union de deux listes de sondes
@@ -64,68 +64,72 @@ sub inter{
 }
 
 # ==============================================================================
-# Retourne le FC du groupe de sonde et sa p_value à partir d'une matrice de fcs
+# Retourne la valeur sommée et les valeurs à utiliser pour le test (valeurs
+# medianes pour chaque sonde) à partir d'une matrice (sondes x valeur)
+# PAS D'EFFET REPLICAT
 # ==============================================================================
 
-sub fc_matrix{
+sub sum_no_rep_effect{
 
-	my($ref_matrix_fcs) = @_;
+	my($ref_matrix) = @_;
 
-	# Pour chaque sonde on récupère la médiane de ses fcs
-	my @fcs = map { median(@{$_}) } @{$ref_matrix_fcs};
+	# Pour chaque sonde on récupère la médiane des valeurs
+	my @valeurs_a_tester = map { median(@{$_}) } @{$ref_matrix};
 
-	# On calcule le fc du groupe (médiane des médianes de fc)
-	my $fc = median(@fcs);
+	# La valeur somme est la médiane des valeurs à tester
+	my $sum = median(@valeurs_a_tester);
 
-	# On fait le test stat
-	my $p_value = ttest([log2(@fcs)], (log2($fc) >= 0));
-
-	# On retourne le fc et le test stat
-	return($fc, $p_value);
+	# On retourne les deux
+	return($sum, @valeurs_a_tester);
 
 }
 
 # ==============================================================================
-# Prend une matrice de valeurs (sondes x num replicat)
-# Permet de calculer les fcs du gène par réplicat
+# Retourne la valeur sommée et les valeurs à utiliser pour le test (valeurs
+# medianes de chaque replicat) à partir d'une matrice (sondes x valeur)
+# AVEC EFFET REPLICAT
+# => Inutile d'utiliser ça sur une exp non paire.
+# => Pour une exp non paire utiliser sum_no_rep_effect
 # ==============================================================================
 
-sub si_matrix{
+sub rep_effect{
 
-	my($ref_matrix_SIs, $paired) = @_;
+	my($ref_matrix) = @_;
 
-	my @SIs = ();
-	my @SIs_a_tester = ();
+	# On initialise les valeurs à tester
+	my @valeurs_reps = ();
 
-	# On récupère à l'arrach le nombre de paires de replicats
-	my $nb_replicats = @{$ref_matrix_SIs->[0]};
+	# On récupère le nombre de colones de la matrice
+	my $nb_cols = @{$ref_matrix->[0]};
 
-	# Pour chaque paire de replicat
-	for(my $i = 0; $i < $nb_replicats; $i++){
+	# Pour chaque colones
+	for(my $i = 0; $i < $nb_cols; $i++){
 
-		my @SIs_paire_rep = map { $_->[$i] } @{$ref_matrix_SIs};
+		# On récupère les valeurs de cette colonne
+		my @valeurs_col = map { $_->[$i] } @{$ref_matrix};
 
-		my $SI_paire_rep = median(@SIs_paire_rep);
-
-		push(@SIs, $SI_paire_rep);
-
-		if($paired){
-
-			push(@SIs_a_tester, $SI_paire_rep);
-
-		}else{
-
-			push(@SIs_a_tester, @SIs_paire_rep);
-
-		}
+		# On ajoute la médiane de la colonne aux valeurs à tester
+		push(@valeurs_reps, median(@valeurs_col));
 
 	}
 
-	my $SI = median(@SIs);
+	# On retourne les valeurs des rep
+	return(@valeurs_reps);
 
-	my $p_value = ttest([log2(@SIs_a_tester)], (log2($SI) >= 0));
+}
 
-	return($SI, $p_value, @SIs);
+sub sum_rep_effect{
+
+	my($ref_matrix) = @_;
+
+	# On initialise les valeurs à tester
+	my @valeurs_a_tester = rep_effect($ref_matrix);
+
+	# La valeur somme est la médiane des valeurs à tester
+	my $sum = median(@valeurs_a_tester);
+
+	# On retourne les deux
+	return($sum, @valeurs_a_tester);
 
 }
 

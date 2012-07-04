@@ -179,20 +179,19 @@ $f->merge_range(0, 17 + $o_si + $o_psi, 0, 23 + $o_si + $o_psi, 'Infos gene', $f
 $f->merge_range(0, 25 + $o_si + $o_psi, 0, 27 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
+my @entetes = ();
 
-my @SIs = ();
+my @entetes_SIs = ();
 
 if($paire){
 
 	for(my $i = 0; $i < $nb_paires_rep; $i++){
 
-		push(@SIs, 'SI' . ($i + 1));
+		push(@entetes_SIs, 'SI' . ($i + 1));
 
 	}
 
 }
-
-my @entetes = ();
 
 # Infos entité
 push(@entetes, 'Fasterdb ID');
@@ -205,7 +204,7 @@ push(@entetes, ''); # Space
 
 # Reg SI
 push(@entetes, 'Reg');
-push(@entetes, @SIs) if($paire);
+push(@entetes, @entetes_SIs) if($paire);
 push(@entetes, 'Med SI');
 push(@entetes, 'Pvalue');
 push(@entetes, 'Nb probes');
@@ -328,6 +327,19 @@ for(my $i = 0; $i < @entites; $i++){
 	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
 	my $reg_psi = ($entite->{'psi_fc'} >= 1) ? 'up' : 'down';
 
+	# On récupère les SIs des replicats
+	my @SIs = ();
+
+	if($paire){
+
+		for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+			push(@SIs, $entite->{'SI' . ($i + 1)});
+
+		}
+
+	}
+
 	# On défini le format des cellules de cette ligne
 	my $format;
 
@@ -359,7 +371,7 @@ for(my $i = 0; $i < @entites; $i++){
 
 	# Algo SI
 	push(@data, $reg_SI);
-	push(@data, map { $entite->{$_} } @SIs) if($paire);
+	push(@data, map { format_fold($_) } @SIs) if($paire);
 	push(@data, format_fold($entite->{'SI'}));
 	push(@data, $entite->{'SI_pval'});
 	push(@data, $entite->{'nb_sondes'});
