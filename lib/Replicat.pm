@@ -68,7 +68,7 @@ sub lissage{
 	}
 
 	# On retourne les sondes lisses du réplicat
-	return @sondes_lisses;
+	return \@sondes_lisses;
 
 }
 

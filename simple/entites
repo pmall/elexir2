@@ -204,10 +204,14 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		next if(@{$ids_sondes_ok} < $nb_sondes_min_entite);
 
 		# On récupère les infos des sondes exprimées
-		my @sondes = $analyse->get_sondes_exprimees($dbh, $ids_sondes_ok, $seuil_dabg);
+		my $ref_sondes = $analyse->get_sondes_exprimees(
+			$dbh,
+			$ids_sondes_ok,
+			$seuil_dabg
+		);
 
 		# On récupère le nombre de sondes
-		my $nb_sondes = scalar(@sondes);
+		my $nb_sondes = @{$ref_sondes};
 
 		# Si il n'y a pas trois sondes exprimées on zappe
 		next if($nb_sondes < $nb_sondes_min_entite);
@@ -228,7 +232,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# On récupère les SIs des sondes
 		my $ref_SIs_sondes = $analyse->sis_sondes(
 			\@fcs_gene,
-			$analyse->fcs_sondes(\@sondes)
+			$analyse->fcs_sondes($ref_sondes)
 		);
 
 		# ==============================================================
@@ -255,7 +259,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# On calcule l'expression de l'entité
-		my @expr = $analyse->expressions(\@sondes);
+		my @expr = $analyse->expressions($ref_sondes);
 
 		# On initialise les valeurs du psi
 		my $psi_control;

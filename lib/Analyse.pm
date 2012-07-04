@@ -241,7 +241,7 @@ sub get_sondes_exprimees{
 
 	}
 
-	return @sondes;	
+	return \@sondes;	
 
 }
 
@@ -288,32 +288,34 @@ sub lissage{
 
 	foreach my $paire (@{$this->{'design'}}){
 
-		my @sondes_lisses_cont_rep = $paire->{'cont'}->lissage(
+		my $sondes_lisses_cont_rep = $paire->{'cont'}->lissage(
 			$ref_sondes,
 			$ref_func_aggr
 		);
 
-		my @sondes_lisses_test_rep = $paire->{'test'}->lissage(
+		my $sondes_lisses_test_rep = $paire->{'test'}->lissage(
 			$ref_sondes,
 			$ref_func_aggr
 		);
 
 		@sondes_lisses_cont = inter(
 			\@sondes_lisses_cont,
-			\@sondes_lisses_cont_rep
+			$sondes_lisses_cont_rep
 		);
 
 		@sondes_lisses_test = inter(
 			\@sondes_lisses_test,
-			\@sondes_lisses_test_rep
+			$sondes_lisses_test_rep
 		);
 
 	}
 
-	return $ref_func_aggr->(
+	my @aggr = $ref_func_aggr->(
 		\@sondes_lisses_cont,
 		\@sondes_lisses_test
 	);
+
+	return \@aggr;
 
 }
 
