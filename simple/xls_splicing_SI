@@ -128,11 +128,10 @@ my $couleur_mauv_fc_odd		= $xlsh->set_custom_color(45, 255, 102, 102);
 my $couleur_mauv_fc_even	= $xlsh->set_custom_color(46, 255, 71, 71);
 
 # Formats
-my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
-my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
-my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
 my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_entete_merge		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
 my $format_up_odd		= $xlsh->add_format(color => 'black', bg_color => $couleur_up_odd, border => 1, border_color => 'black', center_across => 1);
 my $format_up_even		= $xlsh->add_format(color => 'black', bg_color => $couleur_up_even, border => 1, border_color => 'black', center_across => 1);
 my $format_down_odd		= $xlsh->add_format(color => 'black', bg_color => $couleur_down_odd, border => 1, border_color => 'black', center_across => 1);

@@ -147,7 +147,7 @@ push(@fields_splicing, 'psi_pval DECIMAL(12,10) UNSIGNED NOT NULL') if($paire);
 push(@fields_splicing, 'nb_sondes SMALLINT UNSIGNED NOT NULL');
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_splicing);
-$dbh->do('CREATE TABLE ' . $table_splicing . ' (' . join(', ', @fields_splicing) . ')');
+$dbh->do('CREATE TABLE ' . $table_splicing . ' (' . join(', ', @fields_splicing) . ', INDEX (id_gene))');
 
 my $insert_entite_sth = $dbh->prepare(
 	"INSERT INTO $table_splicing VALUES(" . join(', ', ('?')x@fields_splicing) . ")"

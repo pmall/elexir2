@@ -110,11 +110,10 @@ my $couleur_up			= $xlsh->set_custom_color(40, 255, 204, 153);
 my $couleur_down		= $xlsh->set_custom_color(41, 204, 255, 204);
 
 # On définit les format d'affichage
-my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
-my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
-my $format_cell_no_center	= $xlsh->add_format(color => 'black', bold => 0);
 my $format_entete		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
 my $format_entete_merge		= $xlsh->add_format(color => 'black', bold => 1, bg_color => $couleur_entete, border => 2, border_color => 'black', center_across => 1);
+my $format_resume_titre		= $xlsh->add_format(color => 'black', bold => 1, center_across => 1);
+my $format_cell_center		= $xlsh->add_format(color => 'black', bold => 0, center_across => 1);
 my $format_up			= $xlsh->add_format(color => 'black', bg_color => $couleur_up, border => 1, border_color => 'black', center_across => 1);
 my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_down, border => 1, border_color => 'black', center_across => 1);
 

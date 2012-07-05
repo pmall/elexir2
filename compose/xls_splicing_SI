@@ -84,6 +84,10 @@ make_path($dir_sortie);
 # On se connecte a fasterdb
 # ==============================================================================
 
+my $select_nb_entites_total_sth = $dbh->prepare(
+	"SELECT COUNT(*) FROM $table_splicing"
+);
+
 my $select_entites_sth = $dbh->prepare(
 	"SELECT * FROM $table_splicing
 	WHERE ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
@@ -183,9 +187,17 @@ my @entites_ba_up = grep { $_->{'SI_ba'} >= 1 } @entites;
 my @entites_ba_down = grep { $_->{'SI_ba'} < 1 } @entites;
 
 # On écrit ces deux listes d'entités, chacune dans la feuille appropriée
-write_list($f_up, @entites_ba_up);
-write_list($f_down, @entites_ba_down);
+my($nb_ups_renforces, $nb_ups_affaiblits) = write_list(
+	$f_up,
+	@entites_ba_up
+);
 
+my($nb_downs_renforces, $nb_downs_affaiblits) = write_list(
+	$f_down,
+	@entites_ba_down
+);
+
+# Fonction pour remplir une feuille
 sub write_list{
 
 	my($f, @entites) = @_;
@@ -273,6 +285,10 @@ sub write_list{
 
 	}
 
+	# On compte les renforcés et les affaiblit
+	my $nb_renforces = 0;
+	my $nb_affaiblits = 0;
+
 	# On classe les entites
 	@entites = sort {
 		# déjà on classe par fc fort/fc faible
@@ -344,11 +360,13 @@ sub write_list{
 
 				$reg_oj = 'Renforce';
 				$format = $format_up_odd;
+				$nb_renforces++;
 
 			}else{
 
 				$reg_oj = 'Affaiblit';
 				$format = $format_down_odd;
+				$nb_affaiblits++;
 
 			}
 
@@ -358,11 +376,13 @@ sub write_list{
 
 				$reg_oj = 'Affaiblit';
 				$format = $format_down_odd;
+				$nb_affaiblits++;
 
 			}else{
 
 				$reg_oj = 'Renforce';
 				$format = $format_up_odd;
+				$nb_renforces++;
 
 			}
 
@@ -427,22 +447,37 @@ sub write_list{
 
 	}
 
+	return($nb_renforces, $nb_affaiblits);
+
 }
 
 # ==============================================================================
-# On écrit le nombre d'entités up/down
+# On écrit la page de résumé
 # ==============================================================================
 
-$f_resume->set_column(5, 5, 30);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(9, 9, 13);
-$f_resume->set_column(11, 11, 18);
+$select_nb_entites_total_sth->execute;
+my($nb_entites_total) = $select_nb_entites_total_sth->fetchrow_array;
+$select_nb_entites_total_sth->finish;
 
-$f_resume->write($num_ligne++, 5, "Resultats", $format_resume_titre);
-$num_ligne++;
-$f_resume->write($num_ligne, 5, "Entités regules", $format_cell_center);
-$f_resume->write($num_ligne, 6, $nb_ups + $nb_downs, $format_cell_center);
-$f_resume->write($num_ligne, 7, "Entités up", $format_cell_center);
-$f_resume->write($num_ligne, 8, $nb_ups, $format_cell_center);
-$f_resume->write($num_ligne, 9, "Entités down", $format_cell_center);
-$f_resume->write($num_ligne, 10, $nb_downs, $format_cell_center);
+my $nb_renforces = $nb_ups_renforces + $nb_downs_renforces;
+my $nb_affaiblits = $nb_ups_affaiblits + $nb_downs_affaiblits;
+my $nb_regules = $nb_renforces + $nb_affaiblits;
+
+$f_resume->set_column(0, 0, 30);
+$f_resume->write(0, 0, date(), $format_cell_center);
+$f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
+$f_resume->write(3, 0, "Seuil fold B/A", $format_cell_center);
+$f_resume->write(3, 1, round($seuil_epissage, 2), $format_cell_center);
+$f_resume->write(4, 0, "Seuil effet O/J", $format_cell_center);
+$f_resume->write(4, 1, round($seuil_epissage_j_vs_o, 2), $format_cell_center);
+$f_resume->write(5, 0, "Seuil p-value", $format_cell_center);
+$f_resume->write(5, 1, $seuil_pval, $format_cell_center);
+$f_resume->write(7, 0, "Resultats", $format_resume_titre);
+$f_resume->write(8, 0, "Entites exprimees", $format_cell_center);
+$f_resume->write(8, 1, $nb_entites_total, $format_cell_center);
+$f_resume->write(9, 0, "Entites regulees", $format_cell_center);
+$f_resume->write(9, 1, $nb_regules, $format_cell_center);
+$f_resume->write(10, 0, "Entites renforcees", $format_cell_center);
+$f_resume->write(10, 1, $nb_renforces, $format_cell_center);
+$f_resume->write(11, 0, "Entites affaiblies", $format_cell_center);
+$f_resume->write(11, 1, $nb_affaiblits, $format_cell_center);
