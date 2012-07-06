@@ -81,6 +81,10 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_nb_genes_total_sth = $dbh->prepare(
+	"SELECT COUNT(*) FROM $table_genes"
+);
+
+my $select_nb_genes_exp_sth = $dbh->prepare(
 	"SELECT COUNT(*) FROM $table_trans"
 );
 
@@ -354,6 +358,10 @@ $select_nb_genes_total_sth->execute;
 my($nb_genes_total) = $select_nb_genes_total_sth->fetchrow_array;
 $select_nb_genes_total_sth->finish;
 
+$select_nb_genes_exp_sth->execute;
+my($nb_genes_exp) = $select_nb_genes_exp_sth->fetchrow_array;
+$select_nb_genes_exp_sth->finish;
+
 my $nb_renforces = $nb_ups_renforces + $nb_downs_renforces;
 my $nb_affaiblits = $nb_ups_affaiblits + $nb_downs_affaiblits;
 my $nb_regules = $nb_renforces + $nb_affaiblits;
@@ -368,11 +376,13 @@ $f_resume->write(4, 1, round($seuil_trans_j_vs_o, 2), $format_cell_center);
 $f_resume->write(5, 0, "Seuil p-value", $format_cell_center);
 $f_resume->write(5, 1, $seuil_pval, $format_cell_center);
 $f_resume->write(7, 0, "Resultats", $format_resume_titre);
-$f_resume->write(8, 0, "Genes exprimes", $format_cell_center);
+$f_resume->write(8, 0, "Genes total", $format_cell_center);
 $f_resume->write(8, 1, $nb_genes_total, $format_cell_center);
-$f_resume->write(9, 0, "Genes regules", $format_cell_center);
-$f_resume->write(9, 1, $nb_regules, $format_cell_center);
-$f_resume->write(10, 0, "Genes renforces", $format_cell_center);
-$f_resume->write(10, 1, $nb_renforces, $format_cell_center);
+$f_resume->write(9, 0, "Genes exprimes", $format_cell_center);
+$f_resume->write(9, 1, $nb_genes_exp, $format_cell_center);
+$f_resume->write(10, 0, "Genes regules", $format_cell_center);
+$f_resume->write(10, 1, $nb_regules, $format_cell_center);
+$f_resume->write(11, 0, "Genes renforces", $format_cell_center);
+$f_resume->write(11, 1, $nb_renforces, $format_cell_center);
 $f_resume->write(11, 0, "Genes affaiblis", $format_cell_center);
 $f_resume->write(11, 1, $nb_affaiblits, $format_cell_center);

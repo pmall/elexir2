@@ -85,6 +85,10 @@ make_path($dir_sortie);
 # ==============================================================================
 
 my $select_nb_entites_total_sth = $dbh->prepare(
+	"SELECT COUNT(*) FROM $table_entites WHERE type != 'intron'"
+);
+
+my $select_nb_entites_exp_sth = $dbh->prepare(
 	"SELECT COUNT(*) FROM $table_splicing"
 );
 
@@ -411,6 +415,10 @@ $select_nb_entites_total_sth->execute;
 my($nb_entites_total) = $select_nb_entites_total_sth->fetchrow_array;
 $select_nb_entites_total_sth->finish;
 
+$select_nb_entites_exp_sth->execute;
+my($nb_entites_exp) = $select_nb_entites_exp_sth->fetchrow_array;
+$select_nb_entites_exp_sth->finish;
+
 $f_resume->set_column(0, 0, 30);
 $f_resume->write(0, 0, date(), $format_cell_center);
 $f_resume->write(2, 0, "Parametres utilises", $format_resume_titre);
@@ -419,11 +427,13 @@ $f_resume->write(3, 1, round($seuil_epissage, 2), $format_cell_center);
 $f_resume->write(4, 0, "Seuil p-value", $format_cell_center);
 $f_resume->write(4, 1, $seuil_pval, $format_cell_center);
 $f_resume->write(6, 0, "Resultats", $format_resume_titre);
-$f_resume->write(7, 0, "Entites exprimees", $format_cell_center);
+$f_resume->write(7, 0, "Entites total", $format_cell_center);
 $f_resume->write(7, 1, $nb_entites_total, $format_cell_center);
-$f_resume->write(8, 0, "Entites regules", $format_cell_center);
-$f_resume->write(8, 1, $nb_ups + $nb_downs, $format_cell_center);
-$f_resume->write(9, 0, "Entites up", $format_cell_center);
-$f_resume->write(9, 1, $nb_ups, $format_cell_center);
-$f_resume->write(10, 0, "Entites down", $format_cell_center);
-$f_resume->write(10, 1, $nb_downs, $format_cell_center);
+$f_resume->write(8, 0, "Entites exprimees", $format_cell_center);
+$f_resume->write(8, 1, $nb_entites_exp, $format_cell_center);
+$f_resume->write(9, 0, "Entites regules", $format_cell_center);
+$f_resume->write(9, 1, $nb_ups + $nb_downs, $format_cell_center);
+$f_resume->write(10, 0, "Entites up", $format_cell_center);
+$f_resume->write(10, 1, $nb_ups, $format_cell_center);
+$f_resume->write(11, 0, "Entites down", $format_cell_center);
+$f_resume->write(11, 1, $nb_downs, $format_cell_center);
