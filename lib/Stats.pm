@@ -8,45 +8,39 @@ use lib $FindBin::Bin;
 use Math;
 use Exporter qw(import);
 
-our @EXPORT = qw(ttest adjust_pvals);
+our @EXPORT = qw(somme_fisher ttest adjust_pvals);
 
 # ==============================================================================
-# Fonction ttest
+# Somme les p values de la liste passé en parametre selon la méthode de fisher
 # ==============================================================================
 
-=head
-# Effectue un ttest à partir d'une valeur moyenne/mediane/whatever et de la
-# liste des échantillons qui a permi de calculer cette valeur
-sub ttest{
+sub somme_fisher{
 
-	my($R, $value, @samples) = @_;
+	my($ref_pvalues) = @_;
 
-	# Si toutes les valeurs des samples sont identique, on en incrémente 1
-	# de 0.01 (sinon R ne veut pas faire le test)
-	if(uniq(@samples) == 1){ $samples[0]+= 0.01; }
+	# On somme les pvalues selon la méthode de fisher (suit une loi X²)
+	my $sum_logs = 0;
 
-	# On initialise les variables pour le test
-	my $mu = 0;
-	my $alternative = ($value > 0) ? "greater" : "less";
+	foreach(@{$ref_pvalues}){ $sum_logs+= log($_); }
 
-	# On calcule la p_value avec R
-	$R->send('x <- c(' . join(', ', @samples) . ');');
-	$R->send('test<-t.test(x, mu=' . $mu . ', alternative="' . $alternative . '"); print(1);');
-	$R->send('print(test$p.value);');
-	my $out = $R->read;
-	my @outs = split(/ /, $out);
-	my $p_value = $outs[1];
+	my $t = -2 * $sum_logs;
 
-	# On clean les objets de R
-	$R->clean_up;
+	# Nombre de degrés de liberté pour ce nombre de pvalues
+	my $df = 2 * @{$ref_pvalues};
 
-	return $p_value;
+	# On calcule la prob qu'une loi de X² à df degré de liberté soit
+	# supérieur à t
+	my $pvalue = Statistics::Distributions::chisqrprob($df, $t);
+
+	return $pvalue;
 
 }
-=cut
 
+# ==============================================================================
 # Effectue un ttest à partir d'une valeur moyenne/mediane/whatever et de la
 # liste des échantillons qui a permi de calculer cette valeur
+# ==============================================================================
+
 sub ttest{
 
 	my($ref_samples, $alternative) = @_;
@@ -73,15 +67,15 @@ sub ttest{
 
 	# On recherche la proba d'avoir une valeur t plus élevée pour
 	# ce degré de liberté == alternative greater
-	my $t_prob = Statistics::Distributions::tprob(@{$ref_samples} - 1, $t);
+	my $pvalue = Statistics::Distributions::tprob(@{$ref_samples} - 1, $t);
 
 	# Selon l'alternative demandé on calcule la pvalue
 	# greater on laisse tel quel
-	if($alternative eq 'lesser'){ $t_prob = 1 - $t_prob; }
-	if($alternative eq 'twosided'){ $t_prob = 2*$t_prob }
+	if($alternative eq 'lesser'){ $pvalue = 1 - $pvalue; }
+	if($alternative eq 'twosided'){ $pvalue = 2 * $pvalue; }
 
 	# On retourne la p value
-	return $t_prob;
+	return $pvalue;
 
 }
 

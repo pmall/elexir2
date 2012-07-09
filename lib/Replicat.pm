@@ -4,6 +4,7 @@ use warnings;
 use FindBin qw($Bin);
 use lib $FindBin::Bin;
 use Math;
+use Stats;
 use Utils;
 
 sub new{
@@ -32,6 +33,28 @@ sub dabg{
 	}
 
 	return ($nb_exp > (@{$ref_samples}/2));
+
+}
+
+sub dabg_global{
+
+	my($ref_samples, $ref_sondes, $seuil) = @_;
+
+	my $nb_exp = 0;
+
+	foreach my $sample (@{$ref_samples}){
+
+		my @liste_dabg_sample = map {
+			$_->{$sample}/10000
+		} @{$ref_sondes};
+
+		my $p_value = somme_fisher(\@liste_dabg_sample);
+
+		$nb_exp++ if($p_value > $seuil);
+
+	}
+
+	return($nb_exp > (@{$ref_samples}/2));
 
 }
 

@@ -85,7 +85,9 @@ sub get_analyse{
 	my $paires = [];
 
 	# Selon que l'analyse soit simple ou composée, ça change...
-	if($infos_analyse->{'type'} eq 'simple'){
+	my @types_simples = ('simple', 'apriori');
+
+	if($infos_analyse->{'type'} ~~ @types_simples){
 
 		# Pour chaque paire de replicat
 		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
@@ -204,12 +206,13 @@ sub get_select_intensites{
 }
 
 # ==============================================================================
-# Retourne la liste des sondes exprimées à partir d'une liste d'infos de sondes
+# Retourne la matrice des intensités des sondes exprimées à partir d'une liste
+# d'identifiants de sondes
 # ==============================================================================
 
 sub get_sondes_exprimees{
 
-	my($this, $dbh, $ref_ids_sondes, $seuil_dabg) = @_;
+	my($this, $dbh, $ref_ids_sondes, $seuil) = @_;
 
 	# On récupère les requetes préparées si elles le sont pas déjà dans
 	# le cache
@@ -227,7 +230,7 @@ sub get_sondes_exprimees{
 		$select_dabg_sth->finish;
 
 		# Si la sonde est exprimée
-		if($this->dabg($dabg, $seuil_dabg)){
+		if($this->dabg($dabg, $seuil)){
 
 			# On va chercher ses intensites
 			$select_intensites_sth->execute($probe_id);
@@ -242,6 +245,57 @@ sub get_sondes_exprimees{
 	}
 
 	return \@sondes;	
+
+}
+
+# ==============================================================================
+# Retourne la matrice des intensités des sondes exprimées à partir d'une liste
+# d'identifiants de sonde en les traitant globalement.
+# Cad si on passe la liste des sondes d'une entité :
+# => matrice des intensités de toutes les sondes si l'entité est exprimée
+# => matrice vide si elle n'est pas exprimée
+# ==============================================================================
+
+sub get_sondes_exprimees_global{
+
+	my($this, $dbh, $ref_ids_sondes, $seuil) = @_;
+
+	# On récupère les requetes préparées si elles le sont pas déjà dans
+	# le cache
+	my $select_dabg_sth = $this->get_select_dabg($dbh);
+	my $select_intensites_sth = $this->get_select_intensites($dbh);
+
+	# On récupère tous les dabg des sondes
+	my @liste_dabg = ();
+
+	foreach my $probe_id (@{$ref_ids_sondes}){
+
+		$select_dabg_sth->execute($probe_id);
+		my $dabg = $select_dabg_sth->fetchrow_hashref;
+		$select_dabg_sth->finish;
+
+		push(@liste_dabg, $dabg);
+
+	}
+
+	# Si les sondes ne sont pas globalement exprimées on retourne une liste
+	# vide
+	return [] if(!$this->dabg_global(\@liste_dabg, $seuil));
+
+	# Sinon on récupère et retourne toutes les intensités
+	my @sondes = ();
+
+	foreach my $probe_id (@{$ref_ids_sondes}){
+
+		$select_intensites_sth->execute($probe_id);
+		my $sonde = $select_intensites_sth->fetchrow_hashref;
+		$select_intensites_sth->finish;
+
+		push(@sondes, $sonde);
+
+	}
+
+	return \@sondes;
 
 }
 
@@ -266,6 +320,36 @@ sub dabg{
 		# si elle est exprimé dans test
 		$nb_exp_cont++ if($paire->{'cont'}->dabg($sonde, $seuil));
 		$nb_exp_test++ if($paire->{'test'}->dabg($sonde, $seuil));
+
+	}
+
+	# Si exprimée dans la moitié des reps controle ou la moitié des
+	# reps test, on retourne true
+	return ($nb_exp_cont > ($nb_paires_rep/2) or $nb_exp_test > ($nb_paires_rep/2));
+
+}
+
+# ==============================================================================
+# Retourne vrai si le groupe de sonde passe le seuil du dabg dans au moins la
+# moitié des puces d'au moins une condition
+# ==============================================================================
+
+sub dabg_global{
+
+	my($this, $ref_sondes, $seuil) = @_;
+
+	# On calcule combien de reps controle et de rep tests sont exprimés
+	my $nb_paires_rep = @{$this->{'design'}};
+	my $nb_exp_cont = 0;
+	my $nb_exp_test = 0;
+
+	# Pour chaque paire de replicats
+	foreach my $paire (@{$this->{'design'}}){
+
+		# On calcule si la sonde est exprimée dans controle et
+		# si elle est exprimé dans test
+		$nb_exp_cont++ if($paire->{'cont'}->dabg_global($ref_sondes, $seuil));
+		$nb_exp_test++ if($paire->{'test'}->dabg_global($ref_sondes, $seuil));
 
 	}
 
