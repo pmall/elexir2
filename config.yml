@@ -65,6 +65,14 @@ table_entites:
     human: humain_fdb2_entites
     mouse: souris_fdb2_entites
 
+table_ase:
+  fdb1:
+    human: humain_fdb1_ase
+    mouse: souris_fdb1_ase
+  fdb2:
+    human: humain_fdb2_ase
+    mouse: souris_fdb2_ase
+
 table_sondes:
   exon:
     fdb1:
@@ -113,3 +121,10 @@ compose:
     seuil_epissage_j_vs_o: 1.2 # En base 10 !
     seuil_pval: 0.05
     seuil_fc_gene: 2
+
+apriori:
+  gc_max: 17
+  nb_occ_max: 1
+  seuil_dabg: 0.05
+  nb_sondes_min_ase: 3
+  nb_sondes_min_flanquants: 6

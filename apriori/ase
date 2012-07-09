@@ -1,0 +1,329 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use YAML::XS qw(LoadFile);
+use DBI;
+use List::MoreUtils qw(uniq);
+use FindBin qw($Bin);
+use lib $FindBin::Bin . '/../lib';
+use Format;
+use Utils;
+use Analyse;
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+my $limit = shift @ARGV // 18446744073709551615; # Si pas indiqué, on met maxint /
+
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
+
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Parametres pour l'analyse
+my $gc_max = $config->{'apriori'}{'gc_max'};
+my $nb_occ_max = $config->{'apriori'}{'nb_occ_max'};
+my $seuil_dabg = $config->{'apriori'}{'seuil_dabg'};
+my $nb_sondes_min_ase = $config->{'apriori'}{'nb_sondes_min_ase'};
+my $nb_sondes_min_flanquants = $config->{'apriori'}{'nb_sondes_min_flanquants'};
+
+# ==============================================================================
+# On récupère les infos de l'exp
+# ==============================================================================
+
+# On se connecte a elexir
+my $dbh = DBI->connect(
+	'DBI:mysql:' . $db_name . ':' . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# On récupère les infos de l'analyse
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
+
+# Message d'erreur si l'analyse n'existe pas
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
+
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($analyse->{'type'} ne 'apriori'){
+
+	die('Le script apriori ne fonctionne que sur les analyses apriori :o)');
+
+}
+
+# ==============================================================================
+# On crée les noms de table dont on a besoin
+# ==============================================================================
+
+my $id_projet = $analyse->{'id_project'};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
+
+my $table_ase = $config->{'table_ase'}{$version}{$orga};
+my $table_sondes = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
+my $table_dabg = get_table_dabg($id_projet);
+my $table_intensites = get_table_intensites($id_projet);
+my $table_ase_apriori = get_table_ase_apriori($id_projet, $id_analyse);
+
+# ==============================================================================
+# On prépare les requètes avec ces infos
+# ==============================================================================
+
+# On selectionne les ase
+my $select_ase_sth = $dbh->prepare(
+	"SELECT gene_id, exon_pos FROM $table_ase LIMIT ?"
+);
+
+# On selectionne les sondes d'un gène
+my $select_infos_sondes_sth = $dbh->prepare(
+	"SELECT probe_id, nb_occ, gc_content
+	FROM " . $table_sondes . "
+	WHERE entite_type = 1
+	AND utiliser_dans_analyse = 1
+	AND gene_id = ?
+	AND exon_pos = ?"
+);
+
+# On selectionne le dabg d'une sonde
+my $select_dabg_sth = $dbh->prepare(
+	"SELECT * FROM " . $table_dabg . " WHERE probe_id = ?"
+);
+
+# On selectionne l'intensité d'une sonde
+my $select_intensite_sth = $dbh->prepare(
+	"SELECT * FROM " . $table_intensites . " WHERE probe_id = ?"
+);
+
+# ==============================================================================
+# On crée la table qui contient les valeurs des gène
+# ==============================================================================
+
+my @fields_si = ();
+
+for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+	push(@fields_si, 'SI' . ($i + 1));
+
+}
+
+my @fields_ase = (
+	'id_gene INT UNSIGNED NOT NULL PRIMARY KEY',
+	'id_entite INT UNSIGNED NOT NULL',
+	'pos_exon SMALLINT UNSIGNED NOT NULL',
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_si),
+	'SI DECIMAL(10,5) UNSIGNED NOT NULL',
+	'nb_sondes SMALLINT UNSIGNED NOT NULL'
+);
+
+$dbh->do('DROP TABLE IF EXISTS ' . $table_ase_apriori);
+$dbh->do('CREATE TABLE ' . $table_ase_apriori . ' (' . join(', ', @fields_ase) . ')');
+
+my $insert_gene_sth = $dbh->prepare(
+	"INSERT INTO $table_ase_apriori VALUES(" . join(', ', ('?')x@fields_ase) . ")"
+);
+
+# ==============================================================================
+# On début l'algo, pour chaque ase
+# ==============================================================================
+
+print 'Analyse des ase' . "\n";
+
+# On selectionne les gènes
+$select_ase_sth->execute($limit);
+
+# Pour chaque gène
+while(my($id_gene, $pos_exon) = $select_ase_sth->fetchrow_array){
+
+	# ======================================================================
+	# On récupère les intensités des sondes de l'exon skippé
+	# ======================================================================
+
+	# On récupère les infos des sondes
+	$select_infos_sondes_sth->execute($id_gene, $pos_exon);
+	my $infos_sondes_skipped = $select_infos_sondes_sth->fetchall_hashref('probe_id');
+	$select_infos_sondes_sth->finish;
+
+	# Si le gène a moins de six sondes on zappe ça sert a rien
+	next if(scalar(keys %{$infos_sondes_skipped}) < $nb_sondes_min_ase);
+
+	# On vire les sondes qui ont pas les bonnes caractéristiques
+	my $ids_probes_ok_skipped = [grep {
+		# ON VIRE LES SONDES AVEC UN GC <= 2 PARCE QU'ON A PAS PU
+		# CALCULER LEUR DABG AVEC APT :((
+		$infos_sondes_skipped->{$_}->{'gc_content'} > 2
+		and
+		$infos_sondes_skipped->{$_}->{'nb_occ'} <= $nb_occ_max
+		and
+		$infos_sondes_skipped->{$_}->{'gc_content'} <= $gc_max
+	} keys %{$infos_sondes_skipped}];
+
+	# Si l'exon a moins de trois sondes avec de bon critères on zappe
+	next if(@{$ids_probes_ok_skipped} < $nb_sondes_min_ase);
+
+	# On récupère les sondes exprimées
+	my $ref_sondes_skipped = $analyse->get_sondes_exprimees(
+		$dbh,
+		$ids_probes_ok_skipped,
+		$seuil_dabg
+	);
+
+	# Si il n'y a pas trois sondes on zappe
+	next if(@{$ref_sondes_skipped} < $nb_sondes_min_ase);
+
+	# ======================================================================
+	# On récupère les intensités des sondes de l'exon flanquant
+	# ======================================================================
+
+	# On récupère les infos des sondes de l'exon précédent
+	$select_infos_sondes_sth->execute($id_gene, $pos_exon - 1);
+	my $infos_sondes_prec = $select_infos_sondes_sth->fetchall_hashref('probe_id');
+	$select_infos_sondes_sth->finish;
+
+	# On récupère les infos des sondes de l'exon suivant
+	$select_infos_sondes_sth->execute($id_gene, $pos_exon + 1);
+	my $infos_sondes_suiv = $select_infos_sondes_sth->fetchall_hashref('probe_id');
+	$select_infos_sondes_sth->finish;
+
+	# Si il y a moins de 6 sondes on zappe
+	my $nb_sondes_prec = scalar(keys %{$infos_sondes_prec});
+	my $nb_sondes_suiv = scalar(keys %{$infos_sondes_suiv});
+
+	next if($nb_sondes_prec + $nb_sondes_suiv < $nb_sondes_min_ase);
+
+	# On mixe les infos des sondes de l'exon suiv et de l'exon prec
+	my $infos_sondes_flanquants = {
+		%{$infos_sondes_prec},
+		%{$infos_sondes_suiv}
+	};
+
+	# On vire les sondes qui ont pas les bonnes caractéristiques
+	my $ids_probes_ok_flanquants = [grep {
+		# ON VIRE LES SONDES AVEC UN GC <= 2 PARCE QU'ON A PAS PU
+		# CALCULER LEUR DABG AVEC APT :((
+		$infos_sondes_flanquants->{$_}->{'gc_content'} > 2
+		and
+		$infos_sondes_flanquants->{$_}->{'nb_occ'} <= $nb_occ_max
+		and
+		$infos_sondes_flanquants->{$_}->{'gc_content'} <= $gc_max
+	} keys %{$infos_sondes_flanquants}];
+
+	# Si les exons flanquants ont moins de six avec de bon critères on zappe
+	next if(@{$ids_probes_ok_flanquants} < $nb_sondes_min_flanquants);
+
+	# On récupère les sondes exprimées
+	my $ref_sondes_flanquants = $analyse->get_sondes_exprimees(
+		$dbh,
+		$ids_probes_ok_flanquants,
+		$seuil_dabg
+	);
+
+	# Si il n'y a pas six sondes on zappe
+	next if(@{$ref_sondes_flanquants} < $nb_sondes_min_flanquants);
+
+	# On regroupe les infos des sondes du skipped et des flanquants
+	my $infos_sondes = {
+		%{$infos_sondes_skipped},
+		%{$infos_sondes_flanquants}
+	};
+
+	print $id_gene . ' ' . $pos_exon . "\n";
+
+=head
+	# ======================================================================
+	# Etape de lissage pour la transcription
+	# ======================================================================
+
+	# On selectionne les sondes qui passe le lissage transcription
+	my $ref_sondes_trans = $analyse->lissage_transcription($ref_sondes);
+
+	# Si il n'y a pas six sondes ça sert a rien de continuer pour ce gène
+	next if(@{$ref_sondes_trans} < $nb_sondes_min_gene);
+
+	# ======================================================================
+	# Calcul de l'expression de gène
+	# ======================================================================
+
+	my @expr = $analyse->expressions($ref_sondes);
+
+	# ======================================================================
+	# Calcul des fold change et de la pvalue pour la transcription
+	# ======================================================================
+
+	# Calcul du fc du gène et de sa p_value
+	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(
+		$analyse->fcs_sondes($ref_sondes_trans)
+	);
+
+	# NB sondes utilisées pour la transcription
+	my $nb_sondes_trans = @{$ref_sondes_trans};
+
+	# NB exons cibles par des sondes lors de la transcription
+	my $nb_exons_trans = scalar(uniq(map {
+		$infos_sondes->{$_->{'probe_id'}}->{'exon_pos'}
+	} @{$ref_sondes_trans}));
+
+	# ======================================================================
+	# Analyse au niveau de l'épissage
+	# ======================================================================
+
+	# On déclare les valeurs d'épissage
+	my @fcs_gene_epissage = (undef)x$nb_paires_rep;
+
+	# ======================================================================
+	# On fait l'épissage seulement si le gène est homogène
+	# ======================================================================
+
+	# Si le gène est homogène on calcule les valeurs d'épissage
+	my $homogene = homogene($infos_sondes, $ref_sondes, $nb_exons);
+
+	if($homogene){
+
+		# ==============================================================
+		# Etape de lissage pour l'épissage
+		# ==============================================================
+
+		# On selectionne les sondes qui passe le lissage de l'épissage
+		my $ref_sondes_epissage = $analyse->lissage_epissage(
+			$ref_sondes
+		);
+
+		# Seulement si on a plus de 6 sondes épissage
+		if(@{$ref_sondes_epissage} >= $nb_sondes_min_gene){
+
+			# ======================================================
+			# Calcul des fold change du gène par replicat
+			# ======================================================
+
+			# Calcul du fc du gène et de sa p_value
+			@fcs_gene_epissage = rep_effect(
+				$analyse->fcs_sondes($ref_sondes_epissage)
+			);
+
+		}
+
+	}
+
+	# ======================================================================
+	# On ajoute le gène dans la table
+	# ======================================================================
+
+	$insert_gene_sth->execute(
+		$id_gene,
+		@expr,
+		$fc_gene_trans,
+		$p_value_trans,
+		$nb_sondes_trans,
+		$nb_exons_trans,
+		@fcs_gene_epissage
+	);
+=cut
+}
