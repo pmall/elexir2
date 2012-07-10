@@ -290,6 +290,8 @@ sub write_list{
 	}
 
 	# On compte les renforcés et les affaiblit
+	my $num_gene = 0;
+	my $id_gene_prec = 0;
 	my $nb_renforces = 0;
 	my $nb_affaiblits = 0;
 
@@ -322,6 +324,15 @@ sub write_list{
 		my $infos_entite = $select_infos_entite_sth->fetchrow_hashref;
 		$select_infos_entite_sth->finish;
 
+		# On compte combien de gènes sont passés
+		if($infos_gene->{'id_fasterdb'} != $id_gene_prec){
+
+			$num_genes++;
+
+			$id_gene_prec = $infos_gene->{'id_fasterdb'};
+
+		}
+
 		# on formatte les infos
 		$infos_gene->{'description'} =~ s/\[.+\]$//;
 
@@ -351,7 +362,7 @@ sub write_list{
 
 		}
 
-		# On défini les régulations
+		# On défini les régulations et le format
 		my $reg_ba = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
 		my $reg_dc = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
 		my $reg_oj;
@@ -363,13 +374,17 @@ sub write_list{
 			if($entite->{'SI_oj'} >= 1){
 
 				$reg_oj = 'Renforce';
-				$format = $format_up_odd;
+				$format = ($num_genes % 2 == 0)
+					? $format_up_even
+					: $format_up_odd;
 				$nb_renforces++;
 
 			}else{
 
 				$reg_oj = 'Affaiblit';
-				$format = $format_down_odd;
+				$format = ($num_genes % 2 == 0)
+					? $format_down_even
+					: $format_down_odd;
 				$nb_affaiblits++;
 
 			}
@@ -379,13 +394,17 @@ sub write_list{
 			if($entite->{'SI_oj'} >= 1){
 
 				$reg_oj = 'Affaiblit';
-				$format = $format_down_odd;
+				$format = ($num_genes % 2 == 0)
+					? $format_down_even
+					: $format_down_odd;
 				$nb_affaiblits++;
 
 			}else{
 
 				$reg_oj = 'Renforce';
-				$format = $format_up_odd;
+				$format = ($num_genes % 2 == 0)
+					? $format_up_even
+					: $format_up_odd;
 				$nb_renforces++;
 
 			}
@@ -395,7 +414,9 @@ sub write_list{
 		# Si O/J est trop faible on lui donne un format spécial
 		if(format_fold($entite->{'SI_oj'}) < $seuil_epissage_j_vs_o){
 
-			$format = $format_mauv_fc_odd;
+			$format = ($num_genes % 2 == 0)
+				? $format_mauv_fc_even
+				: $format_mauv_fc_odd;
 
 		}
 

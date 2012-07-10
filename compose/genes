@@ -121,8 +121,11 @@ for(my $i = 0; $i < $nb_paires_rep; $i++){
 
 my @fields_trans = (
 	'id_gene INT UNSIGNED NOT NULL PRIMARY KEY',
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_ba),
 	'fc_ba DECIMAL(10,5) UNSIGNED NOT NULL',
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_dc),
 	'fc_dc DECIMAL(10,5) UNSIGNED NOT NULL',
+	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_oj),
 	'fc_oj DECIMAL(10,5) UNSIGNED NOT NULL',
 	'pval_ba DECIMAL(12,10) UNSIGNED NOT NULL',
 	'pval_dc DECIMAL(12,10) UNSIGNED NOT NULL',
@@ -132,10 +135,7 @@ my @fields_trans = (
 	'nb_sondes_oj SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_ba SMALLINT UNSIGNED NOT NULL',
 	'nb_exons_dc SMALLINT UNSIGNED NOT NULL',
-	'nb_exons_oj SMALLINT UNSIGNED NOT NULL',
-	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_ba),
-	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_dc),
-	(map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'} @fields_fc_oj)
+	'nb_exons_oj SMALLINT UNSIGNED NOT NULL'
 );
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_trans);
@@ -282,8 +282,11 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 
 	$insert_gene_sth->execute(
 		$id_gene,
+		@fcs_ba,
 		$fc_ba,
+		@fcs_dc,
 		$fc_dc,
+		@fcs_oj,
 		$fc_oj,
 		$p_value_ba,
 		$p_value_dc,
@@ -293,10 +296,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$nb_sondes_oj,
 		$nb_exons_ba,
 		$nb_exons_dc,
-		$nb_exons_oj,
-		@fcs_ba,
-		@fcs_dc,
-		@fcs_oj
+		$nb_exons_oj
 	);
 
 }
