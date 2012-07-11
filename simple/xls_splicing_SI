@@ -106,7 +106,7 @@ my $select_infos_gene_sth = $dbh->prepare(
 );
 
 my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT id, type, exon_pos, start_sur_gene, end_sur_gene
+	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene
 	FROM $table_entites
 	WHERE id = ?"
 );
@@ -156,20 +156,19 @@ $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Link
 $f->set_column(3, 3, 12); # Symbol
-$f->set_column(4, 4, 12); # Elexir id
-$f->set_column(5, 5, 12); # Type
-$f->set_column(18 + $o_si + $o_psi, 18 + $o_si + $o_psi, 24); # Description
-$f->set_column(19 + $o_si + $o_psi, 19 + $o_si + $o_psi, 24); # Coordonnées
+$f->set_column(4, 4, 12); # Type
+$f->set_column(17 + $o_si + $o_psi, 17 + $o_si + $o_psi, 24); # Description
+$f->set_column(18 + $o_si + $o_psi, 18 + $o_si + $o_psi, 24); # Coordonnées
 
-$f->set_column(26 + $o_si + $o_psi, 26 + $o_si + $o_psi, 18); # Coordonnées
-$f->set_column(27 + $o_si + $o_psi, 27 + $o_si + $o_psi, 18); # Sequence
+$f->set_column(25 + $o_si + $o_psi, 25 + $o_si + $o_psi, 18); # Coordonnées
+$f->set_column(26 + $o_si + $o_psi, 26 + $o_si + $o_psi, 18); # Sequence
 
 # On fait les premiers entetes
-$f->merge_range(0, 0, 0, 6, 'Infos Entite', $format_entete_merge);
-$f->merge_range(0, 8, 0, 11 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 13 + $o_si, 0, 16 + $o_si + $o_psi, 'Algo Psi', $format_entete_merge);
-$f->merge_range(0, 18 + $o_si + $o_psi, 0, 24 + $o_si + $o_psi, 'Infos gene', $format_entete_merge);
-$f->merge_range(0, 26 + $o_si + $o_psi, 0, 27 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 0, 0, 5, 'Infos Entite', $format_entete_merge);
+$f->merge_range(0, 7, 0, 10 + $o_si, 'Algo SI', $format_entete_merge);
+$f->merge_range(0, 12 + $o_si, 0, 15 + $o_si + $o_psi, 'Algo Psi', $format_entete_merge);
+$f->merge_range(0, 17 + $o_si + $o_psi, 0, 23 + $o_si + $o_psi, 'Infos gene', $format_entete_merge);
+$f->merge_range(0, 25 + $o_si + $o_psi, 0, 26 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
 my @entetes = ();
@@ -191,7 +190,6 @@ push(@entetes, 'Fasterdb ID');
 push(@entetes, 'Source ID');
 push(@entetes, 'Link Elexir');
 push(@entetes, 'Symbol');
-push(@entetes, 'Elexir ID');
 push(@entetes, 'Type');
 push(@entetes, 'Position');
 push(@entetes, ''); # Space
@@ -316,6 +314,14 @@ for(my $i = 0; $i < @entites; $i++){
 	my $pos_entite = $infos_entite->{'start_sur_gene'} .
 		'-' . $infos_entite->{'end_sur_gene'};
 
+	my $type_entite = $infos_entite->{'type'};
+
+	if($type_entite eq 'exon' and $infos_entite->{'sous_type'}){
+
+		$type_entite.= '/' . $infos_entite->{'sous_type'};
+
+	}
+
 	my $reg_gene = ($entite->{'trans_fc'} >= 1) ? 'up' : 'down';
 	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
 	my $reg_psi = ($entite->{'psi_fc'} >= 1) ? 'up' : 'down';
@@ -358,8 +364,7 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, $infos_gene->{'id_source'});
 	push(@data, 'blah');
 	push(@data, $infos_gene->{'symbol'});
-	push(@data, $infos_entite->{'id'});
-	push(@data, $infos_entite->{'type'});
+	push(@data, $type_entite);
 	push(@data, $infos_entite->{'exon_pos'});
 	push(@data, ''); # Space
 

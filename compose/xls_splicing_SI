@@ -102,7 +102,7 @@ my $select_infos_gene_sth = $dbh->prepare(
 );
 
 my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT id, type, exon_pos, start_sur_gene, end_sur_gene
+	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene
 	FROM $table_entites
 	WHERE id = ?"
 );
@@ -214,16 +214,15 @@ sub write_list{
 	$f->set_column(1, 1, 18); # Source id
 	$f->set_column(2, 2, 12); # Link
 	$f->set_column(3, 3, 12); # Symbol
-	$f->set_column(4, 4, 12); # Elexir id
-	$f->set_column(5, 5, 12); # Type
-	$f->set_column(7, 7, 18); # Coordonnées
-	$f->set_column(8, 8, 18); # Sequence
+	$f->set_column(4, 4, 12); # Type
+	$f->set_column(6, 6, 18); # Coordonnées
+	$f->set_column(7, 7, 18); # Sequence
 
 	# On fait les premiers entetes
-	$f->merge_range(0, 0, 0, 8, 'Infos Entite', $format_entete_merge);
-	$f->merge_range(0, 10, 0, 13 + $o_si, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 15 + $o_si, 0, 19 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 21 + ($o_si * 2), 0, 25 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 0, 0, 7, 'Infos Entite', $format_entete_merge);
+	$f->merge_range(0, 9, 0, 12 + $o_si, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 14 + $o_si, 0, 18 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 20 + ($o_si * 2), 0, 24 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
 
 	# On défini les entetes de chaque colonnes
 	my @entetes = ();
@@ -249,7 +248,6 @@ sub write_list{
 	push(@entetes, 'Source ID');
 	push(@entetes, 'Link Elexir');
 	push(@entetes, 'Symbol');
-	push(@entetes, 'Elexir ID');
 	push(@entetes, 'Type');
 	push(@entetes, 'Position');
 	push(@entetes, 'Coordonnees');
@@ -345,6 +343,14 @@ sub write_list{
 		my $pos_entite = $infos_entite->{'start_sur_gene'} .
 			'-' . $infos_entite->{'end_sur_gene'};
 
+		my $type_entite = $infos_entite->{'type'};
+
+		if($type_entite eq 'exon' and $infos_entite->{'sous_type'}){
+
+			$type_entite.= '/' . $infos_entite->{'sous_type'};
+
+		}
+
 		# On récupère les SIs des replicats
 		my @SIs_ba = ();
 		my @SIs_dc = ();
@@ -428,8 +434,7 @@ sub write_list{
 		push(@data, $infos_gene->{'id_source'});
 		push(@data, 'blah');
 		push(@data, $infos_gene->{'symbol'});
-		push(@data, $infos_entite->{'id'});
-		push(@data, $infos_entite->{'type'});
+		push(@data, $type_entite);
 		push(@data, $infos_entite->{'exon_pos'});
 		push(@data, $pos_entite);
 		push(@data, 'seq');
