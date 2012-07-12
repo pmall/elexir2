@@ -102,7 +102,7 @@ my $select_infos_gene_sth = $dbh->prepare(
 );
 
 my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene
+	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene, sequence
 	FROM $table_entites
 	WHERE id = ?"
 );
@@ -437,7 +437,7 @@ sub write_list{
 		push(@data, $type_entite);
 		push(@data, $infos_entite->{'exon_pos'});
 		push(@data, $pos_entite);
-		push(@data, 'seq');
+		push(@data, $infos_entite->{'sequence'});
 		push(@data, ''); # Space
 
 		# Algo SI B/A

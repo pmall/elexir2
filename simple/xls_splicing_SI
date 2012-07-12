@@ -106,7 +106,7 @@ my $select_infos_gene_sth = $dbh->prepare(
 );
 
 my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene
+	"SELECT type, sous_type, exon_pos, start_sur_gene, end_sur_gene, sequence
 	FROM $table_entites
 	WHERE id = ?"
 );
@@ -399,7 +399,7 @@ for(my $i = 0; $i < @entites; $i++){
 
 	# Infos Entité
 	push(@data, $pos_entite);
-	push(@data, 'seq');
+	push(@data, $infos_entite->{'sequence'});
 
 	# On affiche les data
 	for(my $j = 0; $j < @data; $j++){
