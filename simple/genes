@@ -204,7 +204,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# Calcul du fc du gène et de sa p_value
-	my($fc_gene_trans, $p_value_trans) = $analyse->fc_gene(
+	my($fc_gene_trans, $pvalue_trans) = $analyse->fc_gene(
 		$analyse->fcs_sondes($ref_sondes_trans)
 	);
 
@@ -265,7 +265,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$id_gene,
 		@expr,
 		$fc_gene_trans,
-		$p_value_trans,
+		$pvalue_trans,
 		$nb_sondes_trans,
 		$nb_exons_trans,
 		@fcs_gene_epissage

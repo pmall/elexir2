@@ -83,7 +83,7 @@ my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 
 # On selectionne les gènes qui ont un fc épissage
 my $select_genes_sth = $dbh->prepare(
-	"SELECT * FROM " . $table_trans
+	"SELECT * FROM " . $table_trans . " WHERE epi_fc_ba1 IS NOT NULL"
 );
 
 # On selectionne les entités codantes d'un gène
@@ -262,7 +262,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		for(my $i = 0; $i < $nb_paires_rep; $i++){
 
-			push(@fcs_gene_ba, $gene->{'fc_ba' . ($i + 1)});
+			push(@fcs_gene_ba, $gene->{'epi_fc_ba' . ($i + 1)});
 
 		}
 
@@ -291,7 +291,7 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		for(my $i = 0; $i < $nb_paires_rep; $i++){
 
-			push(@fcs_gene_dc, $gene->{'fc_dc' . ($i + 1)});
+			push(@fcs_gene_dc, $gene->{'epi_fc_dc' . ($i + 1)});
 
 		}
 
@@ -335,17 +335,17 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		# ==============================================================
 
 		# Comparaison B/A
-		my($SI_ba, $p_value_ba, @SIs_ba) = $analyse_ba->si_entite(
+		my($SI_ba, $pvalue_ba, @SIs_ba) = $analyse_ba->si_entite(
 			$ref_SIs_sondes_ba
 		);
 
 		# Comparaison D/C
-		my($SI_dc, $p_value_dc, @SIs_dc) = $analyse_dc->si_entite(
+		my($SI_dc, $pvalue_dc, @SIs_dc) = $analyse_dc->si_entite(
 			$ref_SIs_sondes_dc
 		);
 
 		# Comparaison O/J
-		my($SI_oj, $p_value_oj, @SIs_oj) = $analyse_oj->si_entite(
+		my($SI_oj, $pvalue_oj, @SIs_oj) = $analyse_oj->si_entite(
 			$ref_SIs_sondes_oj
 		);
 
@@ -373,9 +373,9 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 		push(@values, $SI_dc);
 		push(@values, @SIs_oj) if($paire);
 		push(@values, $SI_oj);
-		push(@values, $p_value_ba);
-		push(@values, $p_value_dc);
-		push(@values, $p_value_oj);
+		push(@values, $pvalue_ba);
+		push(@values, $pvalue_dc);
+		push(@values, $pvalue_oj);
 		push(@values, $nb_sondes_ba);
 		push(@values, $nb_sondes_dc);
 		push(@values, $nb_sondes_oj);

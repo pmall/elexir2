@@ -90,7 +90,7 @@ my $select_nb_genes_exp_sth = $dbh->prepare(
 
 my $select_genes_sth = $dbh->prepare(
 	"SELECT * FROM $table_trans
-	WHERE ABS(LOG2(fc_ba)) >= LOG2(?) AND pval_ba <= ?"
+	WHERE ABS(LOG2(trans_fc_ba)) >= LOG2(?) AND trans_pval_ba <= ?"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -135,8 +135,8 @@ my @genes = @{$select_genes_sth->fetchall_arrayref({})};
 $select_genes_sth->finish;
 
 # On récupère les gènes qui ont B/A up et ceux qui ont B/A down
-my @genes_ba_up = grep { $_->{'fc_ba'} >= 1 } @genes;
-my @genes_ba_down = grep { $_->{'fc_ba'} < 1 } @genes;
+my @genes_ba_up = grep { $_->{'trans_fc_ba'} >= 1 } @genes;
+my @genes_ba_down = grep { $_->{'trans_fc_ba'} < 1 } @genes;
 
 # On écrit ces deux listes de gène, chacune dans la feuille appropriée
 my($nb_ups_renforces, $nb_ups_affaiblits) = write_list(
@@ -252,13 +252,13 @@ sub write_list{
 			'-' . $infos_gene->{'end_sur_chromosome'} .
 			':' . $infos_gene->{'strand'};
 
-		my $reg_ba = ($gene->{'fc_ba'} >= 1) ? 'up' : 'down';
-		my $reg_dc = ($gene->{'fc_dc'} >= 1) ? 'up' : 'down';
+		my $reg_ba = ($gene->{'trans_fc_ba'} >= 1) ? 'up' : 'down';
+		my $reg_dc = ($gene->{'trans_fc_dc'} >= 1) ? 'up' : 'down';
 		my $reg_oj;
 		my $format;
 
 		# On défini la regulation de O/J
-		if($gene->{'fc_ba'} >= 1){
+		if($gene->{'trans_fc_ba'} >= 1){
 
 			if($gene->{'fc_oj'} >= 1){
 
@@ -313,18 +313,18 @@ sub write_list{
 
 		# Regulation B/A
 		push(@data, $reg_ba);
-		push(@data, round(format_fold($gene->{'fc_ba'}), 2));
-		push(@data, $gene->{'pval_ba'});
-		push(@data, $gene->{'nb_sondes_ba'});
-		push(@data, $gene->{'nb_exons_ba'});
+		push(@data, round(format_fold($gene->{'trans_fc_ba'}), 2));
+		push(@data, $gene->{'trans_pval_ba'});
+		push(@data, $gene->{'trans_nb_sondes_ba'});
+		push(@data, $gene->{'trans_nb_exons_ba'});
 		push(@data, '');
 
 		# Regulation D/C
 		push(@data, $reg_dc);
-		push(@data, round(format_fold($gene->{'fc_dc'}), 2));
-		push(@data, $gene->{'pval_dc'});
-		push(@data, $gene->{'nb_sondes_dc'});
-		push(@data, $gene->{'nb_exons_dc'});
+		push(@data, round(format_fold($gene->{'trans_fc_dc'}), 2));
+		push(@data, $gene->{'trans_pval_dc'});
+		push(@data, $gene->{'trans_nb_sondes_dc'});
+		push(@data, $gene->{'trans_nb_exons_dc'});
 		push(@data, '');
 
 		# Regulation O/J
