@@ -88,7 +88,7 @@ my $select_genes_sth = $dbh->prepare(
 
 # On selectionne les entités codantes d'un gène
 my $select_entites_sth = $dbh->prepare(
-	"SELECT id, type, exon_pos FROM " . $table_entites . "
+	"SELECT id FROM " . $table_entites . "
 	WHERE id_gene = ? AND type != 'intron'"
 );
 
@@ -130,8 +130,6 @@ my @fields_splicing = ();
 
 push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
 push(@fields_splicing, 'id_gene INT UNSIGNED NOT NULL');
-push(@fields_splicing, 'type_entite ENUM(\'exon\',\'prom\',\'polya\',\'donor\',\'acceptor\',\'deletion\',\'intron-retention\',\'intron\') NOT NULL');
-push(@fields_splicing, 'exon_pos SMALLINT UNSIGNED NOT NULL');
 push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs_ba)) if($paire);
 push(@fields_splicing, 'SI_ba DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs_dc)) if($paire);
@@ -365,8 +363,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 		push(@values, $entite->{'id'});
 		push(@values, $gene->{'id_gene'});
-		push(@values, $entite->{'type'});
-		push(@values, $entite->{'exon_pos'});
 		push(@values, @SIs_ba) if($paire);
 		push(@values, $SI_ba);
 		push(@values, @SIs_dc) if($paire);
