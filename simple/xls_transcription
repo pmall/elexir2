@@ -9,6 +9,7 @@ use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
 use Math;
+use Stats;
 use Analyse;
 
 # ==============================================================================
@@ -30,6 +31,7 @@ my $db_name = $config->{'db_name'};
 # Paramètres de sélection pour les résulats
 my $seuil_trans = $config->{'simple'}{'excel'}{'seuil_trans'};
 my $seuil_pval = $config->{'simple'}{'excel'}{'seuil_pval'};
+my $seuil_fdr = $config->{'simple'}{'excel'}{'seuil_fdr'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -90,7 +92,7 @@ my $select_nb_genes_exp_sth = $dbh->prepare(
 my $select_genes_sth = $dbh->prepare(
 	"SELECT id_gene, trans_fc, trans_pval, trans_nb_sondes, trans_nb_exons
 	FROM $table_trans
-	WHERE ABS(LOG2(trans_fc)) >= LOG2(?) AND trans_pval <= ?"
+	WHERE ABS(LOG2(trans_fc)) >= LOG2(?)"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -106,7 +108,8 @@ my $xlsh = Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # On ajoute les pages
 my $f_resume			= $xlsh->add_worksheet('Resume de l\'analyse');
-my $f				= $xlsh->add_worksheet('Transcription');
+my $f_no_fdr			= $xlsh->add_worksheet('No FDR');
+my $f_fdr			= $xlsh->add_worksheet('FDR');
 
 # On défini les couleurs
 my $couleur_entete		= $xlsh->set_custom_color(39, 189, 189, 189);
@@ -124,6 +127,36 @@ my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_dow
 # ==============================================================================
 # On ajoute les gènes dans la feuille
 # ==============================================================================
+
+# On selectionne les gènes régulés
+$select_genes_sth->execute($seuil_trans);
+my $ref_genes = $select_genes_sth->fetchall_arrayref({});
+$select_genes_sth->finish;
+
+# On récupère les gènes sans fdr
+my @genes_no_fdr = grep { $_->{'trans_pval'} <= $seuil_pval } @{$ref_genes};
+
+# On récupère la liste de gènes qui passe la fdr
+my @genes_fdr = @{$ref_genes};
+my @pvalues = map { $_->{'trans_pval'} } @genes_fdr;
+my @adjps = adjust_pvals(@pvalues);
+
+for(my $i = 0; $i < @genes_fdr; $i++){
+
+	$genes_fdr[$i]->{'trans_pval'} = $adjps[$i];
+
+}
+
+@genes_fdr = grep { $_->{'trans_pval'} <= $seuil_fdr } @genes_fdr;
+
+# On écrit les deux listes de gènes dans leur feuilles respectives
+my($nb_ups_no_fdr, $nb_downs_no_fdr) = write_f($f_no_fdr, @genes_no_fdr);
+my($nb_ups_fdr, $nb_downs_fdr) = write_f($f_fdr, @genes_fdr);
+
+# Fonction pour ne pas se répeter deux fois
+sub write_f{
+
+my($f, @genes) = @_;
 
 # On modifie la largeur des colones
 $f->set_column(0, 0, 12); # Fasterdb id
@@ -167,11 +200,6 @@ for(my $j = 0; $j < @entetes; $j++){
 	$f->write(1, $j, $entetes[$j], $format);
 
 }
-
-# On selectionne les gènes régulés
-$select_genes_sth->execute($seuil_trans, $seuil_pval);
-my @genes = @{$select_genes_sth->fetchall_arrayref({})};
-$select_genes_sth->finish;
 
 # On classe les gènes
 @genes = sort {
@@ -242,6 +270,10 @@ for(my $i = 0; $i < @genes; $i++){
 
 }
 
+return($nb_ups, $nb_downs);
+
+}
+
 # ==============================================================================
 # On écrit la page de résumé
 # ==============================================================================
@@ -262,13 +294,18 @@ $f_resume->write(3, 1, round($seuil_trans, 2), $format_cell_center);
 $f_resume->write(4, 0, "Seuil p-value", $format_cell_center);
 $f_resume->write(4, 1, $seuil_pval, $format_cell_center);
 $f_resume->write(6, 0, "Resultats", $format_resume_titre);
+$f_resume->write(6, 1, 'no FDR', $format_cell_center);
+$f_resume->write(6, 2, 'FDR', $format_cell_center);
 $f_resume->write(7, 0, "Genes total", $format_cell_center);
 $f_resume->write(7, 1, $nb_genes_total, $format_cell_center);
 $f_resume->write(8, 0, "Genes exprimes", $format_cell_center);
 $f_resume->write(8, 1, $nb_genes_exp, $format_cell_center);
 $f_resume->write(9, 0, "Genes regules", $format_cell_center);
-$f_resume->write(9, 1, $nb_ups + $nb_downs, $format_cell_center);
-$f_resume->write(10, 0, "Genes up", $format_cell_center);
-$f_resume->write(10, 1, $nb_ups, $format_cell_center);
-$f_resume->write(11, 0, "Genes down", $format_cell_center);
-$f_resume->write(11, 1, $nb_downs, $format_cell_center);
+$f_resume->write(9, 1, $nb_ups_no_fdr + $nb_downs_no_fdr, $format_cell_center);
+$f_resume->write(9, 2, $nb_ups_fdr + $nb_downs_fdr, $format_cell_center);
+$f_resume->write(10, 0, "Genes ups", $format_cell_center);
+$f_resume->write(10, 1, $nb_ups_no_fdr, $format_cell_center);
+$f_resume->write(10, 2, $nb_ups_fdr, $format_cell_center);
+$f_resume->write(11, 0, "Genes downs", $format_cell_center);
+$f_resume->write(11, 1, $nb_downs_no_fdr, $format_cell_center);
+$f_resume->write(11, 2, $nb_downs_fdr, $format_cell_center);
