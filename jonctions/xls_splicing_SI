@@ -9,6 +9,7 @@ use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
 use Math;
+use Stats;
 use Analyse;
 
 # ==============================================================================
@@ -30,6 +31,7 @@ my $db_name = $config->{'db_name'};
 # Paramètres de sélection pour les résulats
 my $seuil_epissage = $config->{'jonction'}{'excel'}{'seuil_epissage'};
 my $seuil_pval = $config->{'jonction'}{'excel'}{'seuil_pval'};
+my $seuil_fdr = $config->{'jonction'}{'excel'}{'seuil_fdr'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -92,7 +94,7 @@ my $select_nb_entites_exp_sth = $dbh->prepare(
 
 my $select_entites_sth = $dbh->prepare(
 	"SELECT * FROM $table_jonction
-	WHERE ABS(LOG2(SI)) >= LOG2(?) AND SI_pval <= ?"
+	WHERE ABS(LOG2(SI)) >= LOG2(?)"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -114,7 +116,8 @@ my $xlsh			= Spreadsheet::WriteExcel->new($fichier_sortie);
 
 # Feuilles
 my $f_resume			= $xlsh->add_worksheet('Parametres et entites analysees');
-my $f				= $xlsh->add_worksheet('Epissage');
+my $f_no_fdr			= $xlsh->add_worksheet('no FDR');
+my $f_fdr			= $xlsh->add_worksheet('FDR');
 
 # On défini les couleurs
 my $couleur_entete		= $xlsh->set_custom_color(40, 189, 189, 189);
@@ -140,6 +143,45 @@ my $format_mauv_fc_even		= $xlsh->add_format(color => 'black', bg_color => $coul
 # ==============================================================================
 # On ajoute les entités dans la feuille
 # ==============================================================================
+
+# On selectionne les entites régulées
+$select_entites_sth->execute($seuil_epissage);
+my $ref_entites = $select_entites_sth->fetchall_arrayref({});
+$select_entites_sth->finish;
+
+# On selectionne les entités sans fdr
+my @entites_no_fdr = grep { $_->{'SI_pval'} <= $seuil_pval } @{$ref_entites};
+
+# On récupère les pvalues ajustées
+my @adjps = adjust_pvals(map { $_->{'SI_pval'} } @{$ref_entites});
+
+# On récupère la liste des entités qui passent la fdr
+my @entites_fdr =();
+
+for(my $i = 0; $i < @{$ref_entites}; $i++){
+
+	if($adjps[$i] <= $seuil_fdr){
+
+		# On fait une COPIE du hash de l'entité !!!
+		# pour ne pas modifier la pval de cette entité dans la liste no_fdr
+		my $entite = { %{$ref_entites->[$i]} };
+
+		$entite->{'SI_pval'} = $adjps[$i];
+
+		push(@entites_fdr, $entite);
+
+	}
+
+}
+
+# On écrit les deux listes d'entités dans leur feuilles respectives
+my($nb_ups_no_fdr, $nb_downs_no_fdr) = write_f($f_no_fdr, @entites_no_fdr);
+my($nb_ups_fdr, $nb_downs_fdr) = write_f($f_fdr, @entites_fdr);
+
+# Fonction pour ne pas se répeter deux fois
+sub write_f{
+
+my($f, @entites) = @_;
 
 # Offset pour le nombre de colones selon le nombre de paires de rep
 my $o_si = ($paire) ? $nb_paires_rep : 0;
@@ -212,17 +254,6 @@ for(my $j = 0; $j < @entetes; $j++){
 
 }
 
-# On ajoute chaque entité dans la feuille, en comptant les ups et les downs
-my $num_genes = 0;
-my $id_gene_prec = 0;
-my $nb_ups = 0;
-my $nb_downs = 0;
-
-# On selectionne les entites régulées
-$select_entites_sth->execute($seuil_epissage, $seuil_pval);
-my @entites = @{$select_entites_sth->fetchall_arrayref({})};
-$select_entites_sth->finish;
-
 # On fait un hash du fc max par gène pour le classement
 my %SI_max_gene = ();
 
@@ -247,6 +278,12 @@ foreach my $entite (@entites){
 	# Ensuite encore par SI (au sein du gène)
 	format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
 } @entites;
+
+# On ajoute chaque entité dans la feuille, en comptant les ups et les downs
+my $num_genes = 0;
+my $id_gene_prec = 0;
+my $nb_ups = 0;
+my $nb_downs = 0;
 
 for(my $i = 0; $i < @entites; $i++){
 
@@ -347,6 +384,10 @@ for(my $i = 0; $i < @entites; $i++){
 
 }
 
+return($nb_ups, $nb_downs);
+
+}
+
 # ==============================================================================
 # On écrit la page de résumé
 # ==============================================================================
@@ -367,13 +408,18 @@ $f_resume->write(3, 1, round($seuil_epissage, 2), $format_cell_center);
 $f_resume->write(4, 0, "Seuil p-value", $format_cell_center);
 $f_resume->write(4, 1, $seuil_pval, $format_cell_center);
 $f_resume->write(6, 0, "Resultats", $format_resume_titre);
+$f_resume->write(6, 1, "no FDR", $format_cell_center);
+$f_resume->write(6, 2, "FDR", $format_cell_center);
 $f_resume->write(7, 0, "Entites total", $format_cell_center);
 $f_resume->write(7, 1, $nb_entites_total, $format_cell_center);
 $f_resume->write(8, 0, "Entites exprimees", $format_cell_center);
 $f_resume->write(8, 1, $nb_entites_exp, $format_cell_center);
 $f_resume->write(9, 0, "Entites regules", $format_cell_center);
-$f_resume->write(9, 1, $nb_ups + $nb_downs, $format_cell_center);
+$f_resume->write(9, 1, $nb_ups_no_fdr + $nb_downs_no_fdr, $format_cell_center);
+$f_resume->write(9, 2, $nb_ups_fdr + $nb_downs_fdr, $format_cell_center);
 $f_resume->write(10, 0, "Entites up", $format_cell_center);
-$f_resume->write(10, 1, $nb_ups, $format_cell_center);
+$f_resume->write(10, 1, $nb_ups_no_fdr, $format_cell_center);
+$f_resume->write(10, 2, $nb_ups_fdr, $format_cell_center);
 $f_resume->write(11, 0, "Entites down", $format_cell_center);
-$f_resume->write(11, 1, $nb_downs, $format_cell_center);
+$f_resume->write(11, 1, $nb_downs_no_fdr, $format_cell_center);
+$f_resume->write(11, 2, $nb_downs_fdr, $format_cell_center);

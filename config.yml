@@ -142,6 +142,7 @@ jonction:
   excel:
     seuil_epissage: 1.45 # En base 10 !
     seuil_pval: 0.05
+    seuil_fdr: 0.05
 
 apriori:
   gc_max: 17
