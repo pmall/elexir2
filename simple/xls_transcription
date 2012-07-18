@@ -128,7 +128,7 @@ my $format_down			= $xlsh->add_format(color => 'black', bg_color => $couleur_dow
 # On ajoute les gènes dans la feuille
 # ==============================================================================
 
-# On selectionne les gènes régulés
+# On selectionne les gènes exprimés
 $select_genes_sth->execute($seuil_trans);
 my $ref_genes = $select_genes_sth->fetchall_arrayref({});
 $select_genes_sth->finish;
@@ -136,18 +136,27 @@ $select_genes_sth->finish;
 # On récupère les gènes sans fdr
 my @genes_no_fdr = grep { $_->{'trans_pval'} <= $seuil_pval } @{$ref_genes};
 
-# On récupère la liste de gènes qui passe la fdr
-my @genes_fdr = @{$ref_genes};
-my @pvalues = map { $_->{'trans_pval'} } @genes_fdr;
-my @adjps = adjust_pvals(@pvalues);
+# On récupère les pvalues ajustées
+my @adjps = adjust_pvals(map { $_->{'trans_pval'} } @{$ref_genes});
 
-for(my $i = 0; $i < @genes_fdr; $i++){
+# On récupère la liste des gènes qui passent la fdr
+my @genes_fdr =();
 
-	$genes_fdr[$i]->{'trans_pval'} = $adjps[$i];
+for(my $i = 0; $i < @{$ref_genes}; $i++){
+
+	if($adjps[$i] <= $seuil_fdr){
+
+		# On fait une COPIE du hash du gène !!!
+		# pour ne pas modifier la pval de ce gene dans la liste no_fdr
+		my $gene = { %{$ref_genes->[$i]} };
+
+		$gene->{'trans_pval'} = $adjps[$i];
+
+		push(@genes_fdr, $gene);
+
+	}
 
 }
-
-@genes_fdr = grep { $_->{'trans_pval'} <= $seuil_fdr } @genes_fdr;
 
 # On écrit les deux listes de gènes dans leur feuilles respectives
 my($nb_ups_no_fdr, $nb_downs_no_fdr) = write_f($f_no_fdr, @genes_no_fdr);
