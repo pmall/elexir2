@@ -1,0 +1,245 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use YAML::XS qw(LoadFile);
+use DBI;
+use List::MoreUtils qw(uniq);
+use FindBin qw($Bin);
+use lib $FindBin::Bin . '/../lib';
+use Format;
+use Math;
+use Utils;
+use Stats;
+use Replicat;
+use Analyse;
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/../config.yml');
+
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Parametres pour l'analyse
+my $gc_max = $config->{'jonction'}{'gc_max'};
+my $nb_occ_max = $config->{'jonction'}{'nb_occ_max'};
+my $seuil_dabg = $config->{'jonction'}{'seuil_dabg'};
+my $nb_sondes_min_entite = $config->{'jonction'}{'nb_sondes_min_entite'};
+
+# ==============================================================================
+# Préparation des requètes pour les infos du projet
+# ==============================================================================
+
+# On se connecte a elexir
+my $dbh = DBI->connect(
+	'DBI:mysql:' . $db_name . ':' . $db_host,
+	$db_user,
+	$db_pass
+);
+
+# On récupère les infos de l'analyse
+my $analyse = Analyse->get_analyse($dbh, $id_analyse);
+
+# Message d'erreur si l'analyse n'existe pas
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
+
+# Message d'erreur si c'est pas le bon script pour le bon type d'analyse
+if($analyse->{'type'} ne 'jonction'){
+
+	die('Le script simple ne fonctionne que sur les analyses jonction :o)');
+
+}
+
+# ==============================================================================
+# On crée les noms de table dont on a besoin
+# ==============================================================================
+
+my $id_projet = $analyse->{'id_project'};
+my $type_chips = $analyse->{'type_chips'};
+my $version = $analyse->{'version'};
+my $orga = $analyse->{'organism'};
+my $paire = $analyse->{'paired'};
+my $nb_paires_rep = $analyse->{'nb_paires_rep'};
+
+my $table_entites_a_priori = $config->{'table_entites_a_priori'}{$version}{$orga};
+my $table_jonctions = $config->{'table_jonctions_exons'}{$type_chips}{$version}{$orga};
+my $table_dabg = get_table_dabg($id_projet);
+my $table_intensites = get_table_intensites($id_projet);
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
+my $table_jonction = get_table_jonction($id_projet, $id_analyse);
+
+# ==============================================================================
+# On prépare les requete sur elexir pour l'analyse avec ces infos
+# ==============================================================================
+
+# On selectionne les entités exoniques d'un gène
+my $select_entites_sth = $dbh->prepare(
+	"SELECT id, id_gene FROM " . $table_entites_a_priori
+);
+
+# On selectionne les sondes jonction de l'événement
+my $select_infos_sondes_jonctions_sth = $dbh->prepare(
+	"SELECT id_probe, gc_content, nb_occ, groupe
+	FROM " . $table_jonctions . "
+	WHERE id_entite = ?"
+);
+
+# On selectionne le dabg d'une sonde
+my $select_dabg_sth = $dbh->prepare(
+	"SELECT * FROM " . $table_dabg . " WHERE probe_id = ?"
+);
+
+# On selectionne l'intensité d'une sonde
+my $select_intensite_sth = $dbh->prepare(
+	"SELECT * FROM " . $table_intensites . " WHERE probe_id = ?"
+);
+
+# ==============================================================================
+# On crée dynamiquement la table
+# ==============================================================================
+
+my @fields_expr = ();
+my @fields_SIs = ();
+my @fields_SIsds = ();
+
+for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
+
+	push(@fields_expr, 'control' . ($i + 1));
+	push(@fields_expr, 'test' . ($i + 1));
+	push(@fields_SIs, 'SI' . ($i + 1));
+
+}
+
+my @fields_splicing = ();
+
+push(@fields_splicing, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
+push(@fields_splicing, 'id_gene INT UNSIGNED NOT NULL');
+push(@fields_splicing, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL' } @fields_SIs)) if($paire);
+push(@fields_splicing, 'SI DECIMAL(10,5) UNSIGNED NOT NULL');
+push(@fields_splicing, 'SI_pval DECIMAL(12,10) UNSIGNED NOT NULL');
+push(@fields_splicing, 'nb_sondes_inclusion SMALLINT UNSIGNED NOT NULL');
+push(@fields_splicing, 'nb_sondes_exclusion SMALLINT UNSIGNED NOT NULL');
+
+$dbh->do('DROP TABLE IF EXISTS ' . $table_jonction);
+$dbh->do('CREATE TABLE ' . $table_jonction . ' (' . join(', ', @fields_splicing) . ')');
+
+my $insert_entite_sth = $dbh->prepare(
+	"INSERT INTO $table_jonction VALUES(" . join(', ', ('?')x@fields_splicing) . ")"
+);
+
+# ==============================================================================
+# Début de l'algo, on analyse les gènes avec un fc épissage
+# ==============================================================================
+
+# On selectionne les entités exoniques
+$select_entites_sth->execute;
+
+#Pour chaque événement
+while(my $entite = $select_entites_sth->fetchrow_hashref){
+
+	print $entite->{'id'} . "\n";
+
+	# On sélectionne ses sondes jonctions
+	$select_infos_sondes_jonctions_sth->execute($entite->{'id'});
+	my $infos_sondes = $select_infos_sondes_jonctions_sth->fetchall_hashref('id_probe'); 
+	$select_infos_sondes_jonctions_sth->finish;
+
+	# Si on a pas 3 sondes on zappe 
+	next if(scalar(keys %{$infos_sondes}) < $nb_sondes_min_entite);
+
+	# On vire les sondes qui ont pas les bonnes caractéristiques
+	# et on sépare les inclusions et exclusions
+	my $ids_sondes_inclusion_ok = [grep {
+		$infos_sondes->{$_}->{'gc_content'} > 2
+		and
+		$infos_sondes->{$_}->{'gc_content'} <= $gc_max
+		and
+		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
+		and
+		$infos_sondes->{$_}->{'groupe'} eq 'inclusion'
+	} keys %{$infos_sondes}];
+
+	my $ids_sondes_exclusion_ok = [grep {
+		$infos_sondes->{$_}->{'gc_content'} > 2
+		and
+		$infos_sondes->{$_}->{'gc_content'} <= $gc_max
+		and
+		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
+		and 
+		$infos_sondes->{$_}->{'groupe'} eq 'exclusion'
+	} keys %{$infos_sondes}];
+
+	# On récupère le nombre de sondes inclusion/exclusion
+	my $nb_sondes_inclusion_ok = scalar @{$ids_sondes_inclusion_ok};
+	my $nb_sondes_exclusion_ok = scalar @{$ids_sondes_exclusion_ok};
+
+	# Si il y a pas 3 sondes inclusion/exclusion on zappe
+	next if($nb_sondes_inclusion_ok < $nb_sondes_min_entite);
+	next if($nb_sondes_exclusion_ok < $nb_sondes_min_entite);
+
+	# On récupère les infos de toutes les sondes exprimées
+	my $ref_sondes_exclusion = $analyse->get_sondes_exprimees(
+		$dbh,
+		$ids_sondes_exclusion_ok,
+		$seuil_dabg
+	);
+
+	my $ref_sondes_inclusion = $analyse->get_sondes_exprimees(
+		$dbh,
+		$ids_sondes_inclusion_ok,
+		$seuil_dabg
+	);
+
+	# On récupère le nombre de sondes inclusion/exclusion exprimées
+	my $nb_sondes_inclusion = scalar @{$ref_sondes_inclusion};
+	my $nb_sondes_exclusion = scalar @{$ref_sondes_exclusion};
+
+	# Si il n'y a pas trois sondes inclusion/exclusion exprimées on zappe
+	next if($nb_sondes_inclusion < $nb_sondes_min_entite);
+	next if($nb_sondes_exclusion < $nb_sondes_min_entite);
+
+	# ======================================================================
+	# On calcule le FC des sondes
+	# ======================================================================
+
+	# On récupère les FCs des sondes
+	my $ref_fcs_inclusion = $analyse->fcs_sondes($ref_sondes_inclusion);
+	my $ref_fcs_exclusion = $analyse->fcs_sondes($ref_sondes_exclusion);
+
+	# ======================================================================
+	# On calcule le SI des sondes et le SI de l'entité
+	# ======================================================================
+
+	my $ref_SIs_sondes = $analyse->sis_sondes(
+		[rep_effect($ref_fcs_exclusion)],
+		$ref_fcs_inclusion
+	);
+
+	my($SI, $p_value, @SIs) = $analyse->si_entite($ref_SIs_sondes);
+
+	# ======================================================================
+	# On ajoute l'entité dans la table
+	# ======================================================================
+
+	my @values = ();
+
+	push(@values, $entite->{'id'});
+	push(@values, $entite->{'id_gene'});
+	push(@values, @SIs) if($paire);
+	push(@values, $SI);
+	push(@values, $p_value);
+	push(@values, $nb_sondes_inclusion);
+	push(@values, $nb_sondes_exclusion);
+
+	$insert_entite_sth->execute(@values);
+
+}

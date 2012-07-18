@@ -1,0 +1,6 @@
+#!/bin/bash
+
+dir=$(dirname $0)
+
+$dir/jonctions/xls_splicing_SI $1
+$dir/jonctions/xls_zip $1

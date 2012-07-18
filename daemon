@@ -56,6 +56,8 @@ def do_job(wd, job, sema):
 			algo = 'analyse_simple'
 		if(job[4] == 'compose'):
 			algo = 'analyse_compose'
+		if(job[4] == 'jonction'):
+			algo = 'analyse_jonction'
 	if(job[3] == 'excels'):
 		id_elem = job[2]
 		if(job[4] == 'simple'):

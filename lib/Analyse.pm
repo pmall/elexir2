@@ -85,7 +85,7 @@ sub get_analyse{
 	my $paires = [];
 
 	# Selon que l'analyse soit simple ou composée, ça change...
-	my @types_simples = ('simple', 'apriori');
+	my @types_simples = ('simple', 'jonction', 'apriori');
 
 	if($infos_analyse->{'type'} ~~ @types_simples){
 

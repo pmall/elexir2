@@ -65,6 +65,10 @@ table_entites:
     human: humain_fdb2_entites
     mouse: souris_fdb2_entites
 
+table_entites_a_priori:
+  fdb1:
+    human: humain_fdb1_entites_a_priori
+
 table_ase:
   fdb1:
     human: humain_fdb1_ase
@@ -86,6 +90,13 @@ table_sondes:
       human: humain_ggh_fdb1_probes_status
     fdb2:
       human: humain_ggh_fdb2_probes_status
+
+table_jonctions_exons:
+  ggh:
+    fdb1:
+      human: humain_fdb1_jonctions_entites_a_priori
+    fdb2:
+      human: humain_fdb2_jonctions_entites_a_priori
 
 # Paramètres pour les algos
 qc:
@@ -121,6 +132,15 @@ compose:
     seuil_epissage_j_vs_o: 1.2 # En base 10 !
     seuil_pval: 0.05
     seuil_fc_gene: 2
+
+jonction:
+  gc_max: 17
+  nb_occ_max: 1
+  seuil_dabg: 0.05
+  nb_sondes_min_entite: 3
+  excel:
+    seuil_epissage: 1.45 # En base 10 !
+    seuil_pval: 0.05
 
 apriori:
   gc_max: 17
