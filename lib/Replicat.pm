@@ -50,7 +50,7 @@ sub dabg_groupe{
 
 		my $p_value = somme_fisher(\@liste_dabg_sample);
 
-		$nb_exp++ if($p_value > $seuil);
+		$nb_exp++ if($p_value <= $seuil);
 
 	}
 
