@@ -65,18 +65,6 @@ table_entites:
     human: humain_fdb2_entites
     mouse: souris_fdb2_entites
 
-table_entites_a_priori:
-  fdb1:
-    human: humain_fdb1_entites_a_priori
-
-table_ase:
-  fdb1:
-    human: humain_fdb1_ase
-    mouse: souris_fdb1_ase
-  fdb2:
-    human: humain_fdb2_ase
-    mouse: souris_fdb2_ase
-
 table_sondes:
   exon:
     fdb1:
@@ -90,6 +78,26 @@ table_sondes:
       human: humain_ggh_fdb1_probes_status
     fdb2:
       human: humain_ggh_fdb2_probes_status
+
+table_entites_a_priori:
+  fdb1:
+    human: humain_fdb1_entites_a_priori
+  fdb2:
+    human: humain_fdb2_entites_a_priori
+
+table_sondes_entites_a_priori:
+  exon:
+    fdb1:
+      human: humain_huex_fdb1_probes_entites_a_priori
+      mouse: souris_moex_fdb1_probes_entites_a_priori
+    fdb2:
+      human: humain_huex_fdb2_probes_entites_a_priori
+      mouse: souris_moex_fdb2_probes_entites_a_priori
+  ggh:
+    fdb1:
+      human: humain_ggh_fdb1_probes_entites_a_priori
+    fdb2:
+      human: humain_ggh_fdb2_probes_entites_a_priori
 
 table_jonctions_exons:
   ggh:
