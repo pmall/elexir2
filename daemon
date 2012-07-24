@@ -56,6 +56,8 @@ def do_job(wd, job, sema):
 			algo = 'analyse_simple'
 		if(job[4] == 'compose'):
 			algo = 'analyse_compose'
+		if(job[4] == 'apriori'):
+			algo = 'analyse_a_priori'
 		if(job[4] == 'jonction'):
 			algo = 'analyse_jonction'
 	if(job[3] == 'excels'):
@@ -64,6 +66,10 @@ def do_job(wd, job, sema):
 			algo = 'excels_simple'
 		if(job[4] == 'compose'):
 			algo = 'excels_compose'
+		if(job[4] == 'apriori'):
+			algo = 'excels_a_priori'
+		if(job[4] == 'jonction'):
+			algo = 'excels_jonction'
 
 	dbh = MySQLdb.connect(host = DBHOST, user = DBUSER, passwd = DBPASS, db = DBNAME)
 	cursor = dbh.cursor()
