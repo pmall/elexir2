@@ -5,7 +5,7 @@ use Exporter qw(import);
 
 our @EXPORT = qw(get_table_intensites get_table_dabg
 	get_table_transcription get_table_splicing
-	get_table_ase_apriori get_table_jonction
+	get_table_ase_a_priori get_table_jonction
 	format_fold date traduction_type);
 
 # ==============================================================================
@@ -44,7 +44,7 @@ sub get_table_splicing{
 
 }
 
-sub get_table_ase_apriori{
+sub get_table_ase_a_priori{
 
 	my($id_project, $id_analyse) = @_;
 
