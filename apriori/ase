@@ -73,7 +73,7 @@ my $table_entites_a_priori = $config->{'table_entites_a_priori'}{$version}{$orga
 my $table_sondes = $config->{'table_sondes_entites_a_priori'}{$type_chips}{$version}{$orga};
 my $table_dabg = get_table_dabg($id_projet);
 my $table_intensites = get_table_intensites($id_projet);
-my $table_ase_apriori = get_table_ase_apriori($id_projet, $id_analyse);
+my $table_ase_apriori = get_table_ase_a_priori($id_projet, $id_analyse);
 
 # ==============================================================================
 # On prépare les requètes avec ces infos
@@ -120,8 +120,8 @@ push(@fields_ase, 'id_gene INT UNSIGNED NOT NULL');
 push(@fields_ase, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_si)) if $paire;
 push(@fields_ase, 'SI DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_ase, 'SI_pval DECIMAL(12,10) UNSIGNED NOT NULL');
-push(@fields_ase, 'nb_sondes_inclusions SMALLINT UNSIGNED NOT NULL');
-push(@fields_ase, 'nb_sondes_exclusions SMALLINT UNSIGNED NOT NULL');
+push(@fields_ase, 'nb_sondes_inclusion SMALLINT UNSIGNED NOT NULL');
+push(@fields_ase, 'nb_sondes_exclusion SMALLINT UNSIGNED NOT NULL');
 
 $dbh->do('DROP TABLE IF EXISTS ' . $table_ase_apriori);
 $dbh->do('CREATE TABLE ' . $table_ase_apriori . ' (' . join(', ', @fields_ase) . ')');
