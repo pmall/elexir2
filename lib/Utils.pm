@@ -114,7 +114,7 @@ sub rep_effect{
 	}
 
 	# On retourne les valeurs des rep
-	return(@valeurs_reps);
+	return \@valeurs_reps;
 
 }
 
@@ -123,13 +123,13 @@ sub sum_rep_effect{
 	my($ref_matrix) = @_;
 
 	# On initialise les valeurs à tester
-	my @valeurs_a_tester = rep_effect($ref_matrix);
+	my $ref_valeurs_a_tester = rep_effect($ref_matrix);
 
 	# La valeur somme est la médiane des valeurs à tester
-	my $sum = median(@valeurs_a_tester);
+	my $sum = median(@{$ref_valeurs_a_tester});
 
 	# On retourne les deux
-	return($sum, @valeurs_a_tester);
+	return($sum, @{$ref_valeurs_a_tester});
 
 }
 

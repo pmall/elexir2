@@ -221,7 +221,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# ======================================================================
 
 	# On déclare les valeurs d'épissage
-	my @fcs_gene_epissage = (undef)x$nb_paires_rep;
+	my $ref_fcs_gene_epissage = [(undef)x$nb_paires_rep];
 
 	# ======================================================================
 	# On fait l'épissage seulement si le gène est homogène
@@ -249,7 +249,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 			# ======================================================
 
 			# Calcul du fc du gène et de sa p_value
-			@fcs_gene_epissage = rep_effect(
+			$ref_fcs_gene_epissage = rep_effect(
 				$analyse->fcs_sondes($ref_sondes_epissage)
 			);
 
@@ -268,7 +268,7 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$pvalue_trans,
 		$nb_sondes_trans,
 		$nb_exons_trans,
-		@fcs_gene_epissage
+		@{$ref_fcs_gene_epissage}
 	);
 
 }

@@ -260,9 +260,9 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 	# On fait l'épissage seulement si le gène est homogène
 	# ======================================================================
 
-	my @fcs_epi_ba = (undef)x$nb_paires_rep;
-	my @fcs_epi_dc = (undef)x$nb_paires_rep;
-	my @fcs_oj = (undef)x$nb_paires_rep;
+	my $ref_fcs_epi_ba = [(undef)x$nb_paires_rep];
+	my $ref_fcs_epi_dc = [(undef)x$nb_paires_rep];
+	my $ref_fcs_oj = [(undef)x$nb_paires_rep];
 
 	# Si O/J est homogène, les deux autres le sont aussi, ses sondes sont
 	# l'intersection des sondes de ba et dc)
@@ -294,9 +294,9 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 				$ref_sondes_epi_dc
 			);
 
-			@fcs_epi_ba = rep_effect($ref_fcs_sondes_epi_ba);
-			@fcs_epi_dc = rep_effect($ref_fcs_sondes_epi_dc);
-			@fcs_oj = rep_effect($ref_fcs_sondes_oj);
+			$ref_fcs_epi_ba = rep_effect($ref_fcs_sondes_epi_ba);
+			$ref_fcs_epi_dc = rep_effect($ref_fcs_sondes_epi_dc);
+			$ref_fcs_oj = rep_effect($ref_fcs_sondes_oj);
 
 		}
 
@@ -342,9 +342,9 @@ while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
 		$nb_exons_trans_ba,
 		$nb_exons_trans_dc,
 		$nb_exons_oj,
-		map { $_ } @fcs_epi_ba,
-		map { $_ } @fcs_epi_dc,
-		map { $_ } @fcs_oj,
+		@{$ref_fcs_epi_ba},
+		@{$ref_fcs_epi_dc},
+		@{$ref_fcs_oj}
 	);
 
 }

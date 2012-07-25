@@ -271,7 +271,7 @@ while(my $entite = $select_entites_a_priori_sth->fetchrow_hashref){
 
 	# On récupère le Si des sondes
 	my $ref_SIs_sondes = $analyse->sis_sondes(
-		[rep_effect($ref_fcs_exclusions)],
+		rep_effect($ref_fcs_exclusions),
 		$ref_fcs_inclusions
 	);
 

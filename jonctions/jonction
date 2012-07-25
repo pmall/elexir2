@@ -220,7 +220,7 @@ while(my $entite = $select_entites_sth->fetchrow_hashref){
 	# ======================================================================
 
 	my $ref_SIs_sondes = $analyse->sis_sondes(
-		[rep_effect($ref_fcs_exclusion)],
+		rep_effect($ref_fcs_exclusion),
 		$ref_fcs_inclusion
 	);
 
