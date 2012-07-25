@@ -53,7 +53,7 @@ die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
 if($analyse->{'type'} ne 'jonction'){
 
-	die('Le script simple ne fonctionne que sur les analyses jonction :o)');
+	die('Le script jonction ne fonctionne que sur les analyses jonction :o)');
 
 }
 
