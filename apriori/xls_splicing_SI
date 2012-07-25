@@ -75,7 +75,8 @@ my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_entites_a_priori = $config->{'table_entites_a_priori'}{$version}{$orga};
 my $table_ase_a_priori = get_table_ase_a_priori($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage_SI.xls';
+my $nom_fichier = $name . '_epissage_SI.xls';
+my $fichier_sortie = $dir_sortie . '/' . $nom_fichier;
 
 # On crée les dossier
 make_path($dir_sortie);
@@ -423,3 +424,6 @@ $f_resume->write(10, 2, $nb_ups_fdr, $format_cell_center);
 $f_resume->write(11, 0, "Entites down", $format_cell_center);
 $f_resume->write(11, 1, $nb_downs_no_fdr, $format_cell_center);
 $f_resume->write(11, 2, $nb_downs_fdr, $format_cell_center);
+
+# On écrit le nom de fichier sur STDOUT pour pouvoir le passer au script zip
+print $nom_fichier;

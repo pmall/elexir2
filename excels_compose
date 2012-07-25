@@ -2,6 +2,6 @@
 
 dir=$(dirname $0)
 
-$dir/compose/xls_transcription $1
-$dir/compose/xls_splicing_SI $1
-$dir/compose/xls_zip $1
+file1=$($dir/compose/xls_transcription $1)
+file2=$($dir/compose/xls_splicing_SI $1)
+$dir/zip $1 $file1 $file2

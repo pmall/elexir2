@@ -2,5 +2,5 @@
 
 dir=$(dirname $0)
 
-$dir/apriori/xls_splicing_SI $1
-$dir/apriori/xls_zip $1
+file1=$($dir/apriori/xls_splicing_SI $1)
+$dir/zip $1 $file1

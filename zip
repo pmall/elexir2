@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use YAML::XS qw(LoadFile);
+use DBI;
+use FindBin qw($Bin);
+
+# ==============================================================================
+# Parametres
+# ==============================================================================
+
+# On récupère l'id du projet a analyser
+my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
+my @files = @ARGV || die('Vous devez passer au moins un nom de fichier');
+
+# On récupère un hash de config
+my $config = LoadFile($FindBin::Bin . '/config.yml');
+
+# On défini les identifiants pour la bdd
+my $db_host = $config->{'db_host'};
+my $db_user = $config->{'db_user'};
+my $db_pass = $config->{'db_pass'};
+my $db_name = $config->{'db_name'};
+
+# Répertoire de sortie 
+my $dir_xls = $config->{'dir_xls'};
+
+# ==============================================================================
+# Connection à elexir et préparation des requetes
+# ==============================================================================
+
+my $dbh = DBI->connect(
+	"DBI:mysql:" . $db_name . ":" . $db_host,
+	$db_user,
+	$db_pass
+);
+
+my $select_project_id_sth = $dbh->prepare(
+	"SELECT id_project, name, type FROM analyses WHERE id = ?"
+);
+
+# ==============================================================================
+# On récupère les infos du projet et on check si il existe
+# ==============================================================================
+
+$select_project_id_sth->execute($id_analyse);
+
+my $analyse = $select_project_id_sth->fetchrow_hashref;
+
+die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
+
+# ==============================================================================
+# On zippe les fichiers
+# ==============================================================================
+
+my $dir_project = $dir_xls . '/' . $analyse->{'id_project'};
+my $dir_analyse = $dir_project . '/' . $id_analyse;
+
+my $filenames = join(' ', @files);
+
+`cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;

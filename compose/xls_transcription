@@ -71,7 +71,8 @@ my $name = $analyse->{'name'};
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/' . $name . '_transcription.xls';
+my $nom_fichier = $name . '_transcription.xls';
+my $fichier_sortie = $dir_sortie . '/' . $nom_fichier;
 
 # On crée le répertoire de sortie au cas ou il existe pas
 make_path($dir_sortie);
@@ -386,3 +387,6 @@ $f_resume->write(11, 0, "Genes renforces", $format_cell_center);
 $f_resume->write(11, 1, $nb_renforces, $format_cell_center);
 $f_resume->write(11, 0, "Genes affaiblis", $format_cell_center);
 $f_resume->write(11, 1, $nb_affaiblits, $format_cell_center);
+
+# On écrit le nom de fichier sur STDOUT pour pouvoir le passer au script zip
+print $nom_fichier;

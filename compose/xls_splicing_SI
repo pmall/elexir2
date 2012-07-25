@@ -75,7 +75,8 @@ my $table_entites = $config->{'table_entites'}{$version}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $fichier_sortie = $dir_sortie . '/' . $name . '_epissage_SI.xls';
+my $nom_fichier = $name . '_epissage_SI.xls';
+my $fichier_sortie = $dir_sortie . '/' . $nom_fichier;
 
 # On crée les dossier
 make_path($dir_sortie);
@@ -518,3 +519,6 @@ $f_resume->write(11, 0, "Entites renforcees", $format_cell_center);
 $f_resume->write(11, 1, $nb_renforces, $format_cell_center);
 $f_resume->write(12, 0, "Entites affaiblies", $format_cell_center);
 $f_resume->write(12, 1, $nb_affaiblits, $format_cell_center);
+
+# On écrit le nom de fichier sur STDOUT pour pouvoir le passer au script zip
+print $nom_fichier;
