@@ -156,8 +156,6 @@ my $insert_entite_sth = $dbh->prepare(
 # Début de l'algo, on analyse les gènes avec un fc épissage
 # ==============================================================================
 
-print 'Analyse des entités' . "\n";
-
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
@@ -181,8 +179,6 @@ while(my $gene = $select_genes_sth->fetchrow_hashref){
 
 	# Pour chaque entité du gène
 	while(my $entite = $select_entites_sth->fetchrow_hashref){
-
-		print $gene->{'id_gene'} . ' ' . $entite->{'id'} . "\n";
 
 		# ==============================================================
 		# On selectionne les sondes

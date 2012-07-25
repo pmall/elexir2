@@ -149,8 +149,6 @@ my $insert_gene_sth = $dbh->prepare(
 # On début l'algo, pour chaque gène
 # ==============================================================================
 
-print 'Analyse des gènes' . "\n";
-
 # Deux racourcis
 my $analyse_ba = $analyse->{'design'}->[0]->{'cont'};
 my $analyse_dc = $analyse->{'design'}->[0]->{'test'};
@@ -161,8 +159,6 @@ $select_genes_sth->execute($limit);
 
 # Pour chaque gène
 while(my($id_gene, $nb_exons) = $select_genes_sth->fetchrow_array){
-
-	print $id_gene . "\n";
 
 	# ======================================================================
 	# On récupère les intensités des sondes du gène

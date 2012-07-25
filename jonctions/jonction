@@ -146,8 +146,6 @@ $select_entites_sth->execute;
 #Pour chaque événement
 while(my $entite = $select_entites_sth->fetchrow_hashref){
 
-	print $entite->{'id'} . "\n";
-
 	# On sélectionne ses sondes jonctions
 	$select_infos_sondes_jonctions_sth->execute($entite->{'id'});
 	my $infos_sondes = $select_infos_sondes_jonctions_sth->fetchall_hashref('id_probe'); 
