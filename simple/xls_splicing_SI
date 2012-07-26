@@ -294,7 +294,7 @@ foreach my $entite (@entites){
 
 # On classe les entites
 @entites = sort {
-	# Ensuite par FC gène fiable
+	# Par FC gène fiable
 	format_fold($b->{'trans_fc'}) <= $seuil_fiabilite_fcGene
 	<=>
 	format_fold($a->{'trans_fc'}) <= $seuil_fiabilite_fcGene

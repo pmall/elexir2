@@ -65,6 +65,12 @@ table_entites:
     human: humain_fdb2_entites
     mouse: souris_fdb2_entites
 
+table_entites_a_priori:
+  fdb1:
+    human: humain_fdb1_entites_a_priori
+  fdb2:
+    human: humain_fdb2_entites_a_priori
+
 table_sondes:
   exon:
     fdb1:
@@ -79,11 +85,12 @@ table_sondes:
     fdb2:
       human: humain_ggh_fdb2_probes_status
 
-table_entites_a_priori:
-  fdb1:
-    human: humain_fdb1_entites_a_priori
-  fdb2:
-    human: humain_fdb2_entites_a_priori
+table_sondes_jonction:
+  ggh:
+    fdb1:
+      human: humain_fdb1_jonctions_entites_a_priori
+    fdb2:
+      human: humain_fdb2_jonctions_entites_a_priori
 
 table_sondes_entites_a_priori:
   exon:
@@ -98,13 +105,6 @@ table_sondes_entites_a_priori:
       human: humain_ggh_fdb1_probes_entites_a_priori
     fdb2:
       human: humain_ggh_fdb2_probes_entites_a_priori
-
-table_jonctions_exons:
-  ggh:
-    fdb1:
-      human: humain_fdb1_jonctions_entites_a_priori
-    fdb2:
-      human: humain_fdb2_jonctions_entites_a_priori
 
 # Paramètres pour les algos
 qc:
