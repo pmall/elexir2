@@ -214,17 +214,16 @@ sub write_list{
 	# On modifie la largeur des colones
 	$f->set_column(0, 0, 12); # Fasterdb id
 	$f->set_column(1, 1, 18); # Source id
-	$f->set_column(2, 2, 12); # Link
-	$f->set_column(3, 3, 12); # Symbol
-	$f->set_column(4, 4, 12); # Type
-	$f->set_column(6, 6, 18); # Coordonnées
-	$f->set_column(7, 7, 18); # Sequence
+	$f->set_column(2, 2, 12); # Symbol
+	$f->set_column(3, 3, 12); # Type
+	$f->set_column(5, 5, 18); # Coordonnées
+	$f->set_column(6, 6, 18); # Sequence
 
 	# On fait les premiers entetes
-	$f->merge_range(0, 0, 0, 7, 'Infos Entite', $format_entete_merge);
-	$f->merge_range(0, 9, 0, 12 + $o_si, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 14 + $o_si, 0, 18 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 20 + ($o_si * 2), 0, 24 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 0, 0, 6, 'Infos Entite', $format_entete_merge);
+	$f->merge_range(0, 8, 0, 11 + $o_si, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 13 + $o_si, 0, 17 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 19 + ($o_si * 2), 0, 23 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
 
 	# On défini les entetes de chaque colonnes
 	my @entetes = ();
@@ -248,7 +247,6 @@ sub write_list{
 	# Infos entité
 	push(@entetes, 'Fasterdb ID');
 	push(@entetes, 'Source ID');
-	push(@entetes, 'Link Elexir');
 	push(@entetes, 'Symbol');
 	push(@entetes, 'Type');
 	push(@entetes, 'Position');
@@ -434,7 +432,6 @@ sub write_list{
 		# Infos du gène
 		push(@data, $infos_gene->{'id_fasterdb'});
 		push(@data, $infos_gene->{'id_source'});
-		push(@data, 'blah');
 		push(@data, $infos_gene->{'symbol'});
 		push(@data, $type_entite);
 		push(@data, $infos_entite->{'exon_pos'});
@@ -472,7 +469,7 @@ sub write_list{
 
 			my $format = ($data[$j] ne '') ? $format : undef;
 
-			# +2 parce que les deux premières lignes sont les entetes
+			# i+2 parce que les deux premières lignes sont les entetes
 			$f->write($i + 2, $j, $data[$j], $format);
 
 		}

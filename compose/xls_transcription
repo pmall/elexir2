@@ -158,20 +158,19 @@ sub write_list{
 	# On modifie la largeur des colones
 	$f->set_column(0, 0, 12); # Fasterdb id
 	$f->set_column(1, 1, 18); # Source id
-	$f->set_column(2, 2, 12); # Link
-	$f->set_column(3, 3, 12); # Symbol
-	$f->set_column(4, 4, 30); # Description
-	$f->set_column(5, 5, 24); # Pos chrom
-	$f->set_column(6, 6, 12); # Regulation
-	$f->set_column(7, 7, 8); # FC
-	$f->set_column(8, 8, 12); # pval
-	$f->set_column(9, 9, 12); # nb probes
+	$f->set_column(2, 2, 12); # Symbol
+	$f->set_column(3, 3, 30); # Description
+	$f->set_column(4, 4, 24); # Pos chrom
+	$f->set_column(5, 5, 12); # Regulation
+	$f->set_column(6, 6, 8); # FC
+	$f->set_column(7, 7, 12); # pval
+	$f->set_column(8, 8, 12); # nb probes
 
 	# On fait les premiers entetes
-	$f->merge_range(0, 0, 0, 5, 'Infos Gene', $format_entete_merge);
-	$f->merge_range(0, 7, 0, 11, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 13, 0, 17, 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 19, 0, 23, 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 0, 0, 4, 'Infos Gene', $format_entete_merge);
+	$f->merge_range(0, 6, 0, 10, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 12, 0, 16, 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 18, 0, 22, 'Regulation O/J', $format_entete_merge);
 
 	# On défini les entetes
 	my @entetes = ();
@@ -179,7 +178,6 @@ sub write_list{
 	# Infos du gène
 	push(@entetes, 'Fasterdb id');
 	push(@entetes, 'Source id');
-	push(@entetes, 'Link Elexir');
 	push(@entetes, 'Symbol');
 	push(@entetes, 'Description');
 	push(@entetes, 'Chr Position');
@@ -306,7 +304,6 @@ sub write_list{
 		# Infos du gène
 		push(@data, $infos_gene->{'id_fasterdb'});
 		push(@data, $infos_gene->{'id_source'});
-		push(@data, 'blah');
 		push(@data, $infos_gene->{'symbol'});
 		push(@data, $infos_gene->{'description'});
 		push(@data, $pos_chrom);
@@ -340,7 +337,7 @@ sub write_list{
 
 			my $format = ($data[$j] ne '') ? $format : undef;
 
-			# +2 parce que les deux premières lignes sont les entetes
+			# i+2 parce que les deux premières lignes sont les entetes
 			$f->write($i + 2, $j, $data[$j], $format);
 
 		}

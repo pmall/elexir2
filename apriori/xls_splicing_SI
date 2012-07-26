@@ -190,20 +190,18 @@ my $o_si = ($paire) ? $nb_paires_rep : 0;
 # On modifie la largeur des colones
 $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
-$f->set_column(2, 2, 12); # Link
-$f->set_column(3, 3, 12); # Symbol
-$f->set_column(4, 4, 12); # Type
-$f->set_column(13 + $o_si, 13 + $o_si, 24); # Description
-$f->set_column(14 + $o_si, 14 + $o_si, 24); # Coordonnées
-
-$f->set_column(16 + $o_si, 16 + $o_si, 18); # Coordonnées
-$f->set_column(17 + $o_si, 17 + $o_si, 18); # Sequence
+$f->set_column(2, 2, 12); # Symbol
+$f->set_column(3, 3, 12); # Type
+$f->set_column(12 + $o_si, 12 + $o_si, 24); # Description
+$f->set_column(13 + $o_si, 13 + $o_si, 24); # Coordonnées gene
+$f->set_column(15 + $o_si, 15 + $o_si, 18); # Coordonnées entite
+$f->set_column(16 + $o_si, 16 + $o_si, 18); # Sequence
 
 # On fait les premiers entetes
-$f->merge_range(0, 0, 0, 5, 'Infos Entite', $format_entete_merge);
-$f->merge_range(0, 7, 0, 11 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 13 + $o_si, 0, 14 + $o_si, 'Infos gene', $format_entete_merge);
-$f->merge_range(0, 16 + $o_si, 0, 17 + $o_si, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
+$f->merge_range(0, 6, 0, 10 + $o_si, 'Algo SI', $format_entete_merge);
+$f->merge_range(0, 12 + $o_si, 0, 13 + $o_si, 'Infos gene', $format_entete_merge);
+$f->merge_range(0, 15 + $o_si, 0, 16 + $o_si, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
 my @entetes = ();
@@ -223,7 +221,6 @@ if($paire){
 # Infos entité
 push(@entetes, 'Fasterdb ID');
 push(@entetes, 'Source ID');
-push(@entetes, 'Link Elexir');
 push(@entetes, 'Symbol');
 push(@entetes, 'Type');
 push(@entetes, 'Position');
@@ -350,7 +347,6 @@ for(my $i = 0; $i < @entites; $i++){
 	# Infos du gène
 	push(@data, $infos_gene->{'id_fasterdb'});
 	push(@data, $infos_gene->{'id_source'});
-	push(@data, 'blah');
 	push(@data, $infos_gene->{'symbol'});
 	push(@data, $infos_entite->{'type'});
 	push(@data, $infos_entite->{'exon_pos'});
@@ -379,6 +375,7 @@ for(my $i = 0; $i < @entites; $i++){
 
 		my $format = ($data[$j] ne '') ? $format : undef;
 
+		# i+2 parce que les deux premières lignes sont les entetes
 		$f->write($i + 2, $j, $data[$j], $format);
 
 	}

@@ -171,18 +171,17 @@ my($f, @genes) = @_;
 # On modifie la largeur des colones
 $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
-$f->set_column(2, 2, 12); # Link
-$f->set_column(3, 3, 12); # Symbol
-$f->set_column(4, 4, 30); # Description
-$f->set_column(5, 5, 24); # Pos chrom
-$f->set_column(7, 7, 12); # Regulation
-$f->set_column(8, 8, 8); # FC
-$f->set_column(9, 9, 12); # pval
-$f->set_column(10, 10, 12); # nb probes
+$f->set_column(2, 2, 12); # Symbol
+$f->set_column(3, 3, 30); # Description
+$f->set_column(4, 4, 24); # Pos chrom
+$f->set_column(6, 6, 12); # Regulation
+$f->set_column(7, 7, 8); # FC
+$f->set_column(8, 8, 12); # pval
+$f->set_column(9, 9, 12); # nb probes
 
 # On fait les premiers entetes
-$f->merge_range(0, 0, 0, 5, 'Infos Gene', $format_entete_merge);
-$f->merge_range(0, 7, 0, 11, 'Algo SI', $format_entete_merge);
+$f->merge_range(0, 0, 0, 4, 'Infos Gene', $format_entete_merge);
+$f->merge_range(0, 6, 0, 10, 'Analyse', $format_entete_merge);
 
 # On défini les entetes
 my @entetes = ();
@@ -190,7 +189,6 @@ my @entetes = ();
 # Infos du gène
 push(@entetes, 'Fasterdb id');
 push(@entetes, 'Source id');
-push(@entetes, 'Link Elexir');
 push(@entetes, 'Symbol');
 push(@entetes, 'Description');
 push(@entetes, 'Chr Position');
@@ -255,7 +253,6 @@ for(my $i = 0; $i < @genes; $i++){
 	# Infos du gène
 	push(@data, $infos_gene->{'id_fasterdb'});
 	push(@data, $infos_gene->{'id_source'});
-	push(@data, 'blah');
 	push(@data, $infos_gene->{'symbol'});
 	push(@data, $infos_gene->{'description'});
 	push(@data, $pos_chrom);
@@ -273,7 +270,7 @@ for(my $i = 0; $i < @genes; $i++){
 
 		my $format = ($data[$j] ne '') ? $format : undef;
 
-		# +2 parce que les deux premières lignes sont les entetes
+		# i+2 parce que les deux premières lignes sont les entetes
 		$f->write($i + 2, $j, $data[$j], $format);
 
 	}

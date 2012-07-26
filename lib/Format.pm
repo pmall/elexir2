@@ -72,6 +72,42 @@ sub format_fold{
 
 }
 
+=head
+sub link_elexir{
+
+	my($analyse, $symbol) = @_;
+
+	my $id_analyse = $analyse->{'id'};
+	my $orga = ucfirst($analyse->{'organism'});
+	my $cont = $analyse->{'design'}->[0]->{'cont'}->[0];
+	$cont =~ s/(_[0-9]+$)//;
+	my $test = $analyse->{'design'}->[0]->{'test'}->[0];
+	$test =~ s/(_[0-9]+$)//;
+	my $paire = ($analyse->{'paired'}) ? 'Paired' : 'Unpaired';
+	my $sens = ($analyse->{'type_chips'} eq 'exon') ? 'reverse' : 'all';
+
+	my $base_url = 'http://172.21.100.5/elexir2/experiments.pl';
+
+	my @args = (
+		'gene1_0=' . $symbol,
+		'experiment1=' . $id_analyse . '[' . $orga . ']',
+		'cond_test1_1=' . $test,
+		'cond_control1_1=' . $cont,
+		'type1_1=' . $paire,
+		'entity=exon',
+		'probe=' . $sens,
+		'color=absolute',
+		'dabg=on',
+		'gc_content=on',
+		'repeat=on'
+	);
+
+	return $base_url . '?' . join('&', @args);
+
+}
+
+=cut
+
 sub date{
 
 	my $time = time;
