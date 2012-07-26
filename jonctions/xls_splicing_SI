@@ -273,7 +273,7 @@ foreach my $entite (@entites){
 
 # On classe les entites
 @entites = sort {
-	# Par FC gène fiable
+	# Par FC gène fiable (Le fc gene peut être null)
 	(!defined($b->{'fc_gene'}) or format_fold($b->{'fc_gene'}) <= $seuil_fiabilite_fcGene)
 	<=>
 	(!defined($a->{'fc_gene'}) or format_fold($a->{'fc_gene'}) <= $seuil_fiabilite_fcGene)
@@ -331,6 +331,9 @@ for(my $i = 0; $i < @entites; $i++){
 
 	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
 
+	my $fc_gene = (defined($entite->{'fc_gene'}))
+		? format_fold($entite->{'fc_gene'}) : '-'; # Le fc gene peut être null
+
 	# On récupère les SIs des replicats
 	my @SIs = ();
 
@@ -382,7 +385,7 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, ''); # Space
 
 	# Infos gène
-	push(@data, $entite->{'fc_gene'} || 'blah'); # Le fc gene peut être null
+	push(@data, $fc_gene);
 	push(@data, $infos_gene->{'description'});
 	push(@data, $pos_chrom);
 	push(@data, ''); # Space

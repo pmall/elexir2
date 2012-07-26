@@ -1,6 +1,9 @@
 package Format;
 use strict;
 use warnings;
+use FindBin qw($Bin);
+use lib $FindBin::Bin;
+use Math;
 use Exporter qw(import);
 
 our @EXPORT = qw(get_table_intensites get_table_dabg
@@ -68,7 +71,9 @@ sub format_fold{
 
 	my($fold) = @_;
 
-	return ($fold >= 1) ? $fold : 1/$fold;
+	my $fold_base10 = ($fold >= 1) ? $fold : 1/$fold;
+
+	return round($fold_base10, 2);
 
 }
 
