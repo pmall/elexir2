@@ -11,7 +11,13 @@ use FindBin qw($Bin);
 
 # On récupère l'id du projet a analyser
 my $id_analyse = shift @ARGV || die('Vous devez passer l\'id d\'une analyse en paramètre');
-my @files = @ARGV || die('Vous devez passer au moins un nom de fichier');
+my @files = @ARGV;
+
+if(@files == 0){
+
+	die('Vous devez passer au moins un nom de fichier');
+
+}
 
 # On récupère un hash de config
 my $config = LoadFile($FindBin::Bin . '/config.yml');
@@ -58,4 +64,4 @@ my $dir_analyse = $dir_project . '/' . $id_analyse;
 
 my $filenames = join(' ', @files);
 
-`cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;
+print `cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;
