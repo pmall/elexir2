@@ -64,4 +64,4 @@ my $dir_analyse = $dir_project . '/' . $id_analyse;
 
 my $filenames = join(' ', @files);
 
-print `cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;
+`cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;
