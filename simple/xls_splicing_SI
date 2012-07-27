@@ -199,10 +199,9 @@ $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Symbol
 $f->set_column(3, 3, 12); # Type
-$f->set_column(16 + $o_si + $o_psi, 16 + $o_si + $o_psi, 24); # Description
-$f->set_column(17 + $o_si + $o_psi, 17 + $o_si + $o_psi, 24); # Coordonnées
-
-$f->set_column(24 + $o_si + $o_psi, 24 + $o_si + $o_psi, 18); # Coordonnées
+$f->set_column(21 + $o_si + $o_psi, 21 + $o_si + $o_psi, 24); # Description
+$f->set_column(22 + $o_si + $o_psi, 22 + $o_si + $o_psi, 24); # Coordonnées gene
+$f->set_column(24 + $o_si + $o_psi, 24 + $o_si + $o_psi, 18); # Coordonnées entites
 $f->set_column(25 + $o_si + $o_psi, 25 + $o_si + $o_psi, 18); # Sequence
 
 # On fait les premiers entetes
@@ -255,13 +254,13 @@ push(@entetes, 'Pvalue') if($paire);
 push(@entetes, ''); # Space
 
 # Infos gène
-push(@entetes, 'Description');
-push(@entetes, 'Chr Position');
 push(@entetes, 'Reg');
 push(@entetes, 'FC');
 push(@entetes, 'Pvalue');
 push(@entetes, 'Nb probes');
 push(@entetes, 'Nb exons');
+push(@entetes, 'Description');
+push(@entetes, 'Chr Position');
 push(@entetes, ''); # Space
 
 # Infos Entité
@@ -423,13 +422,13 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, ''); # Space
 
 	# Infos gène
-	push(@data, $infos_gene->{'description'});
-	push(@data, $pos_chrom);
 	push(@data, $reg_gene);
 	push(@data, format_fold($entite->{'trans_fc'}));
 	push(@data, $entite->{'trans_pval'});
 	push(@data, $entite->{'trans_nb_sondes'});
 	push(@data, $entite->{'trans_nb_exons'});
+	push(@data, $infos_gene->{'description'});
+	push(@data, $pos_chrom);
 	push(@data, ''); # Space
 
 	# Infos Entité
