@@ -151,6 +151,7 @@ jonction:
     seuil_epissage: 1.45 # En base 10 !
     seuil_pval: 0.05
     seuil_fdr: 0.05
+    seuil_fc_gene: 2
 
 apriori:
   gc_max: 17
@@ -158,3 +159,8 @@ apriori:
   seuil_dabg: 0.05
   nb_sondes_min_ase: 3
   nb_sondes_min_flanquants: 6
+  excel:
+    seuil_epissage: 1.45 # En base 10 !
+    seuil_pval: 0.05
+    seuil_fdr: 0.05
+    seuil_fc_gene: 2

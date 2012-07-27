@@ -32,7 +32,7 @@ my $db_name = $config->{'db_name'};
 my $seuil_epissage = $config->{'jonction'}{'excel'}{'seuil_epissage'};
 my $seuil_pval = $config->{'jonction'}{'excel'}{'seuil_pval'};
 my $seuil_fdr = $config->{'jonction'}{'excel'}{'seuil_fdr'};
-my $seuil_fiabilite_fcGene = $config->{'simple'}{'excel'}{'seuil_fc_gene'};
+my $seuil_fiabilite_fcGene = $config->{'jonction'}{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -194,9 +194,8 @@ $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Symbol
 $f->set_column(3, 3, 12); # Type
 $f->set_column(13 + $o_si, 13 + $o_si, 24); # Description
-$f->set_column(14 + $o_si, 14 + $o_si, 24); # Coordonnées
-
-$f->set_column(16 + $o_si, 16 + $o_si, 18); # Coordonnées
+$f->set_column(14 + $o_si, 14 + $o_si, 24); # Coordonnées gene
+$f->set_column(16 + $o_si, 16 + $o_si, 18); # Coordonnées entite
 $f->set_column(17 + $o_si, 17 + $o_si, 18); # Sequence
 
 # On fait les premiers entetes

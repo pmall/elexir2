@@ -29,9 +29,10 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Paramètres de sélection pour les résulats
-my $seuil_epissage = $config->{'jonction'}{'excel'}{'seuil_epissage'};
-my $seuil_pval = $config->{'jonction'}{'excel'}{'seuil_pval'};
-my $seuil_fdr = $config->{'jonction'}{'excel'}{'seuil_fdr'};
+my $seuil_epissage = $config->{'apriori'}{'excel'}{'seuil_epissage'};
+my $seuil_pval = $config->{'apriori'}{'excel'}{'seuil_pval'};
+my $seuil_fdr = $config->{'apriori'}{'excel'}{'seuil_fdr'};
+my $seuil_fiabilite_fcGene = $config->{'apriori'}{'excel'}{'seuil_fc_gene'};
 
 # Répertoire de sortie 
 my $dir_xls = $config->{'dir_xls'};
@@ -192,16 +193,16 @@ $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Symbol
 $f->set_column(3, 3, 12); # Type
-$f->set_column(12 + $o_si, 12 + $o_si, 24); # Description
-$f->set_column(13 + $o_si, 13 + $o_si, 24); # Coordonnées gene
-$f->set_column(15 + $o_si, 15 + $o_si, 18); # Coordonnées entite
-$f->set_column(16 + $o_si, 16 + $o_si, 18); # Sequence
+$f->set_column(13 + $o_si, 13 + $o_si, 24); # Description
+$f->set_column(14 + $o_si, 14 + $o_si, 24); # Coordonnées gene
+$f->set_column(16 + $o_si, 16 + $o_si, 18); # Coordonnées entite
+$f->set_column(17 + $o_si, 17 + $o_si, 18); # Sequence
 
 # On fait les premiers entetes
 $f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
 $f->merge_range(0, 6, 0, 10 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 12 + $o_si, 0, 13 + $o_si, 'Infos gene', $format_entete_merge);
-$f->merge_range(0, 15 + $o_si, 0, 16 + $o_si, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 12 + $o_si, 0, 14 + $o_si, 'Infos gene', $format_entete_merge);
+$f->merge_range(0, 16 + $o_si, 0, 17 + $o_si, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
 my @entetes = ();
@@ -236,6 +237,7 @@ push(@entetes, 'Nb probes exclusion');
 push(@entetes, ''); # Space
 
 # Infos gène
+push(@entetes, 'fc');
 push(@entetes, 'Description');
 push(@entetes, 'Chr Position');
 push(@entetes, ''); # Space
@@ -270,6 +272,11 @@ foreach my $entite (@entites){
 
 # On classe les entites
 @entites = sort {
+	# Par FC gène fiable (Le fc gene peut être null)
+	(!defined($b->{'fc_gene'}) or format_fold($b->{'fc_gene'}) <= $seuil_fiabilite_fcGene)
+	<=>
+	(!defined($a->{'fc_gene'}) or format_fold($a->{'fc_gene'}) <= $seuil_fiabilite_fcGene)
+	||
 	# Ensuite par gène
 	$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
 	||
@@ -323,6 +330,9 @@ for(my $i = 0; $i < @entites; $i++){
 
 	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
 
+	my $fc_gene = (defined($entite->{'fc_gene'}))
+		? format_fold($entite->{'fc_gene'}) : '-'; # Le fc gene peut être null
+
 	# On récupère les SIs des replicats
 	my @SIs = ();
 
@@ -337,9 +347,21 @@ for(my $i = 0; $i < @entites; $i++){
 	}
 
 	# On défini le format des cellules de cette ligne
-	my $format = ($entite->{'SI'} >= 1)
-		? ($num_genes % 2 == 0) ? $format_up_even : $format_up_odd
-		: ($num_genes % 2 == 0) ? $format_down_even : $format_down_odd;
+	my $format;
+
+	if(defined($entite->{'fc_gene'}) and format_fold($entite->{'fc_gene'}) > $seuil_fiabilite_fcGene){
+
+		$format = ($num_genes % 2 == 0)
+			? $format_mauv_fc_even
+			: $format_mauv_fc_odd;
+
+	}else{
+
+		$format = ($entite->{'SI'} >= 1)
+			? ($num_genes % 2 == 0) ? $format_up_even : $format_up_odd
+			: ($num_genes % 2 == 0) ? $format_down_even : $format_down_odd;
+
+	}
 
 	# On crée le tableau de data
 	my @data = ();
@@ -362,6 +384,7 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, ''); # Space
 
 	# Infos gène
+	push(@data, $fc_gene);
 	push(@data, $infos_gene->{'description'});
 	push(@data, $pos_chrom);
 	push(@data, ''); # Space
