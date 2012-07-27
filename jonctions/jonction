@@ -31,7 +31,6 @@ my $db_name = $config->{'db_name'};
 
 # Parametres pour l'analyse
 my $nb_sondes_min_gene = $config->{'simple'}{'nb_sondes_min_gene'};
-
 my $gc_max = $config->{'jonction'}{'gc_max'};
 my $nb_occ_max = $config->{'jonction'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'jonction'}{'seuil_dabg'};
@@ -90,7 +89,7 @@ my $select_genes_sth = $dbh->prepare(
 	"SELECT id_fasterdb FROM " . $table_genes
 );
 
-# On selectionne les entités exoniques d'un gène
+# On selectionne les entités a priori d'un gène
 my $select_entites_a_priori_sth = $dbh->prepare(
 	"SELECT id
 	FROM " . $table_entites_a_priori . "

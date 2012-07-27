@@ -28,6 +28,7 @@ my $db_pass = $config->{'db_pass'};
 my $db_name = $config->{'db_name'};
 
 # Parametres pour l'analyse
+my $nb_sondes_min_gene = $config->{'simple'}{'nb_sondes_min_gene'};
 my $gc_max = $config->{'apriori'}{'gc_max'};
 my $nb_occ_max = $config->{'apriori'}{'nb_occ_max'};
 my $seuil_dabg = $config->{'apriori'}{'seuil_dabg'};
@@ -69,8 +70,10 @@ my $orga = $analyse->{'organism'};
 my $paire = $analyse->{'paired'};
 my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 
+my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_entites_a_priori = $config->{'table_entites_a_priori'}{$version}{$orga};
-my $table_sondes = $config->{'table_sondes_entites_a_priori'}{$type_chips}{$version}{$orga};
+my $table_sondes_exon = $config->{'table_sondes'}{$type_chips}{$version}{$orga};
+my $table_sondes_entites_a_priori = $config->{'table_sondes_entites_a_priori'}{$type_chips}{$version}{$orga};
 my $table_dabg = get_table_dabg($id_projet);
 my $table_intensites = get_table_intensites($id_projet);
 my $table_ase_apriori = get_table_ase_a_priori($id_projet, $id_analyse);
@@ -79,15 +82,31 @@ my $table_ase_apriori = get_table_ase_a_priori($id_projet, $id_analyse);
 # On prépare les requètes avec ces infos
 # ==============================================================================
 
-# On selectionne les ase
+# On selectionne les gènes
+my $select_genes_sth = $dbh->prepare(
+	"SELECT id_fasterdb FROM " . $table_genes
+);
+
+# On selectionne les entités a priori d'un gène
 my $select_entites_a_priori_sth = $dbh->prepare(
-	"SELECT id, id_gene, type FROM $table_entites_a_priori"
+	"SELECT id, type
+	FROM " . $table_entites_a_priori . "
+	WHERE id_gene = ?"
+);
+
+# On selectionne les sondes exon d'un gène (qui ciblent des exons)
+my $select_infos_sondes_exons_sth = $dbh->prepare(
+	"SELECT probe_id, nb_occ, gc_content, exon_pos
+	FROM " . $table_sondes_exon . "
+	WHERE entite_type = 1
+	AND utiliser_dans_analyse = 1
+	AND gene_id = ?"
 );
 
 # On selectionne les sondes de l'entité a priori
-my $select_infos_sondes_sth = $dbh->prepare(
+my $select_infos_sondes_entites_sth = $dbh->prepare(
 	"SELECT id_probe, gc_content, nb_occ, groupe, side
-	FROM " . $table_sondes . "
+	FROM " . $table_sondes_entites_a_priori . "
 	WHERE id_entite = ?"
 );
 
@@ -117,6 +136,7 @@ my @fields_ase = ();
 
 push(@fields_ase, 'id_entite INT UNSIGNED NOT NULL PRIMARY KEY');
 push(@fields_ase, 'id_gene INT UNSIGNED NOT NULL');
+push(@fields_ase, 'fc_gene DECIMAL(10,5) UNSIGNED');
 push(@fields_ase, (map { $_ . ' DECIMAL(10,5) UNSIGNED NOT NULL'; } @fields_si)) if $paire;
 push(@fields_ase, 'SI DECIMAL(10,5) UNSIGNED NOT NULL');
 push(@fields_ase, 'SI_pval DECIMAL(12,10) UNSIGNED NOT NULL');
@@ -126,7 +146,7 @@ push(@fields_ase, 'nb_sondes_exclusion SMALLINT UNSIGNED NOT NULL');
 $dbh->do('DROP TABLE IF EXISTS ' . $table_ase_apriori);
 $dbh->do('CREATE TABLE ' . $table_ase_apriori . ' (' . join(', ', @fields_ase) . ')');
 
-my $insert_ase_sth = $dbh->prepare(
+my $insert_entite_sth = $dbh->prepare(
 	"INSERT INTO $table_ase_apriori VALUES(" . join(', ', ('?')x@fields_ase) . ")"
 );
 
@@ -135,163 +155,240 @@ my $insert_ase_sth = $dbh->prepare(
 # ==============================================================================
 
 # On selectionne les gènes
-$select_entites_a_priori_sth->execute;
+$select_genes_sth->execute;
 
 # Pour chaque gène
-while(my $entite = $select_entites_a_priori_sth->fetchrow_hashref){
+while(my($id_gene) = $select_genes_sth->fetchrow_array){
 
-	# ======================================================================
-	# On récupère les sondes de chaque exon
-	# ======================================================================
+	# On analyse les entités à priori du gène
+	my @entites = ();
 
-	# On récupère les infos des sondes
-	$select_infos_sondes_sth->execute($entite->{'id'});
-	my $infos_sondes = $select_infos_sondes_sth->fetchall_hashref('id_probe');
-	$select_infos_sondes_sth->finish;
+	$select_entites_a_priori_sth->execute($id_gene);
 
-	# On vire celles qui ont moins de 2 gc content car on a pas pu calculer
-	# leur dabg
-	my $ids_sondes_dabg = [grep {
-		$infos_sondes->{$_}->{'gc_content'} > 2
-	} keys %{$infos_sondes}];
+	# Pour chaque événement
+	while(my $entite = $select_entites_a_priori_sth->fetchrow_hashref){
 
-	# On récupère les sondes qui ont de bonnes caractéristiques
-	my $ids_sondes_ok = [grep {
-		$infos_sondes->{$_}->{'gc_content'} <= $gc_max
-		and
-		$infos_sondes->{$_}->{'nb_occ'} <= $nb_occ_max
-	} @{$ids_sondes_dabg}];
+		# ======================================================================
+		# On récupère les sondes de chaque exon
+		# ======================================================================
 
-	# On récupère les sondes de chaque groupe
-	my $ids_sondes_inclusions = [grep {
-		$infos_sondes->{$_}->{'groupe'} eq 'inclusion'
-	} @{$ids_sondes_dabg}];
+		# On récupère les infos des sondes
+		$select_infos_sondes_entites_sth->execute($entite->{'id'});
+		my $infos_sondes_entites = $select_infos_sondes_entites_sth->fetchall_hashref('id_probe');
+		$select_infos_sondes_entites_sth->finish;
 
-	my $ids_sondes_exclusions_5prime = [grep {
-		$infos_sondes->{$_}->{'groupe'} eq 'exclusion'
-		and
-		$infos_sondes->{$_}->{'side'} eq '5prime'
-	} @{$ids_sondes_dabg}];
+		# On vire celles qui ont moins de 2 gc content car on a pas pu
+		# calculer leur dabg
+		my $ids_sondes_dabg = [grep {
+			$infos_sondes_entites->{$_}->{'gc_content'} > 2
+		} keys %{$infos_sondes_entites}];
 
-	my $ids_sondes_exclusions_3prime = [grep {
-		$infos_sondes->{$_}->{'groupe'} eq 'exclusion'
-		and
-		$infos_sondes->{$_}->{'side'} eq '3prime'
-	} @{$ids_sondes_dabg}];
+		# On récupère les sondes qui ont de bonnes caractéristiques
+		my $ids_sondes_ok = [grep {
+			$infos_sondes_entites->{$_}->{'gc_content'} <= $gc_max
+			and
+			$infos_sondes_entites->{$_}->{'nb_occ'} <= $nb_occ_max
+		} @{$ids_sondes_dabg}];
 
-	# On récupère les sondes exprimées pour les inclusions
-	my $ref_sondes_inclusions_raw = $analyse->get_sondes_exprimees(
-		$dbh,
-		$ids_sondes_inclusions,
-		$seuil_dabg,
-		1, # au niveau de l'entité
-	);
+		# On récupère les sondes de chaque groupe
+		my $ids_sondes_inclusion = [grep {
+			$infos_sondes_entites->{$_}->{'groupe'} eq 'inclusion'
+		} @{$ids_sondes_dabg}];
 
-	next if(@{$ref_sondes_inclusions_raw} == 0);
+		my $ids_sondes_exclusion_5prime = [grep {
+			$infos_sondes_entites->{$_}->{'groupe'} eq 'exclusion'
+			and
+			$infos_sondes_entites->{$_}->{'side'} eq '5prime'
+		} @{$ids_sondes_dabg}];
 
-	my $ref_sondes_inclusions = [];
+		my $ids_sondes_exclusion_3prime = [grep {
+			$infos_sondes_entites->{$_}->{'groupe'} eq 'exclusion'
+			and
+			$infos_sondes_entites->{$_}->{'side'} eq '3prime'
+		} @{$ids_sondes_dabg}];
 
-	foreach my $id_sonde (@{$ids_sondes_ok}){
+		# On récupère les sondes exprimées pour les inclusions
+		my $ref_sondes_inclusion_raw = $analyse->get_sondes_exprimees(
+			$dbh,
+			$ids_sondes_inclusion,
+			$seuil_dabg,
+			1, # au niveau de l'entité
+		);
 
-		my @sondes = grep {
-			$id_sonde == $_->{'probe_id'}
-		} @{$ref_sondes_inclusions_raw};
+		next if(@{$ref_sondes_inclusion_raw} == 0);
 
-		push(@{$ref_sondes_inclusions}, $sondes[0]) if(@sondes > 0);
+		# On récupère les sondes inclusion qui ont de bonnes
+		# caractéristiques
+		my $ref_sondes_inclusion = [];
+
+		foreach my $id_sonde (@{$ids_sondes_ok}){
+
+			my @sondes = grep {
+				$id_sonde == $_->{'probe_id'}
+			} @{$ref_sondes_inclusion_raw};
+
+			push(@{$ref_sondes_inclusion}, $sondes[0]) if(@sondes > 0);
+
+		}
+
+		next if(@{$ref_sondes_inclusion} < $nb_sondes_min_ase);
+
+		# On récupère les sondes exprimées pour les exclusions 5prime
+		my $ref_sondes_exclusion_5prime_raw = $analyse->get_sondes_exprimees(
+			$dbh,
+			$ids_sondes_exclusion_5prime,
+			$seuil_dabg,
+			1, # au niveau de l'entité
+			1 # dans les deux conditions
+		);
+
+		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_5prime_raw} == 0);
+
+		# On récupère les sondes exprimées pour les exclusions 3prime
+		my $ref_sondes_exclusion_3prime_raw = $analyse->get_sondes_exprimees(
+			$dbh,
+			$ids_sondes_exclusion_3prime,
+			$seuil_dabg,
+			1, # au niveau de l'entité
+			1 # dans les deux conditions
+		);
+
+		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_3prime_raw} == 0);
+
+		next if(@{$ref_sondes_exclusion_5prime_raw} == 0 and @{$ref_sondes_exclusion_3prime_raw} == 0);
+
+		# On récupère les sondes exclusion 5prime/3prime qui ont de
+		# bonnes caractéristiques
+		my $ref_sondes_exclusion_5prime = [];
+		my $ref_sondes_exclusion_3prime = [];
+
+		foreach my $id_sonde (@{$ids_sondes_ok}){
+
+			my @sondes_5prime = grep {
+				$id_sonde == $_->{'probe_id'}
+			} @{$ref_sondes_exclusion_5prime_raw};
+
+			my @sondes_3prime = grep {
+				$id_sonde == $_->{'probe_id'}
+			} @{$ref_sondes_exclusion_3prime_raw};
+
+			push(@{$ref_sondes_exclusion_5prime}, $sondes_5prime[0]) if(@sondes_5prime > 0);
+			push(@{$ref_sondes_exclusion_3prime}, $sondes_3prime[0]) if(@sondes_3prime > 0);
+
+		}
+
+		next if(@{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
+
+		# On mixe exclusion 5' et exclusion 3'
+		my $ref_sondes_exclusion = [
+			@{$ref_sondes_exclusion_5prime},
+			@{$ref_sondes_exclusion_3prime}
+		];
+
+		# On récupère le nombre de sondes inclusion/exclusion
+		my $nb_sondes_inclusion = @{$ref_sondes_inclusion};
+		my $nb_sondes_exclusion = @{$ref_sondes_exclusion};
+
+		# ======================================================================
+		# On calcule le SI
+		# ======================================================================
+
+		# On récupère les FCs des sondes
+		my $ref_fcs_inclusion = $analyse->fcs_sondes($ref_sondes_inclusion);
+		my $ref_fcs_exclusion = $analyse->fcs_sondes($ref_sondes_exclusion);
+
+		# On récupère le Si des sondes
+		my $ref_SIs_sondes = $analyse->sis_sondes(
+			rep_effect($ref_fcs_exclusion),
+			$ref_fcs_inclusion
+		);
+
+		# On calcule le SI de l'entité
+		my($SI, $pvalue, @SIs) = $analyse->si_entite($ref_SIs_sondes);
+
+		# ======================================================================
+		# On insert l'ase
+		# ======================================================================
+
+		push(@entites, {
+			'id' => $entite->{'id'},
+			'SIs' => \@SIs,
+			'SI' => $SI,
+			'pvalue' => $pvalue,
+			'nb_sondes_inclusion' => $nb_sondes_inclusion,
+			'nb_sondes_exclusion' => $nb_sondes_exclusion
+		});
 
 	}
 
-	next if(@{$ref_sondes_inclusions} < $nb_sondes_min_ase);
+	$select_entites_a_priori_sth->finish;
 
-	# On récupère les sondes exprimées pour les exclusions
-	my $ref_sondes_exclusions_5prime_raw = $analyse->get_sondes_exprimees(
+	# Si il n'y a pas d'entités exprimées pour ce gène on zappe
+	next if(@entites == 0);
+
+	my $fc_gene;
+
+	# On selectionne les sondes du gène
+	$select_infos_sondes_exons_sth->execute($id_gene);
+	my $infos_sondes_exons = $select_infos_sondes_exons_sth->fetchall_hashref('probe_id'); 
+	$select_infos_sondes_exons_sth->finish;
+
+	# Si le gène a au moins 6 sondes on continue
+	if(scalar(keys %{$infos_sondes_exons}) >= $nb_sondes_min_gene){
+
+	# On vire les sondes qui ont pas les bonnes caractéristiques
+	my $ids_probes_ok = [grep {
+		# ON VIRE LES SONDES AVEC UN GC <= 2 PARCE QU'ON A PAS PU
+		# CALCULER LEUR DABG AVEC APT :((
+		$infos_sondes_exons->{$_}->{'gc_content'} > 2
+		and
+		$infos_sondes_exons->{$_}->{'nb_occ'} <= $nb_occ_max
+		and
+		$infos_sondes_exons->{$_}->{'gc_content'} <= $gc_max
+	} keys %{$infos_sondes_exons}];
+
+	# Si le gène a au moins 6 sondes avec de bon critères on continue
+	if(@{$ids_probes_ok} >= $nb_sondes_min_gene){
+
+	# On récupère les sondes exprimées
+	my $ref_sondes = $analyse->get_sondes_exprimees(
 		$dbh,
-		$ids_sondes_exclusions_5prime,
-		$seuil_dabg,
-		1, # au niveau de l'entité
-		1 # dans les deux conditions
+		$ids_probes_ok,
+		$seuil_dabg
 	);
 
-	my $ref_sondes_exclusions_3prime_raw = $analyse->get_sondes_exprimees(
-		$dbh,
-		$ids_sondes_exclusions_3prime,
-		$seuil_dabg,
-		1, # au niveau de l'entité
-		1 # dans les deux conditions
-	);
+	# Si le gène a au moins 6 sondes exprimées on continue
+	if(@{$ref_sondes} >= $nb_sondes_min_gene){
 
-	next if(@{$ref_sondes_exclusions_5prime_raw} == 0 and @{$ref_sondes_exclusions_3prime_raw} == 0);
-	next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusions_5prime_raw} == 0);
-	next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusions_3prime_raw} == 0);
+	# On fait un lissage transcriptionnel
+	my $ref_sondes_trans = $analyse->lissage_transcription($ref_sondes);
 
-	my $ref_sondes_exclusions_5prime = [];
+	# Si le gène a au moins 6 sondes qui passent le lissage on continue
+	if(@{$ref_sondes_trans} >= $nb_sondes_min_gene){
 
-	foreach my $id_sonde (@{$ids_sondes_ok}){
+	# Calcul du fc du gène
+	($fc_gene) = sum_no_rep_effect($analyse->fcs_sondes($ref_sondes_trans));
 
-		my @sondes = grep {
-			$id_sonde == $_->{'probe_id'}
-		} @{$ref_sondes_exclusions_5prime_raw};
+	}}}} # On ferme tout
 
-		push(@{$ref_sondes_exclusions_5prime}, $sondes[0]) if(@sondes > 0);
+	# On ajoute les entités
+	foreach my $entite (@entites){
+
+		my @values = ();
+
+		push(@values, $entite->{'id'});
+		push(@values, $id_gene);
+		push(@values, $fc_gene);
+		push(@values, @{$entite->{'SIs'}}) if($paire);
+		push(@values, $entite->{'SI'});
+		push(@values, $entite->{'pvalue'});
+		push(@values, $entite->{'nb_sondes_inclusion'});
+		push(@values, $entite->{'nb_sondes_exclusion'});
+
+		$insert_entite_sth->execute(@values);
 
 	}
-
-	my $ref_sondes_exclusions_3prime = [];
-
-	foreach my $id_sonde (@{$ids_sondes_ok}){
-
-		my @sondes = grep {
-			$id_sonde == $_->{'probe_id'}
-		} @{$ref_sondes_exclusions_3prime_raw};
-
-		push(@{$ref_sondes_exclusions_3prime}, $sondes[0]) if(@sondes > 0);
-
-	}
-
-	next if(@{$ref_sondes_exclusions_5prime} < $nb_sondes_min_ase and @{$ref_sondes_exclusions_3prime} < $nb_sondes_min_ase);
-	next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusions_5prime} < $nb_sondes_min_ase);
-	next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusions_3prime} < $nb_sondes_min_ase);
-
-	# On mixe exclusion 5' et exclusion 3'
-	my $ref_sondes_exclusions = [
-		@{$ref_sondes_exclusions_5prime},
-		@{$ref_sondes_exclusions_3prime}
-	];
-
-	my $nb_sondes_inclusions = @{$ref_sondes_inclusions};
-	my $nb_sondes_exclusions = @{$ref_sondes_exclusions};
-
-	# ======================================================================
-	# On calcule le SI
-	# ======================================================================
-
-	# On récupère les FCs des sondes
-	my $ref_fcs_inclusions = $analyse->fcs_sondes($ref_sondes_inclusions);
-	my $ref_fcs_exclusions = $analyse->fcs_sondes($ref_sondes_exclusions);
-
-	# On récupère le Si des sondes
-	my $ref_SIs_sondes = $analyse->sis_sondes(
-		rep_effect($ref_fcs_exclusions),
-		$ref_fcs_inclusions
-	);
-
-	# On calcule le SI de l'entité
-	my($SI, $pvalue, @SIs) = $analyse->si_entite($ref_SIs_sondes);
-
-	# ======================================================================
-	# On insert l'ase
-	# ======================================================================
-
-	my @values = ();
-
-	push(@values, $entite->{'id'});
-	push(@values, $entite->{'id_gene'});
-	push(@values, @SIs) if $paire;
-	push(@values, $SI);
-	push(@values, $pvalue);
-	push(@values, $nb_sondes_inclusions);
-	push(@values, $nb_sondes_exclusions);
-
-	$insert_ase_sth->execute(@values);
 
 }
