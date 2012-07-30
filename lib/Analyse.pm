@@ -14,13 +14,14 @@ use Replicat;
 # ==============================================================================
 
 # => Factory : Tout le reste découle de la liste 'design'
+# Un peu fait à l'arrache.
 
 sub get_analyse{
 
 	my($class, $dbh, $id_analyse) = @_;
 
 	# On selectionne les infos de l'analyse
-	my $select_infos_analyse_sth = $dbh->prepare(
+	my $select_analyse_sth = $dbh->prepare(
 		"SELECT a.id, a.name, p.id AS id_project, p.type AS type_chips,
 		a.version, p.organism, a.type, a.paired
 		FROM analyses AS a, projects AS p
@@ -29,16 +30,16 @@ sub get_analyse{
 	);
 
 	# On selectionne les infos de l'analyse
-	$select_infos_analyse_sth->execute($id_analyse);
-	my $infos_analyse = $select_infos_analyse_sth->fetchrow_hashref;
-	$select_infos_analyse_sth->finish;
+	$select_analyse_sth->execute($id_analyse);
+	my $analyse = $select_analyse_sth->fetchrow_hashref;
+	$select_analyse_sth->finish;
 
 	# Si l'info analyse est undef on retourne undef
-	return undef if(!$infos_analyse);
+	return undef if(!$analyse);
 
 	# On selectionne les puces de l'analyse
 	my $select_chips_sth = $dbh->prepare(
-		"SELECT g.letter, c.condition, c.num
+		"SELECT c.name, g.letter, c.condition, c.num
 		FROM analyses AS a, chips AS c, groups AS g
 		WHERE a.id_project = c.id_project
 		AND a.id = g.id_analysis
@@ -49,13 +50,14 @@ sub get_analyse{
 
 	# On défini les conditions de l'analyse et le numero max
 	my $conditions = {};
+	my $chip_desc = {};
 	my $nb_max = 0;
 
 	# On selectionne les puces
-	$select_chips_sth->execute($infos_analyse->{'id'});
+	$select_chips_sth->execute($analyse->{'id'});
 
 	# Pour chaque puces
-	while(my($letter, $condition, $num) = $select_chips_sth->fetchrow_array){
+	while(my($name, $letter, $condition, $num) = $select_chips_sth->fetchrow_array){
 
 		# On calcule le nb max
 		$nb_max = $num if($num > $nb_max);
@@ -67,17 +69,22 @@ sub get_analyse{
 		if(!$conditions->{$letter}){
 
 			$conditions->{$letter} = [$sample];
+			$chip_desc->{$letter} = [{'sample' => $sample, 'name' => $name}];
 
 		}else{
 
 			push(@{$conditions->{$letter}}, $sample);
+			push(@{$chip_desc->{$letter}}, {'sample' => $sample, 'name' => $name});
 
 		}
 
 	}
 
+	# On garde les hashes conditions et chipnames
+	$analyse->{'chip_desc'} = $chip_desc;
+
 	# On calcule le nombre de paires de replicats
-	$infos_analyse->{'nb_paires_rep'} = ($infos_analyse->{'paired'})
+	$analyse->{'nb_paires_rep'} = ($analyse->{'paired'})
 		? $nb_max
 		: 1;
 
@@ -87,16 +94,16 @@ sub get_analyse{
 	# Selon que l'analyse soit simple ou composée, ça change...
 	my @types_simples = ('simple', 'jonction', 'apriori');
 
-	if($infos_analyse->{'type'} ~~ @types_simples){
+	if($analyse->{'type'} ~~ @types_simples){
 
 		# Pour chaque paire de replicat
-		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 			$paires->[$i] = {
-				'cont' => ($infos_analyse->{'paired'})
+				'cont' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'A'}->[$i]])
 					: new Replicat($conditions->{'A'}),
-				'test' => ($infos_analyse->{'paired'})
+				'test' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'B'}->[$i]])
 					: new Replicat($conditions->{'B'}) 
 			};
@@ -110,22 +117,22 @@ sub get_analyse{
 		my $paires_test = [];
 
 		# Pour chaque paire de replicat
-		for(my $i = 0; $i < $infos_analyse->{'nb_paires_rep'}; $i++){
+		for(my $i = 0; $i < $analyse->{'nb_paires_rep'}; $i++){
 
 			$paires_cont->[$i] = {
-				'cont' => ($infos_analyse->{'paired'})
+				'cont' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'A'}->[$i]])
 					: new Replicat($conditions->{'A'}),
-				'test' => ($infos_analyse->{'paired'})
+				'test' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'B'}->[$i]])
 					: new Replicat($conditions->{'B'})
 			};
 
 			$paires_test->[$i] = {
-				'cont' => ($infos_analyse->{'paired'})
+				'cont' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'C'}->[$i]])
 					: new Replicat($conditions->{'C'}),
-				'test' => ($infos_analyse->{'paired'})
+				'test' => ($analyse->{'paired'})
 					? new Replicat([$conditions->{'D'}->[$i]])
 					: new Replicat($conditions->{'D'})
 			};
@@ -133,8 +140,8 @@ sub get_analyse{
 		}
 
 		# On fait les designs cont et test
-		my $cont = {%{$infos_analyse}, 'design' => $paires_cont};
-		my $test = {%{$infos_analyse}, 'design' => $paires_test};
+		my $cont = {%{$analyse}, 'design' => $paires_cont};
+		my $test = {%{$analyse}, 'design' => $paires_test};
 
 		# On intègre les sous comparaisons à la comparaison globale
 		$paires->[0] = {
@@ -145,10 +152,10 @@ sub get_analyse{
 	}
 
 	# La liste de paires est le design de l'analyse
-	$infos_analyse->{'design'} = $paires;
+	$analyse->{'design'} = $paires;
 
 	# On retourne un objet analyse
-	return new Analyse($infos_analyse);
+	return new Analyse($analyse);
 
 }
 
@@ -158,14 +165,14 @@ sub get_analyse{
 
 sub new{
 
-	my($class, $infos_analyse) = @_;
+	my($class, $analyse) = @_;
 
-	$infos_analyse->{'select_dabg_sth'} = undef;
-	$infos_analyse->{'select_intensites_sth'} = undef;
+	$analyse->{'select_dabg_sth'} = undef;
+	$analyse->{'select_intensites_sth'} = undef;
 
-	bless($infos_analyse, $class);
+	bless($analyse, $class);
 
-	return $infos_analyse;
+	return $analyse;
 
 }
 

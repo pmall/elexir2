@@ -517,5 +517,33 @@ $f_resume->write(11, 1, $nb_renforces, $format_cell_center);
 $f_resume->write(12, 0, "Entites affaiblies", $format_cell_center);
 $f_resume->write(12, 1, $nb_affaiblits, $format_cell_center);
 
+# On écrit le nom des puces utilisés
+$f_resume->set_column(4, 4, 20);
+$f_resume->set_column(5, 5, 20);
+$f_resume->set_column(6, 6, 50);
+
+$f_resume->write(2, 4, 'Exp. Design', $format_resume_titre);
+$f_resume->write(3, 4, 'Comparaison', $format_cell_center);
+$f_resume->write(3, 5, 'D/C vs B/A', $format_cell_center);
+$f_resume->write(5, 4, 'Lettre', $format_resume_titre);
+$f_resume->write(5, 5, 'Condition', $format_resume_titre);
+$f_resume->write(5, 6, 'Puce', $format_resume_titre);
+
+my $i = 6;
+
+foreach my $letter (keys %{$analyse->{'chip_desc'}}){
+
+	foreach my $desc (@{$analyse->{'chip_desc'}->{$letter}}){
+
+		$f_resume->write($i, 4, $letter, $format_cell_center);
+		$f_resume->write($i, 5, $desc->{'sample'}, $format_cell_center);
+		$f_resume->write($i, 6, $desc->{'name'}, $format_cell_center);
+
+		$i++;
+
+	}
+
+}
+
 # On écrit le nom de fichier sur STDOUT pour pouvoir le passer au script zip
 print $nom_fichier;
