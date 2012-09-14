@@ -216,14 +216,15 @@ sub write_list{
 	$f->set_column(1, 1, 18); # Source id
 	$f->set_column(2, 2, 12); # Symbol
 	$f->set_column(3, 3, 12); # Type
-	$f->set_column(5, 5, 18); # Coordonnées
-	$f->set_column(6, 6, 18); # Sequence
+	$f->set_column(23 + ($o_si * 3), 23 + ($o_si * 3), 18); # Coordonnées
+	$f->set_column(24 + ($o_si * 3), 24 + ($o_si * 3), 18); # Sequence
 
 	# On fait les premiers entetes
-	$f->merge_range(0, 0, 0, 6, 'Infos Entite', $format_entete_merge);
-	$f->merge_range(0, 8, 0, 11 + $o_si, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 13 + $o_si, 0, 17 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 19 + ($o_si * 2), 0, 23 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
+	$f->merge_range(0, 6, 0, 9 + $o_si, 'Regulation B/A', $format_entete_merge);
+	$f->merge_range(0, 11 + $o_si, 0, 15 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
+	$f->merge_range(0, 17 + ($o_si * 2), 0, 21 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
+	$f->merge_range(0, 23 + ($o_si * 3), 0, 24 + ($o_si * 3), 'Infos supp entite', $format_entete_merge);
 
 	# On défini les entetes de chaque colonnes
 	my @entetes = ();
@@ -250,8 +251,6 @@ sub write_list{
 	push(@entetes, 'Symbol');
 	push(@entetes, 'Type');
 	push(@entetes, 'Position');
-	push(@entetes, 'Coordonnees');
-	push(@entetes, 'Sequence');
 	push(@entetes, ''); # Space
 
 	# Reg SI B/A
@@ -278,6 +277,11 @@ sub write_list{
 	push(@entetes, 'Pvalue');
 	push(@entetes, 'NB sondes');
 	push(@entetes, 'Coherent');
+	push(@entetes, ''); # Space
+
+	# Infos supp entité
+	push(@entetes, 'Coordonnees');
+	push(@entetes, 'Sequence');
 
 	for(my $j = 0; $j < @entetes; $j++){
 
@@ -435,8 +439,6 @@ sub write_list{
 		push(@data, $infos_gene->{'symbol'});
 		push(@data, $type_entite);
 		push(@data, $infos_entite->{'exon_pos'});
-		push(@data, $pos_entite);
-		push(@data, $infos_entite->{'sequence'});
 		push(@data, ''); # Space
 
 		# Algo SI B/A
@@ -447,7 +449,7 @@ sub write_list{
 		push(@data, $entite->{'nb_sondes_ba'});
 		push(@data, ''); # Space
 
-		# Algo SI B/A
+		# Algo SI D/C
 		push(@data, $reg_dc);
 		push(@data, map { format_fold($_) } @SIs_dc) if($paire);
 		push(@data, format_fold($entite->{'SI_dc'}));
@@ -456,13 +458,18 @@ sub write_list{
 		push(@data, $entite->{'is_robust_dc'});
 		push(@data, ''); # Space
 
-		# Algo SI B/A
+		# Algo SI O/J
 		push(@data, $reg_oj);
 		push(@data, map { format_fold($_) } @SIs_oj) if($paire);
 		push(@data, format_fold($entite->{'SI_oj'}));
 		push(@data, $entite->{'SI_pval_oj'});
 		push(@data, $entite->{'nb_sondes_oj'});
 		push(@data, $entite->{'is_robust_oj'});
+		push(@data, ''); # Space
+
+		# Infos supp entité
+		push(@data, $pos_entite);
+		push(@data, $infos_entite->{'sequence'});
 
 		# On affiche les data
 		for(my $j = 0; $j < @data; $j++){
