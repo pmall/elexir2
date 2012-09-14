@@ -1,0 +1,112 @@
+Classe analyse :
+	get_analyse :
+	METHODE DE CLASSE
+	Récupère les infos de l'analyse et fait tout ce qu'il faut pour que
+	l'objet analyse retourné puisse faire les calculs correspondant à sa
+	description (utiliser les bons réplicats, etc etc...)
+	* Connection à la base de donnée
+	* Identifiant de l'analyse
+	> Objet analyse
+
+Instance d'analyse (récupérée via get_analyse) :
+	Attributs :
+		'' =>
+		'' =>
+		'' =>
+		'' =>
+		'' =>
+
+	Méthodes :
+		get_sondes_exprimees :
+		Retourne les sondes exprimées dans cette analyse à partir
+		d'une liste d'id de sonde.
+		* Connection à la base de données
+		* Référence à une liste de sondes
+		* Seuil DABG
+		* 0 ou 1
+		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
+		dans les deux conditions (1) ou dans l'une ou l'autre (0)
+
+Package Utils :
+	union :
+	* Reférence à une liste de sondes (liste1)
+	* Référence à une liste de sondes (liste2)
+	> Liste des sondes présente dans liste1 OU liste2
+
+	inter :
+	* Reférence à une liste de sondes (liste1)
+	* Référence à une liste de sondes (liste2)
+	> Liste des sondes présente dans liste1 ET liste2
+
+	sum_no_rep_effect :
+	Calcule une valeur résumée d'un groupe de sondes sans tenir compte
+	des effets replicats.
+	Fait la médiane des FCs de chaque sondes sur les replicats. (médianes
+	des lignes de la matrice). La valeur résumée est la médiane de ces
+	médianes.
+	* Référence à une matrice de sondes replicatXsonde
+	> Valeur résumée
+	> Liste des médianes de chaque sonde sur les réplicats
+
+	rep_effect :
+	Calcule les effets replicats d'un groupe de sondes. C'est à dire une
+	valeur résumée pour chaque réplicat. C'est la médiane des FCs des
+	sondes de chaque réplicat. (médianes des colones de la matrice).
+	* Référence à une matrice de sondes replicatXsonde
+	> Référence à la liste d'effets replicats
+
+	sum_rep_effect :
+	Calcule une valeur résumée d'un groupe de sondes en tenant compte
+	des effets replicats.
+	Fait la médiane des FCs des sondes de chaque réplicat. (médianes des
+	colones de la matrice). La valeur résumée est la médiane de ces
+	médianes.
+	* Référence à une matrice de sondes replicatXsonde
+	> Valeur résumée
+	> Liste des médianes de chaque réplicat
+
+	homogene :
+	Détermine si les sondes d'un gène sont réparties de façon homogène.
+	C'est à dire au moins deux sondes dans au moins la moitié des exons
+	du gène seulement si ce gène a au moins 4 exons.
+	* Référence à une liste des infos des sondes du gène
+	* Référence à une liste de sondes du gène
+	* Nombre d'exon du gène
+	* (optionel : 4) Nombre d'exon minimum du gène en dessous duquel on
+	retourne forcément 1
+	* (optionel : 2) Nombre de sondes minimum par exon
+	> 0 ou 1 selon que le gène est homogène ou non
+
+	is_robust :
+	Détermine si une liste de valeurs est cohérente ou non. C'est à dire
+	au moins 80% des valeurs sont soit "up" soit "down".
+	* Référence à une liste de valeurs
+	* Seuil au dessus duquel la valeur est up
+	* Seuil en dessous duquel la valeur est down
+	* (optionel : 0.80) Pourcentage de sondes devant aller dans le même
+	sens pour que la liste soit cohérente
+	* (optionel : 3) Nombre minimum de sondes devant aller dans le même sens
+	pour que la liste soit cohérente.
+	> 0 ou 1 selon que la liste de valeur est cohérente ou non
+
+Package Stats :
+	somme_fisher :
+	Permet de calculer la pvalue d'un groupe de sondes en utilisant la
+	methode de fisher. (méthode utilisée par Affymetrix pour calcule le
+	dabg d'un probeset à partir de ses sondes).
+	* Référence à une liste de pvalues
+	> pvalue du groupe de sondes.
+
+	ttest :
+	Effectue un ttest comparant la moyenne d'une liste de valeurs à 0
+	* Référence à une liste de valeur.
+	* le type d'hypothèse alternative [0 1 greater lesser towsided]
+	0 = lesser, 1 = greater. Permet de passer un simple booléen pour
+	ce paramètre
+	> pvalue du test de student
+
+	adjust_pval :
+	Correction d'une liste de pvaleurs en utilisant la méthode de
+	bonferrini hopfman.
+	* Référence à une liste de pvaleurs
+	> Liste des pvaleurs corrigées
