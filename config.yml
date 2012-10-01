@@ -68,6 +68,7 @@ table_entites:
 table_entites_a_priori:
   fdb1:
     human: humain_fdb1_entites_a_priori
+    mouse: souris_fdb1_entites_a_priori
   fdb2:
     human: humain_fdb2_entites_a_priori
 

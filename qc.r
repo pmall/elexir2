@@ -212,6 +212,7 @@ for(i in seq(2, nb_puces)){
 }
 
 axis(side = 1, labels = c('bioB', 'bioC', 'bioD', 'cre'), at = c(1, 2, 3, 4));
+legend(1, max(biob, bioc, biod, cre), seq(nb_puces), col = colors, lty = 1);
 
 dev.off();
 
@@ -249,6 +250,7 @@ for(i in seq(2, nb_puces)){
 }
 
 axis(side = 1, labels = c('bioB', 'bioC', 'bioD', 'cre'), at = c(1, 2, 3, 4));
+legend(1, max(biob, bioc, biod, cre), seq(nb_puces), col = colors, lty = 1);
 
 dev.off();
 
@@ -286,6 +288,7 @@ for(i in seq(2, nb_puces)){
 }
 
 axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
+legend(1, max(lys, phe, thr, dap), seq(nb_puces), col = colors, lty = 1);
 
 dev.off();
 
@@ -323,6 +326,7 @@ for(i in seq(2, nb_puces)){
 }
 
 axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
+legend(1, max(lys, phe, thr, dap), seq(nb_puces), col = colors, lty = 1);
 
 dev.off();
 
@@ -360,6 +364,7 @@ for(i in seq(2, nb_puces)){
 }
 
 axis(side = 1, labels = c('lys', 'phe', 'thr', 'dap'), at = c(1, 2, 3, 4));
+legend(1, max(lys, phe, thr, dap), seq(nb_puces), col = colors, lty = 1);
 
 dev.off();
 
