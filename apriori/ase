@@ -172,6 +172,11 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		# On récupère les sondes de chaque exon
 		# ======================================================================
 
+		# On fait un bordel infame parce que l'on calcule le dabg avec
+		# toutes les sondes et on les filtre après
+		# Ce serait beaucoup plus simple de filtrer avant et de récupérer
+		# les sondes exprimés après, comme dans les autres algos
+
 		# On récupère les infos des sondes
 		$select_infos_sondes_entites_sth->execute($entite->{'id'});
 		my $infos_sondes_entites = $select_infos_sondes_entites_sth->fetchall_hashref('id_probe');
@@ -242,7 +247,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			1 # dans les deux conditions
 		);
 
-		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_5prime_raw} == 0);
+		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_5prime_raw} == 0);
 
 		# On récupère les sondes exprimées pour les exclusions 3prime
 		my $ref_sondes_exclusion_3prime_raw = $analyse->get_sondes_exprimees(
@@ -253,7 +258,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			1 # dans les deux conditions
 		);
 
-		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_3prime_raw} == 0);
+		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_3prime_raw} == 0);
 
 		next if(@{$ref_sondes_exclusion_5prime_raw} == 0 and @{$ref_sondes_exclusion_3prime_raw} == 0);
 
@@ -278,8 +283,8 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		}
 
 		next if(@{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
-		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase);
-		next if($entite->{'type'} eq 'ASE' and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
 
 		# On mixe exclusion 5' et exclusion 3'
 		my $ref_sondes_exclusion = [
