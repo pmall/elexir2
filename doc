@@ -1,42 +1,452 @@
-Classe analyse :
-	get_analyse :
-	METHODE DE CLASSE
-	Récupère les infos de l'analyse et fait tout ce qu'il faut pour que
-	l'objet analyse retourné puisse faire les calculs correspondant à sa
-	description (utiliser les bons réplicats, etc etc...)
-	* Connection à la base de donnée
-	* Identifiant de l'analyse
-	> Objet analyse
+================================================================================
+Structures de base
+================================================================================
 
-Instance d'analyse (récupérée via get_analyse) :
+Dans tout ce qui suit une sonde est un hash nom_puce => intensité ex :
+
+	sonde = {
+		'PuceA1' => IntensA1,
+		'PuceA2' => IntensA2,
+		'PuceA3' => IntensA3,
+		'PuceB1' => IntensB1,
+		'PuceB2' => IntensB2,
+		'PuceB3' => IntensB3
+	}
+
+Un liste de sondes est une liste de hash de sondes, elles peuvent représenter
+par exemple la liste de sondes d'un gène ou la liste de sondes d'une entité ex :
+
+	ListeSondeGene = [
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		{ 'PuceA1' => IntensA1, 'PuceA2' => IntensA2 ... },
+		...
+	]
+
+A plusieurs endoit je parle de liste de FCs d'une sonde, c'est donc la liste
+des fold changes d'une sonde pour chaque paires de réplicat test et cont. Ex :
+
+	ListeFCsSonde = [
+		FCPaireReplicat1,
+		FCPaireReplicat2,
+		FCPaireReplicat3,
+		FCPaireReplicat4,
+		...
+	]
+
+A plusieurs endroit je parle de matrice de FCs des sondes, c'est simplement
+une liste des listes de FCs de plusieurs sondes. Ex :
+
+	MatriceFCsSondes = [
+		[FCPaireReplicat1, FCPaireReplicat2, ...], # Sonde 1
+		[FCPaireReplicat1, FCPaireReplicat2, ...], # Sonde 2
+		[FCPaireReplicat1, FCPaireReplicat2, ...], # Sonde 3
+		[FCPaireReplicat1, FCPaireReplicat2, ...], # Sonde 4
+		...
+	]
+
+Idem avec le SI, il y a des listes de SIs pour une sonde et des matrices de SIs
+pour une liste de sondes.
+
+================================================================================
+Concepts algos
+================================================================================
+
+L'idée est d'utiliser les mêmes algos pour les exp paires et non paires. Dans
+tout ce qui suit le terme réplicat fait en fait référence à une LISTE de puces
+et non une seule puce. Liste composée d'un seul élément pour une exp paire et de
+plusieurs éléments pour une exp non paire.
+
+Le design d'une analyse est décrit comme étant une liste de paires de replicats
+cont et test. Une paire est un hash avec deux clés cont et test, qui pointent
+sur des réplicats. Pour une expérience paire il y a plusieurs paires de
+replicats qui ne contiennent qu'une puce, et pour une analyse non paire il y a
+une seule paire de replicats qui contiennent plusieurs puces. Ex :
+
+Exp paire avec trois paires de replicat :
+
+	[ # Analyse
+		{
+			cont => [PuceA1] # Replicat
+			test => [PuceB1] # Replicat
+		},
+
+		{
+			cont => [PuceA2] # Replicat
+			test => [PuceB2] # Replicat
+		},
+
+		{
+			cont => [PuceA3] # Replicat
+			test => [PuceB3] # Replicat
+		}
+	]
+
+Exp non paire avec trois puces control et deux puces test :
+
+	[ # Analyse
+		{
+			cont => [PuceA1, PuceA2, PuceA3] # Replicat
+			test => [PuceB1, PuceB2] # Replicat
+		}
+	]
+
+Ce design permet d'utiliser les mêmes fonctions pour faire les calculs que l'exp
+soit paire ou non. Ex : Pour calculer le fold change d'une sonde, il suffit de
+boucler sur toutes les paires de replicats (une seule dans le cas d'une exp non
+paire), puis de comparer le replicat test au replicat controle, en faisant la
+moyenne de la liste (pour les exp paire il n'y a qu'un seul élément dans la
+liste donc faire la moyenne reviens à prendre la même valeur). Pour les exps ci
+dessus ça donne :
+
+Exp paire avec trois paires de replicat :
+
+	FC1 : moyenne([PuceB1])/moyenne([PuceA1])
+	FC2 : moyenne([PuceB2])/moyenne([PuceA2])
+	FC3 : moyenne([PuceB3])/moyenne([PuceA3])
+
+Exp non paire avec deux puces control et trois puces test :
+
+	FC1 : moyenne([PuceB1, PuceB2])/moyenne([PuceA1, PuceA2, PuceA3])
+
+L'algo est le même :).
+
+Un autre exemple est le dabg.
+
+	Soit dabg une fonction qui retourne vrai si au moins la moitié des
+	valeurs	passées en paramètre sont supérieures au seuil de dabg.
+
+	Soit moitie une fonction retournant vrai si au moins la moitié des
+	valeurs passées en paramètre sont vraies.
+
+Exp paire avec trois paires de replicat :
+
+	DABG_cont1 : dabg([PuceA1])
+	DABG_test1 : dabg([PuceB1])
+
+	DABG_cont2 : dabg([PuceA2])
+	DABG_test2 : dabg([PuceB2])
+
+	DABG_cont3 : dabg([PuceA3])
+	DABG_test3 : dabg([PuceB3])
+
+	DABG : moitie(DABG_cont1, DABG_cont2, DABG_cont3)
+	       OU
+	       moitie(DABG_test1, DABG_test2, DABG_test3)
+
+Exp non paire avec deux puces control et trois puces test :
+
+	DABG_cont1 : dabg([PuceA1, PuceA2, PuceA3])
+	DABG_test1 : dabg([PuceB1, PuceB2])
+
+	DABG : moitie(DABG_cont1) OU moitie(DABG_cont2)
+
+Meme Algo :). Biensur ici ils sont écrit de façon schématique, le vrai se fait
+avec une boucle mais c'est juste pour montrer l'idée.
+
+L'étape suivante est de rendre l'algo récursif pour les analyses composées. Ce
+n'est qu'une question d'organisation du code. On peut voir une composée comme
+une analyse dont les parties test et control sont d'autres analyses. Voilà à
+quoi ressemble un desing d'exp composée :
+
+	[ # Analyse
+		{
+			cont => [ # Analyse
+					{
+						cont => [PuceA1] # Replicat
+						test => [PuceB1] # Replicat
+					},
+
+					{
+						cont => [PuceA2] # Replicat
+						test => [PuceB2] # Replicat
+					},
+
+					{
+						cont => [PuceA3] # Replicat
+						test => [PuceB3] # Replicat
+					}
+				]
+
+			test => [ # Analyse
+					{
+						cont => [PuceC1] # Replicat
+						test => [PuceD1] # Replicat
+					},
+
+					{
+						cont => [PuceC2] # Replicat
+						test => [PuceD2] # Replicat
+					},
+
+					{
+						cont => [PuceC3] # Replicat
+						test => [PuceD3] # Replicat
+					}
+			]
+		}
+	]
+
+Pour faire le fold change on voit que
+
+	FCBA1 : moyenne(PuceB1)/moyenne(PuceA1)
+	FCBA2 : moyenne(PuceB2)/moyenne(PuceA2)
+	FCBA3 : moyenne(PuceB3)/moyenne(PuceA3)
+
+	FCDC1 : moyenne(PuceD1)/moyenne(PuceC1)
+	FCDC2 : moyenne(PuceD2)/moyenne(PuceC2)
+	FCDC3 : moyenne(PuceD3)/moyenne(PuceC3)
+
+	FCOJ1 : FCDC1/FCBA1
+	FCOJ2 : FCDC2/FCBA2
+	FCOJ3 : FCDC3/FCBA3
+
+	Soit FC une fonction qui divise les valeurs de test par les valeurs de
+	controle au niveau des analyses et qui retourne la moyenne au niveau des
+	replicats on a :
+
+	FC1 : FC(test)/FC(cont)
+		FC(test) : FC([PuceB1])/FC([PuceA1])
+		FC(cont) : FC([PuceD1])/FC([PuceC1])
+	FC2 : FC(test)/FC(cont)
+		FC(test) : FC([PuceB2])/FC([PuceA2])
+		FC(cont) : FC([PuceD2])/FC([PuceC2])
+	FC3 : FC(test)/FC(cont)
+		FC(test) : FC([PuceB2])/FC([PuceA3])
+		FC(cont) : FC([PuceD2])/FC([PuceC3])
+
+C'est pourquoi le code est séparé en deux classe Analyse et Replicat, qui ont
+une fonction fcs_sonde mais qui fait test/cont dans la classe Analyse et qui
+fait la moyenne de la liste de puces dans la classe Replicat. De cette façon on
+peut faire des simples ou des composés, paires ou non paires, avec le même algo.
+Toutes les fonctions de la classe analyse sont concues pour fonctionner
+récursivement, ce qui peut parfois être casse tête... :(
+
+================================================================================
+Description des classes
+================================================================================
+
+Classe Analyse :
+
+	Classe permettant d'acceder aux infos d'une analyse en particulier et
+	d'effectuer les calculs qui lui sont spécifiques. Les calculs du FC et
+	du SI marchent que l'exp soit paire, non paire ou bien composée.
+
+	Méthode de classe :
+		get_analyse :
+		Récupère les infos de l'analyse et fait tout ce qu'il faut pour
+		que l'objet analyse retourné puisse faire les calculs
+		correspondant au design de l'analyse (utiliser les bons
+		réplicats, etc etc...).
+		* Connection à la base de donnée.
+		* Identifiant de l'analyse.
+		> Objet analyse.
+
 	Attributs :
-		'' =>
-		'' =>
-		'' =>
-		'' =>
-		'' =>
+		'id' => Id de l'analyse.
+		'name' => Nom de l'analyser.
+		'id_project' => Id du projet correspondant.
+		'type' => Type d'analyse [simple compose apriori jonction].
+		'version' => Version de fasterdb à utiliser [fdb1 fdb2].
+		'organism' => Organisme de l'analyse [humain souris].
+		'type_chips' => Type de puces [exon ggh].
+		'paired' => 0 si analyse non pairée, 1 si analyse pairée.
+		'nb_paires_rep' => Nombre de paires de replicats. 1 Pour les exp
+		non pairée.
 
-	Méthodes :
-		get_sondes_exprimees :
-		Retourne les sondes exprimées dans cette analyse à partir
-		d'une liste d'id de sonde.
-		* Connection à la base de données
-		* Référence à une liste de sondes
-		* Seuil DABG
-		* 0 ou 1
+	Méthodes privées (à ne pas utiliser !!)
+		get_select_dabg :
+		Retourne la requète préparée pour selectionne les valeurs de
+		dabg, mise en cache pour qu'elle ne soit préparée qu'une fois.
+		* Connection à la base de données.
+		> Requète préparée.
+
+		get_select_intensites :
+		Retourne la requète préparée pour selectionne les valeurs de
+		intensite, mise en cache pour qu'elle ne soit préparée qu'une
+		fois.
+		* Connection à la base de données.
+		> Requète préparée.
+
+		get_sondes_exprimees_simples :
+		Retourne la liste des sondes exprimées à partir d'une liste
+		d'identifiants de sondes, en filtrant le dabg pour chaque sondes
+		INDIVIDUELLEMENT.
+		* Connection à la base de données.
+		* Référence à une liste d'identifiants de sondes.
+		* Seuil pour le dabg.
 		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
-		dans les deux conditions (1) ou dans l'une ou l'autre (0)
+	 	dans test OU control (0) ou dans test ET control (1).
+		> Liste des sondes exprimées.
+
+		get_sondes_exprimees_groupe :
+		Retourne la liste des sondes exprimées à partir d'une liste
+		d'identifiants de sondes, en filtrant le dabg SUR L'ENTITE.
+		* Connection à la base de données.
+		* Référence à une liste d'identifiants de sondes.
+		* Seuil pour le dabg.
+		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
+		dans test OU control (0) ou dans test ET control (1).
+		> Liste des sondes exprimées.
+
+		dabg, dabg_simple :
+		Retourne 1 si la sonde passe le dabg, 0 sinon.
+		* Sonde.
+		* Seuil dabg.
+		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
+		dans test OU control (0) ou dans test ET control (1).
+		> 1 si la sonde passe le dabg, 0 sinon.
+
+		dabg_groupe :
+		Retourne 1 si le groupe de sondes passe le dabg, 0 sinon.
+		* Référence à une liste de sondes.
+		* Seuil dabg.
+		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
+		dans test OU control (0) ou dans test ET control (1).
+		> 1 si le groupe de sondes passe le dabg, 0 sinon.
+
+		lissage :
+		Retourne une liste de sondes lissées à partir d'une liste de
+		sondes et d'une fonction d'aggregation (union ou intersection).
+		* Référence à une liste de sondes.
+		* Référence à une fonction d'aggregation
+		> Référence à une liste de sondes lissées.
+
+
+	Méthodes publiques :
+		get_sondes_exprimees :
+		Retourne la liste des sondes exprimées dans cette analyse à
+		partir d'une liste d'id de sonde.
+		* Connection à la base de données.
+		* Référence à une liste d'id de sondes.
+		* Seuil DABG au dessus duquel l'élement est filtré.
+		* 0 ou 1 selon que l'on veut que le dabg soit filtré sur les
+                sondes individuelles (0) ou sur le dabg de l'entité (1).
+		* 0 ou 1 selon que l'on veut que les sondes soient exprimées
+		dans test OU control (0) ou dans test ET control (1).
+
+		lissage_transcription :
+		Retourne les sondes qui passent le lissage transcriptionel à
+		partir d'une liste de sondes.
+		* Référence à une liste de sondes.
+		> Référence à une liste de sondes lissées transcriptionellement.
+
+		lissage_epissage :
+		Retourne les sondes qui passent le lissage épissage à partir
+		d'une liste de sondes.
+		* Référence à une liste de sondes.
+		> Référence à une liste de sondes lissées épissage.
+
+		expressions :
+		Retourne les valeurs d'expression de chaque réplicat à partir
+		d'une liste de sondes
+		* Référence à une liste de sondes
+		> Liste des valeurs d'expression
+
+		fcs_sonde :
+		Retourne la liste des FCs d'une sonde (un par paire de replicats).
+		* Sonde.
+		> Référence à une liste des FCs de la sonde.
+
+		fcs_sondes :
+		Retourne la liste des FCs (un par paire de replicat) d'une liste
+		de sondes (matrice de FCs).
+		* Référence à une liste de sondes.
+		> Référence à une matrice (liste de liste) de FCs.
+
+		fc_gene :
+		Retourne le FC du gène, sa pvalue, la liste des FCs des sondes
+		qui ont été utilisés pour le calcul à partir d'une matrice de
+		FCs de sondes.
+		* Référence à une matrice (liste de liste) de FCs des sondes.
+		> FC du gène.
+		> pvalue du FC.
+		> Liste des FCs qui ont été utilisés pour le calcul.
+
+		sis_sonde :
+		Retourne une liste de SIs à partir d'une liste de FCs référence
+		et une liste de FCs d'une sonde. Pour chaque paire de replicat,
+		on fait FC sonde/FC reference.
+		* Référence à une liste de FCs référence.
+		* Référence à une liste de FCs d'une sonde.
+		> Référence à une liste de SIs de la sonde.
+
+		sis_sondes :
+		Retourne la liste des SIs (un par paire de replicat) d'une liste
+		de sondes (matrice de SIs).
+		* Référence à une liste de FCs référence.
+		* Référence à une matrice (liste de liste) de FCs des sondes.
+		> Référence à une matrice (liste de liste) de SIs.
+
+		si_entite :
+		Retourne le SI d'une entité, sa pvalue, la liste des SIs qui ont
+		été utilisés pour le calcul.
+		* Référence à une matrice (liste de liste) de SIs des sondes.
+		> Si de l'entité.
+		> pvalue du SI.
+		> Liste des SIs qui ont été utilisés pour le calcul.
+
+Classe Replicat :
+
+	Classe qui sert seulement à rendre récursif le design des analyses,
+	n'est utilisé que dans Analyse et ne doit PAS etre utilisé manuellement.
+	La nom est un abus de language, car cette classe représente une liste de
+	replicats, dans le cas des exp paires elles ne contiennent qu'une puce,
+	dans le cas des exp non paires elles contienent plusieurs puces. (voir
+	design).
+
+	dabg_sonde :
+	Retourne 1 si le dabg d'une sonde est sous le seuil pour ce replicat, 0
+	sinon.
+	* Sonde
+	* Seuil dabg
+	> 1 si la sonde est sous le seuil, 0 sinon
+
+	dabg_groupe :
+	Retourne 1 si le dabg d'un groupe de sonde est sous le seuil pour ce
+	replicat, 0 sinon.
+
+	lissage :
+	Retourne la liste des sondes lissées pour ce replicat à partir d'un
+	groupe de sondes.
+	* Reférence à une liste de sondes.
+	> Reférence à une liste de sondes filtrées pour ce replicat.
+
+	expression :
+	Retourne la liste des valeurs d'expression pour ce replicat à partir
+	d'un groupe de sondes.
+	* Reférence à une liste de sondes.
+	> Valeur d'expression du réplicat.
+
+	fcs_sonde :
+	Retourne la valeur d'une sonde pour ce replicat. OK le nom est CONTRE
+	INTUITIF, mais c'est simplement pour que la récursion marche pour la
+	fonction fcs_sonde de la classe analyse.
+	* Sonde.
+	> Valeur de la sonde dans ce replicat.
 
 Package Utils :
+
+	Package qui défini les fontion effectuant les calculs que l'on fait
+	partout dans les analyses et qui ne sont pas spécifiques à une analyse
+	en particulier.
+
 	union :
-	* Reférence à une liste de sondes (liste1)
-	* Référence à une liste de sondes (liste2)
-	> Liste des sondes présente dans liste1 OU liste2
+	Calcule l'union de deux listes de sondes.
+	* Reférence à une liste de sondes (liste1).
+	* Référence à une liste de sondes (liste2).
+	> Liste des sondes présente dans liste1 OU liste2.
 
 	inter :
-	* Reférence à une liste de sondes (liste1)
-	* Référence à une liste de sondes (liste2)
-	> Liste des sondes présente dans liste1 ET liste2
+	Calcule l'intersection de deux listes de sondes.
+	* Reférence à une liste de sondes (liste1).
+	* Référence à une liste de sondes (liste2).
+	> Liste des sondes présente dans liste1 ET liste2.
 
 	sum_no_rep_effect :
 	Calcule une valeur résumée d'un groupe de sondes sans tenir compte
@@ -44,16 +454,16 @@ Package Utils :
 	Fait la médiane des FCs de chaque sondes sur les replicats. (médianes
 	des lignes de la matrice). La valeur résumée est la médiane de ces
 	médianes.
-	* Référence à une matrice de sondes replicatXsonde
-	> Valeur résumée
-	> Liste des médianes de chaque sonde sur les réplicats
+	* Référence à une matrice de sondes replicatXsonde.
+	> Valeur résumée.
+	> Liste des médianes de chaque sonde sur les réplicats.
 
 	rep_effect :
 	Calcule les effets replicats d'un groupe de sondes. C'est à dire une
 	valeur résumée pour chaque réplicat. C'est la médiane des FCs des
 	sondes de chaque réplicat. (médianes des colones de la matrice).
-	* Référence à une matrice de sondes replicatXsonde
-	> Référence à la liste d'effets replicats
+	* Référence à une matrice de sondes replicatXsonde.
+	> Référence à la liste d'effets replicats.
 
 	sum_rep_effect :
 	Calcule une valeur résumée d'un groupe de sondes en tenant compte
@@ -61,52 +471,165 @@ Package Utils :
 	Fait la médiane des FCs des sondes de chaque réplicat. (médianes des
 	colones de la matrice). La valeur résumée est la médiane de ces
 	médianes.
-	* Référence à une matrice de sondes replicatXsonde
-	> Valeur résumée
-	> Liste des médianes de chaque réplicat
+	* Référence à une matrice de sondes replicatXsonde.
+	> Valeur résumée.
+	> Liste des médianes de chaque réplicat.
 
 	homogene :
 	Détermine si les sondes d'un gène sont réparties de façon homogène.
 	C'est à dire au moins deux sondes dans au moins la moitié des exons
 	du gène seulement si ce gène a au moins 4 exons.
-	* Référence à une liste des infos des sondes du gène
-	* Référence à une liste de sondes du gène
-	* Nombre d'exon du gène
+	* Référence à une liste des infos des sondes du gène.
+	* Référence à une liste de sondes du gène.
+	* Nombre d'exon du gène.
 	* (optionel : 4) Nombre d'exon minimum du gène en dessous duquel on
-	retourne forcément 1
-	* (optionel : 2) Nombre de sondes minimum par exon
-	> 0 ou 1 selon que le gène est homogène ou non
+	retourne forcément 1.
+	* (optionel : 2) Nombre de sondes minimum par exon.
+	> 0 ou 1 selon que le gène est homogène ou non.
 
 	is_robust :
 	Détermine si une liste de valeurs est cohérente ou non. C'est à dire
 	au moins 80% des valeurs sont soit "up" soit "down".
-	* Référence à une liste de valeurs
-	* Seuil au dessus duquel la valeur est up
-	* Seuil en dessous duquel la valeur est down
+	* Référence à une liste de valeurs.
+	* Seuil au dessus duquel la valeur est up.
+	* Seuil en dessous duquel la valeur est down.
 	* (optionel : 0.80) Pourcentage de sondes devant aller dans le même
-	sens pour que la liste soit cohérente
+	sens pour que la liste soit cohérente.
 	* (optionel : 3) Nombre minimum de sondes devant aller dans le même sens
 	pour que la liste soit cohérente.
-	> 0 ou 1 selon que la liste de valeur est cohérente ou non
+	> 0 ou 1 selon que la liste de valeur est cohérente ou non.
 
 Package Stats :
+
+	Package qui defini les fonctions statistiques que l'on utilise partout.
+
 	somme_fisher :
-	Permet de calculer la pvalue d'un groupe de sondes en utilisant la
-	methode de fisher. (méthode utilisée par Affymetrix pour calcule le
-	dabg d'un probeset à partir de ses sondes).
-	* Référence à une liste de pvalues
+	Calcule une pvalue à partir de plusieurs pvalues en utilisant la methode
+	de fisher. (méthode utilisée par Affymetrix pour calcule le dabg d'un
+	probeset à partir de ses sondes).
+	* Référence à une liste de pvalues.
 	> pvalue du groupe de sondes.
 
 	ttest :
-	Effectue un ttest comparant la moyenne d'une liste de valeurs à 0
+	Effectue un ttest comparant la moyenne d'une liste de valeurs à 0.
 	* Référence à une liste de valeur.
 	* le type d'hypothèse alternative [0 1 greater lesser towsided]
 	0 = lesser, 1 = greater. Permet de passer un simple booléen pour
-	ce paramètre
-	> pvalue du test de student
+	ce paramètre.
+	> pvalue du test de student.
 
 	adjust_pval :
 	Correction d'une liste de pvaleurs en utilisant la méthode de
 	bonferrini hopfman.
-	* Référence à une liste de pvaleurs
-	> Liste des pvaleurs corrigées
+	* Référence à une liste de pvaleurs.
+	> Liste des pvaleurs corrigées.
+
+Package Math
+
+	Package qui défini les fonctions de math basiques que l'on utilise
+	partout.
+
+	round :
+	Retourne un nombre arrondi au nombre de décimale demandés.
+	* Nombre à arrondir.
+	* Nombre de décimales.
+	> Nombre arrondi.
+
+	mean :
+	Retourne la moyenne d'une liste de valeurs.
+	* Liste de valeurs.
+	> Moyenne.
+
+	variance :
+	Retourne la variance d'une liste de valeurs.
+	* Liste de valeurs.
+	> Variance.
+
+	sd :
+	Retourne l'écart type exact d'une liste de valeurs.
+	* Liste de valeurs.
+	> Ecart type exact.
+
+	sd_est :
+	Retourne l'écart type estimé d'une liste de valeurs.
+	* Liste de valeurs.
+	> Ecart type estimé.
+
+	median :
+	Retourne la médiane d'une liste de valeurs.
+	* Liste de valeurs.
+	> Mediane.
+
+	log2 :
+	Retourne les valeurs en log2 d'une liste de valeurs.
+	* Liste de valeurs.
+	> Liste de valeurs en log2. Attention si un scalaire est demandé en
+	on retourne seulement le premier élément de la liste. Permet d'utiliser
+	la fonction à la fois sur une liste ou sur une valeur simple.
+
+Package Format
+
+	Package qui permet de récupérer des chaines de caractères formattées de
+	la même façon quelque soit le script, par exemple les noms de table
+	avec des ids dedans, le fold en décimal, la date.
+
+	get_table_intensites :
+	* id du projet.
+	> Nom table intensités.
+
+	get_table_dabg :
+	* id du projet.
+	> Nom table dabg.
+
+	get_table_transcription :
+	* id du projet.
+	* id de l'analyse.
+	> Nom table transcription.
+
+	get_table_splicing :
+	* id du projet.
+	* id de l'analyse.
+	> Nom table épissage.
+
+	get_table_ase_a_priori :
+	* id du projet.
+	* id de l'analyse.
+	> Nom table ase a priori.
+
+	get_table_jonction :
+	* id du projet.
+	* id de l'analyse.
+	> Nom table jonction.
+
+	format_fold :
+	* Fold sous forme de ratio.
+	> Fold en valeur absolue.
+
+	date :
+	> Chaine de caractère contenant date et heure.
+
+================================================================================
+Script d'analyse
+================================================================================
+
+Les scripts d'analyse sont de simples enchainements de ces fonctions.
+
+Ex d'une analyse des gènes :
+
+* On utilise Analyse->get_analyse(id_analyse) pour récupérer un objet analyse.
+* On selectionne les gènes.
+* Pour chaque gène, on boucle :
+* On récupère les ids des sondes du gène avec leur caractéristiques.
+* On filtre les sondes qui n'ont pas de bonnes caractéristiques de nombre
+  d'occurence et de contenu en GC.
+* On récupère les sondes qui passent le dabg avec Analyse->get_sondes_exprimes
+* On récupère les valeurs d'expression des réplicats avec Analyse->expression
+* On lisse les sondes avec Analyse->lissage_transcription ou
+  Analyse->lissage_epissage.
+* On calcule le fold change des sondes avec Analyse->fcs_sondes.
+* On fait le fold change du gène et la pvalue avec Analyse->fc_gene.
+* On insert tout dans la base.
+
+L'analyse peut se faire au niveau des entités en selectionnant toutes les
+entités pour chaque gène puis les sondes des entités. Les scripts sont
+explicites.

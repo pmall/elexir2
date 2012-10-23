@@ -9,7 +9,7 @@ use Exporter qw(import);
 our @EXPORT = qw(get_table_intensites get_table_dabg
 	get_table_transcription get_table_splicing
 	get_table_ase_a_priori get_table_jonction
-	format_fold date traduction_type);
+	format_fold date);
 
 # ==============================================================================
 # Formatage commun a tout les scripts
@@ -77,42 +77,6 @@ sub format_fold{
 
 }
 
-=head
-sub link_elexir{
-
-	my($analyse, $symbol) = @_;
-
-	my $id_analyse = $analyse->{'id'};
-	my $orga = ucfirst($analyse->{'organism'});
-	my $cont = $analyse->{'design'}->[0]->{'cont'}->[0];
-	$cont =~ s/(_[0-9]+$)//;
-	my $test = $analyse->{'design'}->[0]->{'test'}->[0];
-	$test =~ s/(_[0-9]+$)//;
-	my $paire = ($analyse->{'paired'}) ? 'Paired' : 'Unpaired';
-	my $sens = ($analyse->{'type_chips'} eq 'exon') ? 'reverse' : 'all';
-
-	my $base_url = 'http://172.21.100.5/elexir2/experiments.pl';
-
-	my @args = (
-		'gene1_0=' . $symbol,
-		'experiment1=' . $id_analyse . '[' . $orga . ']',
-		'cond_test1_1=' . $test,
-		'cond_control1_1=' . $cont,
-		'type1_1=' . $paire,
-		'entity=exon',
-		'probe=' . $sens,
-		'color=absolute',
-		'dabg=on',
-		'gc_content=on',
-		'repeat=on'
-	);
-
-	return $base_url . '?' . join('&', @args);
-
-}
-
-=cut
-
 sub date{
 
 	my $time = time;
@@ -160,25 +124,6 @@ sub date{
 	my $string_date = "$h_date{jour_semaine} $h_date{date}, $h_date{heure}";
 
 	return $string_date;
-
-}
-
-sub traduction_type{
-
-	my($type) = @_;
-
-	my %traduction = (
-		'exon' => 'ASE',
-		'prom' => 'AFE',
-		'polya' => 'ALE',
-		'intron-ret' => 'IR',
-		'donor' => 'DON',
-		'acceptor' => 'ACC',
-		'deletion' => 'DEL',
-		'3primeUTR' => '3\'UTR',
-	);
-
-	return $traduction{$type};
 
 }
 
