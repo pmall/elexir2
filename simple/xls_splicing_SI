@@ -5,6 +5,7 @@ use YAML::XS qw(LoadFile);
 use DBI;
 use File::Path qw(make_path);
 use Spreadsheet::WriteExcel;
+use List::MoreUtils qw(uniq);
 use FindBin qw($Bin);
 use lib "$FindBin::Bin/../lib";
 use Format;
@@ -97,21 +98,17 @@ my $select_nb_entites_exp_sth = $dbh->prepare(
 
 my $select_entites_sth = $dbh->prepare(
 	"SELECT e.*, g.trans_fc, g.trans_pval,
-	g.trans_nb_sondes, g.trans_nb_exons
-	FROM $table_trans AS g, $table_splicing AS e
-	WHERE g.id_gene = e.id_gene
+	g.trans_nb_sondes, g.trans_nb_exons,
+	i.type, i.sous_type, i.sequence,
+	i.exon_pos, i.start_sur_gene, i.end_sur_gene
+	FROM $table_trans AS g, $table_splicing AS e, $table_entites AS i
+	WHERE e.id_gene = g.id_gene
+	AND e.id_entite = i.id
 	AND ABS(LOG2(SI)) >= LOG2(?)"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
 	"SELECT * FROM $table_genes WHERE id_fasterdb = ?"
-);
-
-my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT type, sous_type, sequence,
-	exon_pos, start_sur_gene, end_sur_gene
-	FROM $table_entites
-	WHERE id = ?"
 );
 
 # ==============================================================================
@@ -275,6 +272,46 @@ for(my $j = 0; $j < @entetes; $j++){
 
 }
 
+# Pour chaque position d'exon on récupère juste l'entité avec le plus fort SI !
+# Déjà on classe par position d'exon et par SI
+@entites = sort {
+	# On classe par gène
+	$a->{'id_gene'} <=> $b->{'id_gene'}
+	||
+	# On classe par pos d'exon
+	$a->{'exon_pos'} <=> $b->{'exon_pos'}
+	||
+	# On classe par SI décroissant
+	$b->{'SI'} <=> $a->{'SI'}
+	||
+	# Si égalité parfaite on met la plus longue en premier (ce sera l'exon
+	# surement, en cas d'exon vs prom/polya)
+	$b->{'end_sur_gene'} - $b->{'start_sur_gene'}
+	<=>
+	$a->{'end_sur_gene'} - $a->{'start_sur_gene'}
+} @entites;
+
+# On réduit la liste pour garder que le plus fort SI a chaque pos d'exon (on
+# garde celui qui arrive en premier de la liste, on vient de classer pour ça)
+my @entites_uniques = ();
+
+foreach my $entite (@entites){
+
+	my $deja_present = grep {
+		$_->{'id_gene'} == $entite->{'id_gene'}
+		&&
+		$_->{'exon_pos'} == $entite->{'exon_pos'}
+	} @entites_uniques;
+
+	next if($deja_present);
+
+	push(@entites_uniques, $entite);
+
+}
+
+@entites = @entites_uniques;
+
+# Maintenant on classe les entités par SI décroissant grouppé par gène
 # On fait un hash du fc max par gène pour le classement
 my %SI_max_gene = ();
 
@@ -291,15 +328,18 @@ foreach my $entite (@entites){
 
 }
 
-# On classe les entites
+# On classe les entites, par SI décroissant et groupées par gène
 @entites = sort {
 	# Par FC gène fiable
 	format_fold($b->{'trans_fc'}) <= $seuil_fiabilite_fcGene
 	<=>
 	format_fold($a->{'trans_fc'}) <= $seuil_fiabilite_fcGene
 	||
-	# Ensuite par gène
+	# Ensuite par gène qui a l'entité avec le si max
 	$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
+	||
+	# Ensuite par id de gène (si deux gènes avec le si max)
+	$a->{'id_gene'} <=> $b->{'id_gene'}
 	||
 	# Ensuite encore par SI (au sein du gène)
 	format_fold($b->{'SI'}) <=> format_fold($a->{'SI'})
@@ -319,11 +359,6 @@ for(my $i = 0; $i < @entites; $i++){
 	$select_infos_gene_sth->execute($entite->{'id_gene'});
 	my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
 	$select_infos_gene_sth->finish;
-
-	# On récupère les infos de l'entité
-	$select_infos_entite_sth->execute($entite->{'id_entite'});
-	my $infos_entite = $select_infos_entite_sth->fetchrow_hashref;
-	$select_infos_entite_sth->finish;
 
 	# On compte combien de gènes sont passés
 	if($infos_gene->{'id_fasterdb'} != $id_gene_prec){
@@ -346,14 +381,14 @@ for(my $i = 0; $i < @entites; $i++){
 		'-' . $infos_gene->{'end_sur_chromosome'} .
 		':' . $infos_gene->{'strand'};
 
-	my $pos_entite = $infos_entite->{'start_sur_gene'} .
-		'-' . $infos_entite->{'end_sur_gene'};
+	my $pos_entite = $entite->{'start_sur_gene'} .
+		'-' . $entite->{'end_sur_gene'};
 
-	my $type_entite = $infos_entite->{'type'};
+	my $type_entite = $entite->{'type'};
 
-	if($type_entite eq 'exon' and $infos_entite->{'sous_type'}){
+	if($type_entite eq 'exon' and $entite->{'sous_type'}){
 
-		$type_entite.= '/' . $infos_entite->{'sous_type'};
+		$type_entite.= '/' . $entite->{'sous_type'};
 
 	}
 
@@ -399,7 +434,7 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, $infos_gene->{'id_source'});
 	push(@data, $infos_gene->{'symbol'});
 	push(@data, $type_entite);
-	push(@data, $infos_entite->{'exon_pos'});
+	push(@data, $entite->{'exon_pos'});
 	push(@data, ''); # Space
 
 	# Algo SI
@@ -433,7 +468,7 @@ for(my $i = 0; $i < @entites; $i++){
 
 	# Infos Entité
 	push(@data, $pos_entite);
-	push(@data, $infos_entite->{'sequence'});
+	push(@data, $entite->{'sequence'});
 
 	# On affiche les data
 	for(my $j = 0; $j < @data; $j++){

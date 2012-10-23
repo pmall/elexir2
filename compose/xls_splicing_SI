@@ -94,19 +94,16 @@ my $select_nb_entites_exp_sth = $dbh->prepare(
 );
 
 my $select_entites_sth = $dbh->prepare(
-	"SELECT * FROM $table_splicing
-	WHERE ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
+	"SELECT e.*,
+	i.type, i.sous_type, i.sequence,
+	i.exon_pos, i.start_sur_gene, i.end_sur_gene
+	FROM $table_splicing AS e, $table_entites AS i
+	WHERE e.id_entite = i.id
+	AND ABS(LOG2(SI_ba)) >= LOG2(?) AND SI_pval_ba <= ?"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
 	"SELECT * FROM $table_genes WHERE id_fasterdb = ?"
-);
-
-my $select_infos_entite_sth = $dbh->prepare(
-	"SELECT type, sous_type, sequence,
-	exon_pos, start_sur_gene, end_sur_gene
-	FROM $table_entites
-	WHERE id = ?"
 );
 
 # ==============================================================================
@@ -172,22 +169,6 @@ $select_entites_sth->execute($seuil_epissage, $seuil_pval);
 my @entites = @{$select_entites_sth->fetchall_arrayref({})};
 $select_entites_sth->finish;
 
-# On fait un hash du fc max par gène pour le classement
-my %SI_max_gene = ();
-
-foreach my $entite (@entites){
-
-	my $id_gene = $entite->{'id_gene'};
-	my $SI = format_fold($entite->{'SI_oj'});
-
-	if(!$SI_max_gene{$id_gene} or $SI > $SI_max_gene{$id_gene}){
-
-		$SI_max_gene{$id_gene} = $SI;
-
-	}
-
-}
-
 # On récupère les entités qui ont B/A up et ceux qui ont B/A down
 my @entites_ba_up = grep { $_->{'SI_ba'} >= 1 } @entites;
 my @entites_ba_down = grep { $_->{'SI_ba'} < 1 } @entites;
@@ -206,284 +187,338 @@ my($nb_downs_renforces, $nb_downs_affaiblits) = write_list(
 # Fonction pour remplir une feuille
 sub write_list{
 
-	my($f, @entites) = @_;
+my($f, @entites) = @_;
 
-	# Offset pour le nombre de colones selon le nombre de paires de rep
-	my $o_si = ($paire) ? $nb_paires_rep : 0;
+# Offset pour le nombre de colones selon le nombre de paires de rep
+my $o_si = ($paire) ? $nb_paires_rep : 0;
 
-	# On modifie la largeur des colones
-	$f->set_column(0, 0, 12); # Fasterdb id
-	$f->set_column(1, 1, 18); # Source id
-	$f->set_column(2, 2, 12); # Symbol
-	$f->set_column(3, 3, 12); # Type
-	$f->set_column(23 + ($o_si * 3), 23 + ($o_si * 3), 18); # Coordonnées
-	$f->set_column(24 + ($o_si * 3), 24 + ($o_si * 3), 18); # Sequence
+# On modifie la largeur des colones
+$f->set_column(0, 0, 12); # Fasterdb id
+$f->set_column(1, 1, 18); # Source id
+$f->set_column(2, 2, 12); # Symbol
+$f->set_column(3, 3, 12); # Type
+$f->set_column(23 + ($o_si * 3), 23 + ($o_si * 3), 18); # Coordonnées
+$f->set_column(24 + ($o_si * 3), 24 + ($o_si * 3), 18); # Sequence
 
-	# On fait les premiers entetes
-	$f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
-	$f->merge_range(0, 6, 0, 9 + $o_si, 'Regulation B/A', $format_entete_merge);
-	$f->merge_range(0, 11 + $o_si, 0, 15 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
-	$f->merge_range(0, 17 + ($o_si * 2), 0, 21 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
-	$f->merge_range(0, 23 + ($o_si * 3), 0, 24 + ($o_si * 3), 'Infos supp entite', $format_entete_merge);
+# On fait les premiers entetes
+$f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
+$f->merge_range(0, 6, 0, 9 + $o_si, 'Regulation B/A', $format_entete_merge);
+$f->merge_range(0, 11 + $o_si, 0, 15 + ($o_si * 2), 'Regulation D/C', $format_entete_merge);
+$f->merge_range(0, 17 + ($o_si * 2), 0, 21 + ($o_si * 3), 'Regulation O/J', $format_entete_merge);
+$f->merge_range(0, 23 + ($o_si * 3), 0, 24 + ($o_si * 3), 'Infos supp entite', $format_entete_merge);
 
-	# On défini les entetes de chaque colonnes
-	my @entetes = ();
+# On défini les entetes de chaque colonnes
+my @entetes = ();
 
-	my @entete_SIs_ba = ();
-	my @entete_SIs_dc = ();
-	my @entete_SIs_oj = ();
+my @entete_SIs_ba = ();
+my @entete_SIs_dc = ();
+my @entete_SIs_oj = ();
+
+if($paire){
+
+	for(my $i = 0; $i < $nb_paires_rep; $i++){
+
+		push(@entete_SIs_ba, 'SI' . ($i + 1) . ' B/A');
+		push(@entete_SIs_dc, 'SI' . ($i + 1) . ' D/C');
+		push(@entete_SIs_oj, 'SI' . ($i + 1) . ' O/J');
+
+	}
+
+}
+
+# Infos entité
+push(@entetes, 'Fasterdb ID');
+push(@entetes, 'Source ID');
+push(@entetes, 'Symbol');
+push(@entetes, 'Type');
+push(@entetes, 'Position');
+push(@entetes, ''); # Space
+
+# Reg SI B/A
+push(@entetes, 'Reg');
+push(@entetes, @entete_SIs_ba) if($paire);
+push(@entetes, 'SI B/A');
+push(@entetes, 'Pvalue');
+push(@entetes, 'NB sondes');
+push(@entetes, ''); # Space
+
+# Reg SI D/C
+push(@entetes, 'Reg');
+push(@entetes, @entete_SIs_dc) if($paire);
+push(@entetes, 'SI D/C');
+push(@entetes, 'Pvalue');
+push(@entetes, 'NB sondes');
+push(@entetes, 'Coherent');
+push(@entetes, ''); # Space
+
+# Reg SI O/J
+push(@entetes, 'Reg');
+push(@entetes, @entete_SIs_oj) if($paire);
+push(@entetes, 'SI O/J');
+push(@entetes, 'Pvalue');
+push(@entetes, 'NB sondes');
+push(@entetes, 'Coherent');
+push(@entetes, ''); # Space
+
+# Infos supp entité
+push(@entetes, 'Coordonnees');
+push(@entetes, 'Sequence');
+
+for(my $j = 0; $j < @entetes; $j++){
+
+	my $format = ($entetes[$j] ne '') ? $format_entete : undef;
+
+	$f->write(1, $j, $entetes[$j], $format);
+
+}
+
+# On compte les renforcés et les affaiblit
+my $num_gene = 0;
+my $id_gene_prec = 0;
+my $nb_renforces = 0;
+my $nb_affaiblits = 0;
+
+# Pour chaque position d'exon on récupère juste l'entité avec le plus fort SI !
+# Déjà on classe par position d'exon et par SI
+@entites = sort {
+	# On classe par gène
+	$a->{'id_gene'} <=> $b->{'id_gene'}
+	||
+	# On classe par pos d'exon
+	$a->{'exon_pos'} <=> $b->{'exon_pos'}
+	||
+	# On classe par SI décroissant
+	$b->{'SI_oj'} <=> $a->{'SI_oj'}
+	||
+	# Si égalité parfaite on met la plus longue en premier (ce sera l'exon
+	# surement, en cas d'exon vs prom/polya)
+	$b->{'end_sur_gene'} - $b->{'start_sur_gene'}
+	<=>
+	$a->{'end_sur_gene'} - $a->{'start_sur_gene'}
+} @entites;
+
+# On réduit la liste pour garder que le plus fort SI a chaque pos d'exon (on
+# garde celui qui arrive en premier de la liste, on vient de classer pour ça)
+my @entites_uniques = ();
+
+foreach my $entite (@entites){
+
+	my $deja_present = grep {
+		$_->{'id_gene'} == $entite->{'id_gene'}
+		&&
+		$_->{'exon_pos'} == $entite->{'exon_pos'}
+	} @entites_uniques;
+
+	next if($deja_present);
+
+	push(@entites_uniques, $entite);
+
+}
+
+@entites = @entites_uniques;
+
+# Maintenant on classe les entités par SI décroissant grouppé par gène
+# On fait un hash du fc max par gène pour le classement
+my %SI_max_gene = ();
+
+foreach my $entite (@entites){
+
+	my $id_gene = $entite->{'id_gene'};
+	my $SI = format_fold($entite->{'SI_oj'});
+
+	if(!$SI_max_gene{$id_gene} or $SI > $SI_max_gene{$id_gene}){
+
+		$SI_max_gene{$id_gene} = $SI;
+
+	}
+
+}
+
+# On classe les entites
+@entites = sort {
+	# déjà on classe par fc fort/fc faible
+	format_fold($b->{'SI_oj'}) >= $seuil_epissage_j_vs_o
+	<=>
+	format_fold($a->{'SI_oj'}) >= $seuil_epissage_j_vs_o
+	||
+	# Ensuite par gène qui a l'entité avec le si max
+	$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
+	||
+	# Ensuite par id de gène (si deux gènes avec le si max)
+	$a->{'id_gene'} <=> $b->{'id_gene'}
+	||
+	# Ensuite encore par SI (au sein du gène)
+	format_fold($b->{'SI_oj'}) <=> format_fold($a->{'SI_oj'})
+} @entites;
+
+# Pour chaque entité
+for(my $i = 0; $i < @entites; $i++){
+
+	my $entite = $entites[$i];
+
+	# On récupère les infos du gène
+	$select_infos_gene_sth->execute($entite->{'id_gene'});
+	my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
+	$select_infos_gene_sth->finish;
+
+	# On compte combien de gènes sont passés
+	if($infos_gene->{'id_fasterdb'} != $id_gene_prec){
+
+		$num_genes++;
+
+		$id_gene_prec = $infos_gene->{'id_fasterdb'};
+
+	}
+
+	# on formatte les infos
+	$infos_gene->{'description'} =~ s/\[.+\]$//;
+
+	my $pos_chrom =
+		$infos_gene->{'chromosome'} .
+		':' . $infos_gene->{'start_sur_chromosome'} .
+		'-' . $infos_gene->{'end_sur_chromosome'} .
+		':' . $infos_gene->{'strand'};
+
+	my $pos_entite = $entite->{'start_sur_gene'} .
+		'-' . $entite->{'end_sur_gene'};
+
+	my $type_entite = $entite->{'type'};
+
+	if($type_entite eq 'exon' and $entite->{'sous_type'}){
+
+		$type_entite.= '/' . $entite->{'sous_type'};
+
+	}
+
+	# On récupère les SIs des replicats
+	my @SIs_ba = ();
+	my @SIs_dc = ();
+	my @SIs_oj = ();
 
 	if($paire){
 
-		for(my $i = 0; $i < $nb_paires_rep; $i++){
+		foreach(my $i = 0; $i < $nb_paires_rep; $i++){
 
-			push(@entete_SIs_ba, 'SI' . ($i + 1) . ' B/A');
-			push(@entete_SIs_dc, 'SI' . ($i + 1) . ' D/C');
-			push(@entete_SIs_oj, 'SI' . ($i + 1) . ' O/J');
+			push(@SIs_ba, $entite->{'SI_ba' . ($i + 1)});
+			push(@SIs_dc, $entite->{'SI_dc' . ($i + 1)});
+			push(@SIs_oj, $entite->{'SI_oj' . ($i + 1)});
 
 		}
 
 	}
 
-	# Infos entité
-	push(@entetes, 'Fasterdb ID');
-	push(@entetes, 'Source ID');
-	push(@entetes, 'Symbol');
-	push(@entetes, 'Type');
-	push(@entetes, 'Position');
-	push(@entetes, ''); # Space
+	# On défini les régulations et le format
+	my $reg_ba = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
+	my $reg_dc = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
+	my $reg_oj;
+	my $format;
 
-	# Reg SI B/A
-	push(@entetes, 'Reg');
-	push(@entetes, @entete_SIs_ba) if($paire);
-	push(@entetes, 'SI B/A');
-	push(@entetes, 'Pvalue');
-	push(@entetes, 'NB sondes');
-	push(@entetes, ''); # Space
+	# On défini la regulation de O/J
+	if($entite->{'SI_ba'} >= 1){
 
-	# Reg SI D/C
-	push(@entetes, 'Reg');
-	push(@entetes, @entete_SIs_dc) if($paire);
-	push(@entetes, 'SI D/C');
-	push(@entetes, 'Pvalue');
-	push(@entetes, 'NB sondes');
-	push(@entetes, 'Coherent');
-	push(@entetes, ''); # Space
+		if($entite->{'SI_oj'} >= 1){
 
-	# Reg SI O/J
-	push(@entetes, 'Reg');
-	push(@entetes, @entete_SIs_oj) if($paire);
-	push(@entetes, 'SI O/J');
-	push(@entetes, 'Pvalue');
-	push(@entetes, 'NB sondes');
-	push(@entetes, 'Coherent');
-	push(@entetes, ''); # Space
-
-	# Infos supp entité
-	push(@entetes, 'Coordonnees');
-	push(@entetes, 'Sequence');
-
-	for(my $j = 0; $j < @entetes; $j++){
-
-		my $format = ($entetes[$j] ne '') ? $format_entete : undef;
-
-		$f->write(1, $j, $entetes[$j], $format);
-
-	}
-
-	# On compte les renforcés et les affaiblit
-	my $num_gene = 0;
-	my $id_gene_prec = 0;
-	my $nb_renforces = 0;
-	my $nb_affaiblits = 0;
-
-	# On classe les entites
-	@entites = sort {
-		# déjà on classe par fc fort/fc faible
-		format_fold($b->{'SI_oj'}) >= $seuil_epissage_j_vs_o
-		<=>
-		format_fold($a->{'SI_oj'}) >= $seuil_epissage_j_vs_o
-		||
-		# Ensuite par gène
-		$SI_max_gene{$b->{'id_gene'}} <=> $SI_max_gene{$a->{'id_gene'}}
-		||
-		# Ensuite encore par SI (au sein du gène)
-		format_fold($b->{'SI_oj'}) <=> format_fold($a->{'SI_oj'})
-	} @entites;
-
-	# Pour chaque entité
-	for(my $i = 0; $i < @entites; $i++){
-
-		my $entite = $entites[$i];
-
-		# On récupère les infos du gène
-		$select_infos_gene_sth->execute($entite->{'id_gene'});
-		my $infos_gene = $select_infos_gene_sth->fetchrow_hashref;
-		$select_infos_gene_sth->finish;
-
-		# On récupère les infos de l'entité
-		$select_infos_entite_sth->execute($entite->{'id_entite'});
-		my $infos_entite = $select_infos_entite_sth->fetchrow_hashref;
-		$select_infos_entite_sth->finish;
-
-		# On compte combien de gènes sont passés
-		if($infos_gene->{'id_fasterdb'} != $id_gene_prec){
-
-			$num_genes++;
-
-			$id_gene_prec = $infos_gene->{'id_fasterdb'};
-
-		}
-
-		# on formatte les infos
-		$infos_gene->{'description'} =~ s/\[.+\]$//;
-
-		my $pos_chrom =
-			$infos_gene->{'chromosome'} .
-			':' . $infos_gene->{'start_sur_chromosome'} .
-			'-' . $infos_gene->{'end_sur_chromosome'} .
-			':' . $infos_gene->{'strand'};
-
-		my $pos_entite = $infos_entite->{'start_sur_gene'} .
-			'-' . $infos_entite->{'end_sur_gene'};
-
-		my $type_entite = $infos_entite->{'type'};
-
-		if($type_entite eq 'exon' and $infos_entite->{'sous_type'}){
-
-			$type_entite.= '/' . $infos_entite->{'sous_type'};
-
-		}
-
-		# On récupère les SIs des replicats
-		my @SIs_ba = ();
-		my @SIs_dc = ();
-		my @SIs_oj = ();
-
-		if($paire){
-
-			foreach(my $i = 0; $i < $nb_paires_rep; $i++){
-
-				push(@SIs_ba, $entite->{'SI_ba' . ($i + 1)});
-				push(@SIs_dc, $entite->{'SI_dc' . ($i + 1)});
-				push(@SIs_oj, $entite->{'SI_oj' . ($i + 1)});
-
-			}
-
-		}
-
-		# On défini les régulations et le format
-		my $reg_ba = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
-		my $reg_dc = ($entite->{'SI_ba'} >= 1) ? 'up' : 'down';
-		my $reg_oj;
-		my $format;
-
-		# On défini la regulation de O/J
-		if($entite->{'SI_ba'} >= 1){
-
-			if($entite->{'SI_oj'} >= 1){
-
-				$reg_oj = 'Renforce';
-				$format = ($num_genes % 2 == 0)
-					? $format_up_even
-					: $format_up_odd;
-				$nb_renforces++;
-
-			}else{
-
-				$reg_oj = 'Affaiblit';
-				$format = ($num_genes % 2 == 0)
-					? $format_down_even
-					: $format_down_odd;
-				$nb_affaiblits++;
-
-			}
+			$reg_oj = 'Renforce';
+			$format = ($num_genes % 2 == 0)
+				? $format_up_even
+				: $format_up_odd;
+			$nb_renforces++;
 
 		}else{
 
-			if($entite->{'SI_oj'} >= 1){
-
-				$reg_oj = 'Affaiblit';
-				$format = ($num_genes % 2 == 0)
-					? $format_down_even
-					: $format_down_odd;
-				$nb_affaiblits++;
-
-			}else{
-
-				$reg_oj = 'Renforce';
-				$format = ($num_genes % 2 == 0)
-					? $format_up_even
-					: $format_up_odd;
-				$nb_renforces++;
-
-			}
-
-		}
-
-		# Si O/J est trop faible on lui donne un format spécial
-		if(format_fold($entite->{'SI_oj'}) < $seuil_epissage_j_vs_o){
-
+			$reg_oj = 'Affaiblit';
 			$format = ($num_genes % 2 == 0)
-				? $format_mauv_fc_even
-				: $format_mauv_fc_odd;
+				? $format_down_even
+				: $format_down_odd;
+			$nb_affaiblits++;
 
 		}
 
-		# On crée le tableau de data
-		my @data = ();
+	}else{
 
-		# Infos du gène
-		push(@data, $infos_gene->{'id_fasterdb'});
-		push(@data, $infos_gene->{'id_source'});
-		push(@data, $infos_gene->{'symbol'});
-		push(@data, $type_entite);
-		push(@data, $infos_entite->{'exon_pos'});
-		push(@data, ''); # Space
+		if($entite->{'SI_oj'} >= 1){
 
-		# Algo SI B/A
-		push(@data, $reg_ba);
-		push(@data, map { format_fold($_) } @SIs_ba) if($paire);
-		push(@data, format_fold($entite->{'SI_ba'}));
-		push(@data, $entite->{'SI_pval_ba'});
-		push(@data, $entite->{'nb_sondes_ba'});
-		push(@data, ''); # Space
+			$reg_oj = 'Affaiblit';
+			$format = ($num_genes % 2 == 0)
+				? $format_down_even
+				: $format_down_odd;
+			$nb_affaiblits++;
 
-		# Algo SI D/C
-		push(@data, $reg_dc);
-		push(@data, map { format_fold($_) } @SIs_dc) if($paire);
-		push(@data, format_fold($entite->{'SI_dc'}));
-		push(@data, $entite->{'SI_pval_dc'});
-		push(@data, $entite->{'nb_sondes_dc'});
-		push(@data, $entite->{'is_robust_dc'});
-		push(@data, ''); # Space
+		}else{
 
-		# Algo SI O/J
-		push(@data, $reg_oj);
-		push(@data, map { format_fold($_) } @SIs_oj) if($paire);
-		push(@data, format_fold($entite->{'SI_oj'}));
-		push(@data, $entite->{'SI_pval_oj'});
-		push(@data, $entite->{'nb_sondes_oj'});
-		push(@data, $entite->{'is_robust_oj'});
-		push(@data, ''); # Space
-
-		# Infos supp entité
-		push(@data, $pos_entite);
-		push(@data, $infos_entite->{'sequence'});
-
-		# On affiche les data
-		for(my $j = 0; $j < @data; $j++){
-
-			my $format = ($data[$j] ne '') ? $format : undef;
-
-			# i+2 parce que les deux premières lignes sont les entetes
-			$f->write($i + 2, $j, $data[$j], $format);
+			$reg_oj = 'Renforce';
+			$format = ($num_genes % 2 == 0)
+				? $format_up_even
+				: $format_up_odd;
+			$nb_renforces++;
 
 		}
 
 	}
 
-	return($nb_renforces, $nb_affaiblits);
+	# Si O/J est trop faible on lui donne un format spécial
+	if(format_fold($entite->{'SI_oj'}) < $seuil_epissage_j_vs_o){
+
+		$format = ($num_genes % 2 == 0)
+			? $format_mauv_fc_even
+			: $format_mauv_fc_odd;
+
+	}
+
+	# On crée le tableau de data
+	my @data = ();
+
+	# Infos du gène
+	push(@data, $infos_gene->{'id_fasterdb'});
+	push(@data, $infos_gene->{'id_source'});
+	push(@data, $infos_gene->{'symbol'});
+	push(@data, $type_entite);
+	push(@data, $entite->{'exon_pos'});
+	push(@data, ''); # Space
+
+	# Algo SI B/A
+	push(@data, $reg_ba);
+	push(@data, map { format_fold($_) } @SIs_ba) if($paire);
+	push(@data, format_fold($entite->{'SI_ba'}));
+	push(@data, $entite->{'SI_pval_ba'});
+	push(@data, $entite->{'nb_sondes_ba'});
+	push(@data, ''); # Space
+
+	# Algo SI D/C
+	push(@data, $reg_dc);
+	push(@data, map { format_fold($_) } @SIs_dc) if($paire);
+	push(@data, format_fold($entite->{'SI_dc'}));
+	push(@data, $entite->{'SI_pval_dc'});
+	push(@data, $entite->{'nb_sondes_dc'});
+	push(@data, $entite->{'is_robust_dc'});
+	push(@data, ''); # Space
+
+	# Algo SI O/J
+	push(@data, $reg_oj);
+	push(@data, map { format_fold($_) } @SIs_oj) if($paire);
+	push(@data, format_fold($entite->{'SI_oj'}));
+	push(@data, $entite->{'SI_pval_oj'});
+	push(@data, $entite->{'nb_sondes_oj'});
+	push(@data, $entite->{'is_robust_oj'});
+	push(@data, ''); # Space
+
+	# Infos supp entité
+	push(@data, $pos_entite);
+	push(@data, $entite->{'sequence'});
+
+	# On affiche les data
+	for(my $j = 0; $j < @data; $j++){
+
+		my $format = ($data[$j] ne '') ? $format : undef;
+
+		# i+2 parce que les deux premières lignes sont les entetes
+		$f->write($i + 2, $j, $data[$j], $format);
+
+	}
+
+}
+
+return($nb_renforces, $nb_affaiblits);
 
 }
 
