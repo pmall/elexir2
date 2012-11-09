@@ -13,7 +13,7 @@ Dans tout ce qui suit une sonde est un hash nom_puce => intensité ex :
 		'PuceB3' => IntensB3
 	}
 
-Un liste de sondes est une liste de hash de sondes, elles peuvent représenter
+Une liste de sondes est une liste de hash de sondes, elles peuvent représenter
 par exemple la liste de sondes d'un gène ou la liste de sondes d'une entité ex :
 
 	ListeSondeGene = [
@@ -35,7 +35,6 @@ des fold changes d'une sonde pour chaque paires de réplicat test et cont. Ex :
 		FCPaireReplicat1,
 		FCPaireReplicat2,
 		FCPaireReplicat3,
-		FCPaireReplicat4,
 		...
 	]
 
@@ -627,9 +626,38 @@ Ex d'une analyse des gènes :
 * On lisse les sondes avec Analyse->lissage_transcription ou
   Analyse->lissage_epissage.
 * On calcule le fold change des sondes avec Analyse->fcs_sondes.
-* On fait le fold change du gène et la pvalue avec Analyse->fc_gene.
+* On calcule le fold change du gène et la pvalue avec Analyse->fc_gene.
 * On insert tout dans la base.
 
 L'analyse peut se faire au niveau des entités en selectionnant toutes les
 entités pour chaque gène puis les sondes des entités. Les scripts sont
 explicites.
+
+Pour les fichiers excels...
+
+Quand plusieurs scripts doivent être lancé à la suite, on les mets tous dans un
+répertoire, puis on fait un script bash à la racine qui les lance à la suite et
+c'est celui là qui est lancé par le daemon qui gère la file d'attente des
+analyses. Enfin il y a un script commun à tous les autres script qui zippe les
+fichier dont il reçoit le nom sur l'entrée standard. Par exemple le script pour
+l'analyse simple on a :
+
+* ./simple/genes		# Analyse les gènes au niveau transcriptionel
+* ./simple/entites		# Analyse les entités des gènes
+* ./simple/xls_transcription	# Excel transcription
+* ./simple/xls_splicing_SI	# Excel épissage
+* ./zip				# Zippe les noms de fichiers excels retourné par
+				# les deux scripts ci dessus
+* ./analyse_simple		# Lance tout les scripts ci dessus à la suite
+
+Un démon tourne pour lire toutes les quelques secondes la table jobs pour voir
+si il y a de nouvelles tâches. Lorsqu'il y a de nouvelles tâches il les met dans
+la file d'attente du processing. Quand une tâche est traîtée, le démon lance
+simplement le script bash correspondant. Le script du daemon est dans le dossier
+elexir2, il y a aussi un script appelé elexir2 qui permet d'utiliser le daemon
+comme un service, qui est pointé par un lien symbolique depuis le repertoire
+/etc/init.d. Le lien permet de pouvoir modifier le script de service et de le
+deployer avec git sur le serveur sans avoir à aller le mettre dans le repertoire
+/etc/init.d manuellement. Une fois le lien dans /etc/init.d on peut lancer le
+daemon en tant que service avec service elexir2 start sur ubuntu, sur le serveur
+avec debian il faut explicitement tapper ./etc/init.d/elexir2.

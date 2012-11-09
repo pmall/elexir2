@@ -154,6 +154,9 @@ my $insert_entite_sth = $dbh->prepare(
 # On début l'algo, pour chaque ase
 # ==============================================================================
 
+# ptit hack
+my @ce_ou_ase = ('CE', 'ASE');
+
 # On selectionne les gènes
 $select_genes_sth->execute;
 
@@ -247,7 +250,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			1 # dans les deux conditions
 		);
 
-		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_5prime_raw} == 0);
+		next if($entite->{'type'} ~~ @ce_ou_ase and @{$ref_sondes_exclusion_5prime_raw} == 0);
 
 		# On récupère les sondes exprimées pour les exclusions 3prime
 		my $ref_sondes_exclusion_3prime_raw = $analyse->get_sondes_exprimees(
@@ -258,7 +261,7 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 			1 # dans les deux conditions
 		);
 
-		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_3prime_raw} == 0);
+		next if($entite->{'type'} ~~ @ce_ou_ase and @{$ref_sondes_exclusion_3prime_raw} == 0);
 
 		next if(@{$ref_sondes_exclusion_5prime_raw} == 0 and @{$ref_sondes_exclusion_3prime_raw} == 0);
 
@@ -283,8 +286,8 @@ while(my($id_gene) = $select_genes_sth->fetchrow_array){
 		}
 
 		next if(@{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
-		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase);
-		next if($entite->{'type'} ~~ ('CE', 'ASE') and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} ~~ @ce_ou_ase and @{$ref_sondes_exclusion_5prime} < $nb_sondes_min_ase);
+		next if($entite->{'type'} ~~ @ce_ou_ase and @{$ref_sondes_exclusion_3prime} < $nb_sondes_min_ase);
 
 		# On mixe exclusion 5' et exclusion 3'
 		my $ref_sondes_exclusion = [
