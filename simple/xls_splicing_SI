@@ -196,17 +196,17 @@ $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Symbol
 $f->set_column(3, 3, 12); # Type
-$f->set_column(21 + $o_si + $o_psi, 21 + $o_si + $o_psi, 24); # Description
-$f->set_column(22 + $o_si + $o_psi, 22 + $o_si + $o_psi, 24); # Coordonnées gene
-$f->set_column(24 + $o_si + $o_psi, 24 + $o_si + $o_psi, 18); # Coordonnées entites
-$f->set_column(25 + $o_si + $o_psi, 25 + $o_si + $o_psi, 18); # Sequence
+$f->set_column(15 + $o_si + $o_psi, 15 + $o_si + $o_psi, 24); # Description
+$f->set_column(16 + $o_si + $o_psi, 16 + $o_si + $o_psi, 24); # Coordonnées gene
+$f->set_column(18 + $o_si + $o_psi, 18 + $o_si + $o_psi, 18); # Coordonnées entites
+$f->set_column(19 + $o_si + $o_psi, 19 + $o_si + $o_psi, 18); # Sequence
 
 # On fait les premiers entetes
 $f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
-$f->merge_range(0, 6, 0, 9 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 11 + $o_si, 0, 14 + $o_si + $o_psi, 'Algo Psi', $format_entete_merge);
-$f->merge_range(0, 16 + $o_si + $o_psi, 0, 22 + $o_si + $o_psi, 'Infos gene', $format_entete_merge);
-$f->merge_range(0, 24 + $o_si + $o_psi, 0, 25 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 6, 0, 8 + $o_si, 'Algo SI', $format_entete_merge);
+$f->merge_range(0, 10 + $o_si + $o_psi, 0, 16 + $o_si + $o_psi, 'Infos gene', $format_entete_merge);
+$f->merge_range(0, 18 + $o_si + $o_psi, 0, 20 + $o_si + $o_psi, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 22 + $o_si, 0, 25 + $o_si + $o_psi, 'Algo Psi', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
 my @entetes = ();
@@ -236,18 +236,6 @@ push(@entetes, 'Reg');
 push(@entetes, @entetes_SIs) if($paire);
 push(@entetes, 'SI');
 push(@entetes, 'Pvalue');
-push(@entetes, 'Nb probes');
-push(@entetes, ''); # Space
-
-# Reg psi
-push(@entetes, 'Reg');
-push(@entetes, 'control');
-push(@entetes, 'Sd cont') if($paire);
-push(@entetes, 'test');
-push(@entetes, 'Sd test') if($paire);
-push(@entetes, 'FC');
-push(@entetes, 'Sd FC') if($paire);
-push(@entetes, 'Pvalue') if($paire);
 push(@entetes, ''); # Space
 
 # Infos gène
@@ -263,6 +251,18 @@ push(@entetes, ''); # Space
 # Infos Entité
 push(@entetes, 'Coordonnees');
 push(@entetes, 'Sequence');
+push(@entetes, 'Nb probes');
+push(@entetes, ''); # Space
+
+# Reg psi
+push(@entetes, 'Reg');
+push(@entetes, 'control');
+push(@entetes, 'Sd cont') if($paire);
+push(@entetes, 'test');
+push(@entetes, 'Sd test') if($paire);
+push(@entetes, 'FC');
+push(@entetes, 'Sd FC') if($paire);
+push(@entetes, 'Pvalue') if($paire);
 
 for(my $j = 0; $j < @entetes; $j++){
 
@@ -442,18 +442,6 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, map { format_fold($_) } @SIs) if($paire);
 	push(@data, format_fold($entite->{'SI'}));
 	push(@data, $entite->{'SI_pval'});
-	push(@data, $entite->{'nb_sondes'});
-	push(@data, ''); # Space
-
-	# Algo psi
-	push(@data, $reg_psi);
-	push(@data, $entite->{'psi_control'});
-	push(@data, $entite->{'psi_sd_control'}) if($paire);
-	push(@data, $entite->{'psi_test'});
-	push(@data, $entite->{'psi_sd_test'}) if($paire);
-	push(@data, format_fold($entite->{'psi_fc'}));
-	push(@data, $entite->{'psi_sd_fc'}) if($paire);
-	push(@data, $entite->{'psi_pval'}) if($paire);
 	push(@data, ''); # Space
 
 	# Infos gène
@@ -469,6 +457,18 @@ for(my $i = 0; $i < @entites; $i++){
 	# Infos Entité
 	push(@data, $pos_entite);
 	push(@data, $entite->{'sequence'});
+	push(@data, $entite->{'nb_sondes'});
+	push(@data, ''); # Space
+
+	# Algo psi
+	push(@data, $reg_psi);
+	push(@data, $entite->{'psi_control'});
+	push(@data, $entite->{'psi_sd_control'}) if($paire);
+	push(@data, $entite->{'psi_test'});
+	push(@data, $entite->{'psi_sd_test'}) if($paire);
+	push(@data, format_fold($entite->{'psi_fc'}));
+	push(@data, $entite->{'psi_sd_fc'}) if($paire);
+	push(@data, $entite->{'psi_pval'}) if($paire);
 
 	# On affiche les data
 	for(my $j = 0; $j < @data; $j++){
