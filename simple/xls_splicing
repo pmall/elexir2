@@ -78,7 +78,7 @@ my $table_entites = $config->{'table_entites'}{$version}{$orga};
 my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_splicing = get_table_splicing($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
-my $nom_fichier = $name . '_epissage_SI.xls';
+my $nom_fichier = $name . '_splicing.xls';
 my $fichier_sortie = $dir_sortie . '/' . $nom_fichier;
 
 # On crée les dossier

@@ -4,4 +4,5 @@ dir=$(dirname $0)
 
 $dir/simple/genes $1 $2
 $dir/simple/entites $1
+$dir/simple/apriori $1
 $dir/excels_simple $1

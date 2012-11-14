@@ -53,9 +53,9 @@ my $analyse = Analyse->get_analyse($dbh, $id_analyse);
 die('L\'id de l\'analyse n\'est pas valide.') if(!$analyse);
 
 # Message d'erreur si c'est pas le bon script pour le bon type d'analyse
-if($analyse->{'type'} ne 'apriori'){
+if($analyse->{'type'} ne 'simple'){
 
-	die('Le script apriori ne fonctionne que sur les analyses apriori :o)');
+	die('Le script simple ne fonctionne que sur les analyses simples :o)');
 
 }
 
