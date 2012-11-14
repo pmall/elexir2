@@ -5,4 +5,5 @@ dir=$(dirname $0)
 file1=$($dir/simple/xls_transcription $1)
 file2=$($dir/simple/xls_splicing $1)
 file3=$($dir/simple/xls_apriori $1)
-$dir/zip $1 $file1 $file2 $file3
+file4=$($dir/simple/xls_croisement $1)
+$dir/zip $1 $file1 $file2 $file3 $file4

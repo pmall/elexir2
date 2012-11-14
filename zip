@@ -64,4 +64,5 @@ my $dir_analyse = $dir_project . '/' . $id_analyse;
 
 my $filenames = join(' ', @files);
 
-`cd $dir_analyse && rm files.zip && zip files.zip $filenames && chmod -R 777 $dir_project`;
+`cd $dir_analyse && rm files.zip`; # on vire l'ancien fichier zip si il est présent
+`cd $dir_analyse && zip files.zip $filenames && chmod -R 777 $dir_project`;
