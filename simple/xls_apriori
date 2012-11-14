@@ -74,6 +74,7 @@ my $nb_paires_rep = $analyse->{'nb_paires_rep'};
 # on crée les variables du script qui déendent de l'analyse
 my $table_genes = $config->{'table_genes'}{$version}{$orga};
 my $table_entites_a_priori = $config->{'table_entites_a_priori'}{$version}{$orga};
+my $table_trans = get_table_transcription($id_projet, $id_analyse);
 my $table_ase_a_priori = get_table_ase_a_priori($id_projet, $id_analyse);
 my $dir_sortie = $dir_xls . '/' . $id_projet . '/' . $id_analyse;
 my $nom_fichier = $name . '_apriori.xls';
@@ -95,12 +96,14 @@ my $select_nb_entites_exp_sth = $dbh->prepare(
 );
 
 my $select_entites_sth = $dbh->prepare(
-	"SELECT e.*,
+	"SELECT e.*, g.trans_fc, g.trans_pval,
+	g.trans_nb_sondes, g.trans_nb_exons,
 	i.type, i.sequence, i.exon_pos,
 	i.start_sur_gene, i.end_sur_gene
-	FROM $table_ase_a_priori AS e, $table_entites_a_priori AS i
-	WHERE e.id_entite = i.id
-	AND ABS(LOG2(SI)) >= LOG2(?)"
+	FROM $table_ase_a_priori AS e
+	LEFT JOIN $table_trans AS g ON e.id_gene = g.id_gene
+	LEFT JOIN $table_entites_a_priori AS i ON e.id_entite = i.id
+	WHERE ABS(LOG2(SI)) >= LOG2(?)"
 );
 
 my $select_infos_gene_sth = $dbh->prepare(
@@ -201,16 +204,16 @@ $f->set_column(0, 0, 12); # Fasterdb id
 $f->set_column(1, 1, 18); # Source id
 $f->set_column(2, 2, 12); # Symbol
 $f->set_column(3, 3, 12); # Type
-$f->set_column(11 + $o_si, 11 + $o_si, 24); # Description
-$f->set_column(12 + $o_si, 12 + $o_si, 24); # Coordonnées gene
-$f->set_column(14 + $o_si, 14 + $o_si, 18); # Coordonnées entite
-$f->set_column(15 + $o_si, 15 + $o_si, 18); # Sequence
+$f->set_column(15 + $o_si, 15 + $o_si, 24); # Description
+$f->set_column(16 + $o_si, 16 + $o_si, 24); # Coordonnées gene
+$f->set_column(18 + $o_si, 18 + $o_si, 18); # Coordonnées entite
+$f->set_column(19 + $o_si, 19 + $o_si, 18); # Sequence
 
 # On fait les premiers entetes
 $f->merge_range(0, 0, 0, 4, 'Infos Entite', $format_entete_merge);
 $f->merge_range(0, 6, 0, 8 + $o_si, 'Algo SI', $format_entete_merge);
-$f->merge_range(0, 10 + $o_si, 0, 12 + $o_si, 'Infos gene', $format_entete_merge);
-$f->merge_range(0, 14 + $o_si, 0, 18 + $o_si, 'Infos supp entite', $format_entete_merge);
+$f->merge_range(0, 10 + $o_si, 0, 16 + $o_si, 'Infos gene', $format_entete_merge);
+$f->merge_range(0, 18 + $o_si, 0, 22 + $o_si, 'Infos supp entite', $format_entete_merge);
 
 # On défini les entetes de chaque colonnes
 my @entetes = ();
@@ -243,7 +246,11 @@ push(@entetes, 'Pvalue');
 push(@entetes, ''); # Space
 
 # Infos gène
-push(@entetes, 'fc');
+push(@entetes, 'Reg');
+push(@entetes, 'FC');
+push(@entetes, 'Pvalue');
+push(@entetes, 'Nb probes');
+push(@entetes, 'Nb exons');
 push(@entetes, 'Description');
 push(@entetes, 'Chr Position');
 push(@entetes, ''); # Space
@@ -377,8 +384,20 @@ for(my $i = 0; $i < @entites; $i++){
 
 	my $reg_SI = ($entite->{'SI'} >= 1) ? 'up' : 'down';
 
-	my $fc_gene = (defined($entite->{'fc_gene'}))
-		? format_fold($entite->{'fc_gene'}) : '-'; # Le fc gene peut être null
+	# Les infos sur la transcription ne sont pas forcément là
+	my $reg_gene = '-';
+	my $trans_fc = '-';
+
+	if(defined($entite->{'trans_fc'})){
+
+		$reg_gene = ($entite->{'trans_fc'} >= 1) ? 'up' : 'down';
+		$trans_fc = format_fold($entite->{'trans_fc'});
+
+	}
+
+	my $trans_pval = $entite->{'trans_pval'} || '-';
+	my $trans_nb_sondes = $entite->{'trans_nb_sondes'} || '-';
+	my $trans_nb_exons = $entite->{'trans_nb_exons'} || '-';
 
 	# On récupère les SIs des replicats
 	my @SIs = ();
@@ -429,7 +448,11 @@ for(my $i = 0; $i < @entites; $i++){
 	push(@data, ''); # Space
 
 	# Infos gène
-	push(@data, $fc_gene);
+	push(@data, $reg_gene);
+	push(@data, $trans_fc);
+	push(@data, $trans_pval);
+	push(@data, $trans_nb_sondes);
+	push(@data, $trans_nb_exons);
 	push(@data, $infos_gene->{'description'});
 	push(@data, $pos_chrom);
 	push(@data, ''); # Space
