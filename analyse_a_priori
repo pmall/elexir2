@@ -1,6 +1,0 @@
-#!/bin/bash
-
-dir=$(dirname $0)
-
-$dir/apriori/ase $1 $2
-$dir/excels_a_priori $1
