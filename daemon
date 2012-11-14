@@ -40,16 +40,21 @@ def now():
 # ==============================================================================
 
 def do_job(wd, job, sema):
-	sema.acquire()
 
 	id_job = job[0];
+
+	weight = 0
+	id_elem = ''
+	algo = ''
 
 	if(job[3] == 'qc'):
 		id_elem = job[1]
 		algo = 'qc'
+		weight = 5
 	if(job[3] == 'preprocessing'):
 		id_elem = job[1]
 		algo = 'correction'
+		weight = 5
 	if(job[3] == 'analysis'):
 		id_elem = job[2]
 		if(job[4] == 'simple'):
@@ -58,6 +63,7 @@ def do_job(wd, job, sema):
 			algo = 'analyse_compose'
 		if(job[4] == 'jonction'):
 			algo = 'analyse_jonction'
+		weight = 1
 	if(job[3] == 'excels'):
 		id_elem = job[2]
 		if(job[4] == 'simple'):
@@ -66,29 +72,43 @@ def do_job(wd, job, sema):
 			algo = 'excels_compose'
 		if(job[4] == 'jonction'):
 			algo = 'excels_jonction'
+		weight = 1
 
+	# On se connecte a la bdd
 	dbh = MySQLdb.connect(host = DBHOST, user = DBUSER, passwd = DBPASS, db = DBNAME)
 	cursor = dbh.cursor()
-	cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
 
-	log_file = open(config['log_file'], 'a')
-	log_file.write(id_elem + ' ' + algo + ' ' + now())
-	log_file.write("\n")
+	# Si on a pas d'element ou d'algo correspondant au job on le termine
+	if(id_elem == '' or algo == ''):
 
-	subprocess.call(
-		[wd + '/' + algo, str(id_elem)],
-		stdout=log_file,
-		stderr=subprocess.STDOUT,
-	)
+		cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s, end = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'done', 'date':now()})
 
-	log_file.write("\n")
-	log_file.close();
+	else:
 
-	cursor.execute('UPDATE jobs SET status = %(status)s, end = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'done', 'date':now()})
-	cursor.close
-	dbh.close
+		# On prend des sema proportionellement à ce que l'on fait :)
+		sema.acquire()
 
-	sema.release()
+		cursor.execute('UPDATE jobs SET status = %(status)s, start = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'processing', 'date':now()})
+
+		log_file = open(config['log_file'], 'a')
+		log_file.write(id_elem + ' ' + algo + ' ' + now())
+		log_file.write("\n")
+
+		subprocess.call(
+			[wd + '/' + algo, str(id_elem)],
+			stdout=log_file,
+			stderr=subprocess.STDOUT,
+		)
+
+		log_file.write("\n")
+		log_file.close();
+
+		cursor.execute('UPDATE jobs SET status = %(status)s, end = %(date)s WHERE id = %(id)s', {'id':id_job, 'status':'done', 'date':now()})
+		cursor.close
+		dbh.close
+
+		# On relache des sema
+		sema.release()
 
 # ==============================================================================
 # Script / boucle infinie

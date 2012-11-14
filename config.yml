@@ -8,7 +8,7 @@ db_name: elexir2
 log_file: /data/logs/elexir2.log
 
 # Nombre de threads max que le demon peut lancer en même temps
-nb_threads: 2
+nb_threads: 10
 
 # Repertoires de données
 dir_cel: /data/elexir/celfiles
