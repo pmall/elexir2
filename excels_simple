@@ -3,5 +3,5 @@
 dir=$(dirname $0)
 
 file1=$($dir/simple/xls_transcription $1)
-file2=$($dir/simple/xls_splicing_SI $1)
+file2=$($dir/simple/xls_splicing $1)
 $dir/zip $1 $file1 $file2
