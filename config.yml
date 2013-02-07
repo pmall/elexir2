@@ -1,7 +1,7 @@
 # connection aux base de données
 db_host: localhost
-db_user: elexir2
-db_pass: pandas
+db_user: 
+db_pass: 
 db_name: elexir2
 
 # Fichier de logs pour le daemon
